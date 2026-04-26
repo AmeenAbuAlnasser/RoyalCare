@@ -2,6 +2,42 @@
 
 ## 2026-04-26
 
+Initialized the backend API in `services/api`.
+
+Added:
+- NestJS `11.x` API scaffold generated with `@nestjs/cli@11.0.21`
+- TypeScript backend setup
+- REST-ready global prefix `api/v1`
+- ESLint backend setup
+- Clean modular API structure
+- Health endpoint at `GET /api/v1/health`
+- Module placeholders for:
+  - Auth
+  - Users
+  - Tenancy
+  - Centers
+  - Subscriptions
+  - Domains
+  - Appointments
+  - Customers
+  - Services
+  - Sessions
+  - Notifications
+  - Permissions
+- Common backend folders for constants, decorators, DTOs, filters, guards, interceptors, interfaces, and pipes
+- Tenant context interface using `centerId`
+
+Verified:
+- `npm run lint` passes in `services/api`.
+- `npm run build` passes in `services/api`.
+- `npm test` passes in `services/api`.
+- `npm run test:e2e` passes in `services/api`.
+
+Notes:
+- No database connection was added.
+- No Prisma schema was created.
+- Business endpoints are not implemented yet.
+
 Initialized the main web application in `apps/web`.
 
 Added:

@@ -1,7 +1,7 @@
 # RoyalCare - Architecture
 
 Last updated: 2026-04-26
-Status: Monorepo structure initialized; web app scaffolded
+Status: Monorepo structure initialized; web and API apps scaffolded
 
 ## 1. Architecture Goal
 
@@ -30,6 +30,8 @@ Frontend Web:
 Backend API:
 - NestJS
 - TypeScript
+- REST API architecture
+- ESLint
 
 Database:
 - PostgreSQL
@@ -77,7 +79,7 @@ RoyalCare/
 Current folder status:
 - `apps/web` contains the initialized Next.js web application.
 - `apps/mobile` exists as the future React Native Expo location.
-- `services/api` exists as the future NestJS backend API location.
+- `services/api` contains the initialized NestJS backend API application.
 - `packages/database` exists as the future Prisma/PostgreSQL package location.
 - `packages/shared` exists for shared TypeScript contracts, constants, and validation schemas.
 - `packages/ui` exists for shared UI components.
@@ -94,7 +96,19 @@ Web app baseline:
 - Uses `src/` directory
 - Uses import alias `@/*`
 
-No backend, mobile, database, shared package, or UI package framework scaffolding has been generated yet.
+API baseline:
+- Location: `services/api`
+- Initialized with `@nestjs/cli@11.0.21`
+- Uses NestJS `11.x`
+- Uses TypeScript
+- Uses REST architecture
+- Uses ESLint
+- Uses global API prefix `api/v1`
+- Default port constant is `3001`
+- CORS is enabled for future web and mobile clients
+- Health check endpoint exists at `GET /api/v1/health`
+
+No mobile, database, shared package, or UI package framework scaffolding has been generated yet.
 
 Needs Confirmation:
 - Whether to use npm, pnpm, yarn, or bun workspaces.
@@ -165,28 +179,63 @@ Needs Confirmation:
 
 The NestJS API should own business logic and data access.
 
-Suggested modules:
+Prepared modules:
 - AuthModule
 - TenancyModule
 - CentersModule
 - SubscriptionsModule
 - DomainsModule
-- UsersModule
-- RolesPermissionsModule
-- CustomersModule
-- ServicesModule
-- StaffModule
 - AppointmentsModule
+- CustomersModule
+- HealthModule
+- NotificationsModule
+- PermissionsModule
+- ServicesModule
 - SessionsModule
+- UsersModule
+
+Planned but not scaffolded yet:
+- StaffModule
 - PagesModule
 - TemplatesModule
 - BrandingModule
-- NotificationsModule
 - FilesModule
 - AuditLogModule
 - BackupsModule
 
+Prepared API structure:
+
+```text
+services/api/src/
+  common/
+    constants/
+    decorators/
+    dto/
+    filters/
+    guards/
+    interceptors/
+    interfaces/
+    pipes/
+  config/
+  modules/
+    appointments/
+    auth/
+    centers/
+    customers/
+    domains/
+    health/
+    notifications/
+    permissions/
+    services/
+    sessions/
+    subscriptions/
+    tenancy/
+    users/
+```
+
 API design should be mobile-ready. Avoid exposing web-only assumptions in core endpoints.
+
+Database and Prisma are intentionally not connected yet.
 
 ### 4.3 Database
 

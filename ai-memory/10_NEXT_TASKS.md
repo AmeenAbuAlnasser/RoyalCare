@@ -1,7 +1,7 @@
 # RoyalCare - Next Tasks
 
 Last updated: 2026-04-26
-Status: Web scaffold created; backend/database scaffolding pending
+Status: Web and API scaffolds created; database scaffolding pending
 
 ## 1. Immediate Confirmation Tasks
 
@@ -92,21 +92,42 @@ Completed:
   - `src/features/tenancy`
 - Remove generated demo homepage content and demo assets.
 - Verify web lint passes.
+- Initialize NestJS API in `services/api` with:
+  - TypeScript
+  - REST-ready architecture
+  - ESLint
+  - Global API prefix `api/v1`
+  - Health endpoint
+- Prepare backend module folders:
+  - Auth
+  - Users
+  - Tenancy
+  - Centers
+  - Subscriptions
+  - Domains
+  - Appointments
+  - Customers
+  - Services
+  - Sessions
+  - Notifications
+  - Permissions
+- Prepare common backend folders for future guards, decorators, filters, interceptors, DTOs, and pipes.
+- Verify backend lint, build, unit test, and e2e test commands pass.
 
 Next:
 1. Choose package manager.
 2. Choose monorepo tooling.
 3. Add root workspace configuration.
-4. Scaffold NestJS API with TypeScript in `services/api`.
-5. Add Prisma/PostgreSQL setup in `packages/database`.
-6. Add shared TypeScript package setup in `packages/shared`.
-7. Add shared UI package setup in `packages/ui`.
-8. Add root-level lint/build scripts once workspaces are configured.
-9. Create initial Prisma schema.
-10. Add environment variable structure.
-11. Add Docker Compose for local PostgreSQL if useful.
-12. Add basic CI checks.
-13. Prepare React Native Expo app in `apps/mobile` when mobile work begins.
+4. Add Prisma/PostgreSQL setup in `packages/database`.
+5. Add shared TypeScript package setup in `packages/shared`.
+6. Add shared UI package setup in `packages/ui`.
+7. Add root-level lint/build scripts once workspaces are configured.
+8. Create initial Prisma schema.
+9. Add environment variable structure.
+10. Add Docker Compose for local PostgreSQL if useful.
+11. Add basic CI checks.
+12. Prepare React Native Expo app in `apps/mobile` when mobile work begins.
+13. Implement backend auth, tenancy guard, permission guard, module guard, and subscription guard.
 
 Needs Confirmation:
 - Whether Docker should be used locally.

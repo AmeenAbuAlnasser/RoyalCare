@@ -1,7 +1,7 @@
 # RoyalCare - API Map
 
 Last updated: 2026-04-26
-Status: Initial API planning map
+Status: Initial API planning map; NestJS API scaffold initialized
 
 ## 1. API Principles
 
@@ -37,6 +37,27 @@ List response:
   }
 }
 ```
+
+## 2.1 Implemented Operational Endpoints
+
+Currently implemented:
+- `GET /api/v1/health`
+
+Purpose:
+- Basic service health check for local development, deployment checks, and future monitoring.
+
+Response:
+
+```json
+{
+  "service": "royalcare-api",
+  "status": "ok"
+}
+```
+
+Notes:
+- Business endpoints below are planned API map entries and are not implemented yet.
+- Database and Prisma are not connected yet.
 
 Error response:
 

@@ -1,11 +1,11 @@
 # RoyalCare - Current Status
 
 Last updated: 2026-04-26
-Status: Web app scaffolded; backend/mobile/database implementation not started
+Status: Web and API apps scaffolded; mobile/database implementation not started
 
 ## 1. What Exists Now
 
-The project currently has AI memory/documentation files, a clean monorepo folder structure, and the main web application scaffolded.
+The project currently has AI memory/documentation files, a clean monorepo folder structure, the main web application scaffolded, and the backend API scaffolded.
 
 Files initialized:
 - `ai-memory/00_PROJECT_OVERVIEW.md`
@@ -57,6 +57,30 @@ Web app initialized:
   - `src/features/auth`
   - `src/features/tenancy`
 
+Backend API initialized:
+- Location: `services/api`
+- NestJS `11.x`
+- TypeScript
+- REST-ready architecture
+- ESLint
+- Global API prefix: `api/v1`
+- Default port: `3001`
+- Health endpoint: `GET /api/v1/health`
+- Prepared modules:
+  - Auth
+  - Users
+  - Tenancy
+  - Centers
+  - Subscriptions
+  - Domains
+  - Appointments
+  - Customers
+  - Services
+  - Sessions
+  - Notifications
+  - Permissions
+- Tenant context interface prepared with `centerId`
+
 ## 2. Implementation Status
 
 Application code:
@@ -68,8 +92,9 @@ Frontend:
 - Future mobile folder prepared at `apps/mobile`
 
 Backend:
-- Not scaffolded
-- Folder prepared at `services/api`
+- NestJS app scaffolded at `services/api`
+- Business endpoints not implemented yet
+- Database not connected
 
 Database:
 - Prisma schema not created yet
@@ -143,16 +168,19 @@ Before writing application code, confirm MVP scope and infrastructure choices.
 Recommended first technical implementation:
 1. Choose package manager and monorepo tooling.
 2. Add root workspace configuration.
-3. Scaffold NestJS API app in `services/api`.
-4. Add Prisma with PostgreSQL in `packages/database`.
-5. Create initial tenant-aware schema.
-6. Implement auth, tenancy guard, and permissions guard early.
-7. Start web app shell only after route/layout direction is confirmed.
+3. Add Prisma with PostgreSQL in `packages/database`.
+4. Create initial tenant-aware schema.
+5. Implement auth, tenancy guard, and permissions guard early.
+6. Start web app shell only after route/layout direction is confirmed.
 
 ## 7. Verification
 
 Latest verification:
 - `npm run lint` passed in `apps/web`.
+- `npm run lint` passed in `services/api`.
+- `npm run build` passed in `services/api`.
+- `npm test` passed in `services/api`.
+- `npm run test:e2e` passed in `services/api`.
 
 ## 6. Risk Notes
 
