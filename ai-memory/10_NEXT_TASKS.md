@@ -1,7 +1,7 @@
 # RoyalCare - Next Tasks
 
 Last updated: 2026-04-26
-Status: Monorepo structure created; framework scaffolding pending
+Status: Web scaffold created; backend/database scaffolding pending
 
 ## 1. Immediate Confirmation Tasks
 
@@ -71,22 +71,42 @@ Completed:
   - `packages/database`
   - `packages/shared`
   - `packages/ui`
+- Initialize Next.js web app in `apps/web` with:
+  - TypeScript
+  - Tailwind CSS
+  - App Router
+  - ESLint
+  - `src/` directory
+  - `@/*` import alias
+- Prepare web route groups:
+  - `src/app/(public)`
+  - `src/app/(super-admin)`
+  - `src/app/(center-admin)`
+  - `src/app/(portal)`
+- Prepare web feature folders:
+  - `src/features/public-site`
+  - `src/features/super-admin`
+  - `src/features/center-admin`
+  - `src/features/customer-portal`
+  - `src/features/auth`
+  - `src/features/tenancy`
+- Remove generated demo homepage content and demo assets.
+- Verify web lint passes.
 
 Next:
 1. Choose package manager.
 2. Choose monorepo tooling.
 3. Add root workspace configuration.
-4. Scaffold Next.js app with TypeScript in `apps/web`.
-5. Scaffold NestJS API with TypeScript in `services/api`.
-6. Prepare React Native Expo app in `apps/mobile` when mobile work begins.
-7. Add Prisma/PostgreSQL setup in `packages/database`.
-8. Add shared TypeScript package setup in `packages/shared`.
-9. Add shared UI package setup in `packages/ui`.
-10. Configure linting and formatting.
-11. Create initial Prisma schema.
-12. Add environment variable structure.
-13. Add Docker Compose for local PostgreSQL if useful.
-14. Add basic CI checks.
+4. Scaffold NestJS API with TypeScript in `services/api`.
+5. Add Prisma/PostgreSQL setup in `packages/database`.
+6. Add shared TypeScript package setup in `packages/shared`.
+7. Add shared UI package setup in `packages/ui`.
+8. Add root-level lint/build scripts once workspaces are configured.
+9. Create initial Prisma schema.
+10. Add environment variable structure.
+11. Add Docker Compose for local PostgreSQL if useful.
+12. Add basic CI checks.
+13. Prepare React Native Expo app in `apps/mobile` when mobile work begins.
 
 Needs Confirmation:
 - Whether Docker should be used locally.

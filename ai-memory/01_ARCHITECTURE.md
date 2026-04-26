@@ -1,7 +1,7 @@
 # RoyalCare - Architecture
 
 Last updated: 2026-04-26
-Status: Monorepo folder structure initialized
+Status: Monorepo structure initialized; web app scaffolded
 
 ## 1. Architecture Goal
 
@@ -23,6 +23,9 @@ The architecture must support:
 Frontend Web:
 - Next.js
 - TypeScript
+- Tailwind CSS
+- App Router
+- ESLint
 
 Backend API:
 - NestJS
@@ -72,14 +75,26 @@ RoyalCare/
 ```
 
 Current folder status:
-- `apps/web` exists as the future Next.js frontend location.
+- `apps/web` contains the initialized Next.js web application.
 - `apps/mobile` exists as the future React Native Expo location.
 - `services/api` exists as the future NestJS backend API location.
 - `packages/database` exists as the future Prisma/PostgreSQL package location.
 - `packages/shared` exists for shared TypeScript contracts, constants, and validation schemas.
 - `packages/ui` exists for shared UI components.
 
-No dependencies have been installed yet. No framework scaffolding has been generated yet.
+Web app baseline:
+- Location: `apps/web`
+- Initialized with `create-next-app@16.2.4`
+- Uses Next.js `16.2.4`
+- Uses React `19.2.4`
+- Uses TypeScript
+- Uses Tailwind CSS
+- Uses App Router
+- Uses ESLint
+- Uses `src/` directory
+- Uses import alias `@/*`
+
+No backend, mobile, database, shared package, or UI package framework scaffolding has been generated yet.
 
 Needs Confirmation:
 - Whether to use npm, pnpm, yarn, or bun workspaces.
@@ -96,16 +111,51 @@ The Next.js app should serve:
 - Customer Portal
 - Public center websites
 
-Recommended routing groups:
+Prepared routing groups:
 
 ```text
-/super-admin
-/admin
-/portal
-/(public-site)
+src/app/(public)
+src/app/(super-admin)
+src/app/(center-admin)
+src/app/(portal)
 ```
 
 Domain-based tenant resolution should determine which center is being viewed for public websites and customer portals.
+
+Prepared web structure:
+
+```text
+apps/web/src/
+  app/
+    (public)/
+    (super-admin)/
+    (center-admin)/
+    (portal)/
+  components/
+    data-display/
+    forms/
+    layout/
+    navigation/
+  config/
+  features/
+    auth/
+    center-admin/
+    customer-portal/
+    public-site/
+    super-admin/
+    tenancy/
+  hooks/
+  i18n/
+  lib/
+    api/
+    auth/
+    tenancy/
+  providers/
+  styles/
+  types/
+```
+
+The generated demo homepage was removed. Feature pages have not been built yet.
 
 Needs Confirmation:
 - Whether Super Admin and Center Admin should live in the same Next.js app or separate apps.
