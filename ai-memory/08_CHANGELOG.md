@@ -2,6 +2,48 @@
 
 ## 2026-04-26
 
+Extended the Prisma schema with Phase 2 business models.
+
+Added models:
+- `Customer`
+- `Service`
+- `Appointment`
+- `Session`
+- `Notification`
+- `DynamicPage`
+- `BrandingSettings`
+
+Added enums:
+- `CustomerStatus`
+- `ServiceStatus`
+- `AppointmentStatus`
+- `AppointmentSource`
+- `SessionStatus`
+- `NotificationChannel`
+- `NotificationStatus`
+- `DynamicPageStatus`
+
+Architecture notes:
+- Every Phase 2 model includes `centerId`.
+- Every Phase 2 tenant-owned model relates to `Center`.
+- Customer records are isolated per center.
+- Services, dynamic pages, and notifications support multilingual JSON content for `ar`, `he`, and `en`.
+- Branding settings support logo URL, colors, default language, enabled languages, and theme JSON.
+- Dynamic pages support per-center unique slugs.
+
+Deferred:
+- Payments
+- Medical diagnosis details
+- Staff scheduling
+- Audit logs
+- File assets
+- Dedicated page block table
+
+Verified:
+- `npm run db:format` passes in `packages/database`.
+- `npm run db:validate` passes in `packages/database`.
+- `npm run typecheck` passes in `packages/database`.
+
 Designed the Phase 1 production-ready Prisma schema foundation.
 
 Added models:

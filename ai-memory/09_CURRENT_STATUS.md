@@ -1,7 +1,7 @@
 # RoyalCare - Current Status
 
 Last updated: 2026-04-26
-Status: Web, API, and Phase 1 database foundation ready; mobile implementation not started
+Status: Web, API, and Phase 2 database foundation ready; mobile implementation not started
 
 ## 1. What Exists Now
 
@@ -93,6 +93,7 @@ Database package initialized:
 - TypeScript helpers folder prepared
 - Tenant scope helper prepared with `centerId`
 - Phase 1 Prisma schema foundation implemented
+- Phase 2 Prisma business foundation implemented
 - Implemented models:
   - User
   - Role
@@ -102,14 +103,20 @@ Database package initialized:
   - Center
   - Subscription
   - Domain
-- Deferred models:
   - Customer
-  - Appointment
   - Service
+  - Appointment
   - Session
   - Notification
   - Dynamic Page
   - Branding Settings
+Deferred models:
+  - Payment
+  - Medical diagnosis details
+  - Staff scheduling
+  - File Asset
+  - Audit Log
+  - Dedicated Page Block
   - Audit Log
 
 ## 2. Implementation Status
@@ -129,7 +136,7 @@ Backend:
 
 Database:
 - Prisma schema baseline created
-- Phase 1 foundation models created
+- Phase 1 and Phase 2 foundation models created
 - Migrations not created yet
 - Migration folder prepared at `packages/database/prisma/migrations`
 

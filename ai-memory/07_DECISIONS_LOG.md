@@ -171,3 +171,30 @@ Needs Confirmation:
 - Whether a dedicated `SubscriptionPlan` table should be added before billing integration.
 - Whether domain primary uniqueness should use application logic or a PostgreSQL partial unique index.
 - Whether platform role uniqueness should be enforced through application logic or raw SQL partial indexes.
+
+## 2026-04-26 - Phase 2 Business Prisma Models
+
+Decision:
+- Added Phase 2 business models:
+  - `Customer`
+  - `Service`
+  - `Appointment`
+  - `Session`
+  - `Notification`
+  - `DynamicPage`
+  - `BrandingSettings`
+- Payments, medical diagnosis details, staff scheduling, audit logs, file assets, and dedicated page blocks remain deferred.
+
+Reason:
+- RoyalCare needs tenant-owned operational data after the identity/RBAC/center foundation.
+- The selected models support first center workflows without overcomplicating healthcare-specific or payment details too early.
+
+Impact:
+- Center admin, customer portal, public website pages, service catalog, appointments, sessions, notifications, and branding can now be built against a concrete schema foundation.
+- Every Phase 2 business model is linked to `Center` through `centerId`.
+
+Needs Confirmation:
+- Exact appointment approval/cancellation rules.
+- Whether staff assignment is required before MVP.
+- Whether reusable notification templates should be added.
+- Whether advanced page blocks should become a separate table.

@@ -1,7 +1,7 @@
 # RoyalCare - Next Tasks
 
 Last updated: 2026-04-26
-Status: Web, API, and Phase 1 database foundation created; first migration pending
+Status: Web, API, and Phase 2 database foundation created; first migration pending
 
 ## 1. Immediate Confirmation Tasks
 
@@ -134,13 +134,22 @@ Completed:
   - Subscription
   - Domain
 - Verify Prisma format, validation, and TypeScript typecheck pass after Phase 1 schema.
+- Create Phase 2 Prisma business models:
+  - Customer
+  - Service
+  - Appointment
+  - Session
+  - Notification
+  - DynamicPage
+  - BrandingSettings
+- Verify Prisma format, validation, and TypeScript typecheck pass after Phase 2 schema.
 
 Next:
 1. Choose package manager.
 2. Choose monorepo tooling.
 3. Add root workspace configuration.
 4. Confirm local/hosted PostgreSQL environment.
-5. Create first Prisma migration for Phase 1 models.
+5. Create first Prisma migration for Phase 1 and Phase 2 models.
 6. Add seed data for:
    - Platform owner role
    - Platform admin role
@@ -187,6 +196,14 @@ Completed:
   - Center
   - Subscription
   - Domain
+- Phase 2 business models:
+  - Customer
+  - Service
+  - Appointment
+  - Session
+  - Notification
+  - DynamicPage
+  - BrandingSettings
 
 Next database tasks:
 1. Create first migration after PostgreSQL environment is confirmed.
@@ -194,21 +211,17 @@ Next database tasks:
    - Super Admin role
    - Default permissions
    - Center Owner role
-3. Add Phase 2 schema only after confirmation:
+3. Add later schema only after confirmation:
    - SubscriptionPlan
    - ModuleDefinition
    - CenterModule
-   - Customer
-   - Service
    - StaffMember
-   - Appointment
-   - Session
-   - Page
    - PageBlock
-   - BrandingSettings
    - NotificationTemplate
    - FileAsset
    - AuditLog
+   - Payments
+   - Medical/treatment detail tables
 
 ## 6. Frontend Foundation Tasks
 

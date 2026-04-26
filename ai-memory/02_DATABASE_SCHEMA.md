@@ -1,7 +1,7 @@
 # RoyalCare - Database Schema
 
 Last updated: 2026-04-26
-Status: Phase 1 Prisma foundation implemented
+Status: Phase 2 Prisma business foundation implemented
 
 ## 1. Database Strategy
 
@@ -23,7 +23,8 @@ Current implementation status:
 - Prisma has been initialized correctly.
 - PostgreSQL datasource is configured.
 - Phase 1 foundation models are implemented.
-- Customer, appointment, service, session, notification, page, branding, and audit models are intentionally not created yet.
+- Phase 2 business foundation models are implemented.
+- Payments, medical diagnosis details, staff scheduling, file assets, audit logs, module tables, and dedicated page-block tables are intentionally not created yet.
 
 Multi-tenancy:
 - Shared database
@@ -62,7 +63,7 @@ Tenant-owned center data:
 
 ## 3. Core Models - Draft
 
-Phase 1 implemented models:
+Implemented models:
 - `User`
 - `Role`
 - `Permission`
@@ -71,16 +72,22 @@ Phase 1 implemented models:
 - `Center`
 - `Subscription`
 - `Domain`
+- `Customer`
+- `Service`
+- `Appointment`
+- `Session`
+- `Notification`
+- `DynamicPage`
+- `BrandingSettings`
 
 Not implemented yet:
-- Customers
-- Appointments
-- Services
-- Sessions
-- Notifications
-- Dynamic Pages
-- Branding Settings
+- Payments
+- Medical diagnosis details
+- Staff scheduling
+- File assets
 - Audit Logs
+- Module tables
+- Dedicated page blocks
 
 ### 3.0 Phase 1 Implementation Notes
 
@@ -121,6 +128,26 @@ Needs Confirmation:
 - Whether platform roles and center role templates should be separate tables later.
 - Whether subscriptions need a separate `SubscriptionPlan` table in Phase 2.
 - Whether domain primary uniqueness should be enforced with raw SQL partial indexes.
+
+### 3.0.1 Phase 2 Implementation Notes
+
+Tenant strategy:
+- Every Phase 2 model includes required `centerId`.
+- Every Phase 2 model has a relation to `Center`.
+- Customer, service, appointment, session, notification, dynamic page, and branding records are all center-owned.
+
+Multilingual strategy:
+- `Service.name` and `Service.description` use JSON to support `ar`, `he`, and `en`.
+- `DynamicPage.title`, `DynamicPage.content`, `DynamicPage.seoTitle`, and `DynamicPage.seoDescription` use JSON for multilingual website content.
+- `Notification.title` and `Notification.body` use JSON for multilingual message content.
+- `BrandingSettings.defaultLanguage` uses `SupportedLanguage`.
+- `BrandingSettings.enabledLanguages` uses JSON so centers can enable combinations of `ar`, `he`, and `en` without adding a join table yet.
+
+Business scope:
+- Customer identity, service catalog, booking records, session records, notifications, dynamic pages, and branding settings are now represented.
+- Payments are not included.
+- Medical diagnosis details are not included.
+- Staff scheduling is not included yet.
 
 ### 3.1 Center
 
@@ -384,12 +411,12 @@ Fields:
 - `fullName`
 - `email`
 - `phone`
-- `dateOfBirth`
-- `gender`
+- `language`
 - `notes`
 - `status`
 - `createdAt`
 - `updatedAt`
+- `archivedAt`
 
 Rules:
 - Customer data is tenant-owned.
@@ -397,8 +424,8 @@ Rules:
 
 Needs Confirmation:
 - Required customer fields by industry.
-- Whether medical notes are included in v1.
 - Data privacy/regulatory requirements.
+- Whether customers should be globally linked across centers or isolated per center only.
 
 ### 3.13 Service
 
@@ -408,18 +435,19 @@ Purpose:
 Fields:
 - `id`
 - `centerId`
-- `name`
-- `description`
+- `name` JSON translations
+- `description` JSON translations
 - `durationMinutes`
 - `price`
 - `currency`
-- `categoryId`
-- `isActive`
+- `category`
+- `status`
+- `sortOrder`
 - `createdAt`
 - `updatedAt`
+- `archivedAt`
 
 Needs Confirmation:
-- Whether service names/descriptions are multilingual.
 - Whether packages/bundles are needed in v1.
 
 ### 3.14 StaffMember
@@ -450,13 +478,15 @@ Fields:
 - `id`
 - `centerId`
 - `customerId`
-- `serviceId`
-- `staffMemberId` nullable
+- `serviceId` nullable
 - `startsAt`
 - `endsAt`
 - `status`
 - `source`
+- `language`
 - `notes`
+- `cancelledAt`
+- `completedAt`
 - `createdAt`
 - `updatedAt`
 
@@ -477,6 +507,7 @@ Needs Confirmation:
 - Whether appointments require approval or can be auto-confirmed.
 - Cancellation rules.
 - Reminder schedule.
+- Staff assignment/scheduling model.
 
 ### 3.16 Session
 
@@ -489,7 +520,6 @@ Fields:
 - `customerId`
 - `appointmentId` nullable
 - `serviceId` nullable
-- `staffMemberId` nullable
 - `sessionNumber`
 - `status`
 - `notes`
@@ -500,8 +530,9 @@ Fields:
 Needs Confirmation:
 - Industry-specific session fields.
 - Whether session notes are visible to customers.
+- Whether staff/practitioner assignment is required in Phase 3.
 
-### 3.17 Page
+### 3.17 DynamicPage
 
 Purpose:
 - Dynamic website page for a center.
@@ -510,18 +541,32 @@ Fields:
 - `id`
 - `centerId`
 - `slug`
-- `title`
+- `title` JSON translations
+- `content` JSON blocks/translations
 - `status`
-- `seoTitle`
-- `seoDescription`
+- `seoTitle` JSON translations
+- `seoDescription` JSON translations
 - `publishedAt`
 - `createdAt`
 - `updatedAt`
+- `archivedAt`
+
+Rules:
+- Slugs are unique per center.
+- Public website must only show published pages.
+- Page block structure is stored in `content` JSON for now.
+
+Needs Confirmation:
+- Whether a dedicated `PageBlock` table is required later for advanced page builder editing.
 
 ### 3.18 PageBlock
 
 Purpose:
 - Structured page-builder blocks.
+
+Implementation status:
+- Not implemented in Phase 2.
+- `DynamicPage.content` JSON is used for the current foundation.
 
 Fields:
 - `id`
@@ -546,30 +591,42 @@ Purpose:
 Fields:
 - `id`
 - `centerId`
-- `logoFileId`
+- `logoUrl`
 - `primaryColor`
 - `secondaryColor`
 - `accentColor`
-- `themeMode`
-- `fontFamily`
-- `settings`
+- `defaultLanguage`
+- `enabledLanguages`
+- `theme`
 - `createdAt`
 - `updatedAt`
 
-### 3.20 NotificationTemplate
+Rules:
+- One branding settings record per center.
+- `enabledLanguages` should contain supported language codes: `ar`, `he`, `en`.
+
+### 3.20 Notification
 
 Purpose:
-- Stores notification templates per center and channel.
+- Stores notification records per center and channel.
 
 Fields:
 - `id`
 - `centerId`
+- `customerId`
+- `recipientUserId`
 - `channel`
+- `status`
 - `eventKey`
 - `language`
-- `subject`
-- `body`
-- `isEnabled`
+- `title` JSON translations
+- `body` JSON translations
+- `recipientEmail`
+- `recipientPhone`
+- `sentAt`
+- `failedAt`
+- `failureReason`
+- `metadata`
 - `createdAt`
 - `updatedAt`
 
@@ -578,6 +635,10 @@ Channels:
 - `sms`
 - `whatsapp`
 - `in_app`
+
+Needs Confirmation:
+- Whether reusable `NotificationTemplate` should be added later.
+- Provider-specific delivery log fields.
 
 ### 3.21 FileAsset
 
@@ -641,7 +702,11 @@ Recommended indexes:
 - Appointment by `centerId`, `startsAt`
 - Customer by `centerId`, `phone`
 - Customer by `centerId`, `email`
-- Page by `centerId`, `slug`
+- DynamicPage unique by `centerId`, `slug`
+- Service by `centerId`, `status`
+- Session by `centerId`, `performedAt`
+- Notification by `centerId`, `status`
+- BrandingSettings unique by `centerId`
 - AuditLog by `centerId`, `createdAt`
 
 Needs Confirmation:

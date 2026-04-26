@@ -1,11 +1,18 @@
 // RoyalCare Prisma schema.
 //
-// Phase 1 foundation only:
+// Phase 1 and Phase 2 foundation:
 // - Identity
 // - RBAC permissions
 // - Centers / tenants
 // - Subscriptions
 // - Custom domains
+// - Customers
+// - Services
+// - Appointments
+// - Sessions
+// - Notifications
+// - Dynamic pages
+// - Branding settings
 //
 // Tenant-owned models must include centerId unless explicitly documented as
 // global platform data.
@@ -102,6 +109,60 @@ enum DomainStatus {
   DISABLED
 }
 
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum ServiceStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum AppointmentStatus {
+  REQUESTED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum AppointmentSource {
+  ADMIN
+  PUBLIC_WEBSITE
+  CUSTOMER_PORTAL
+  IMPORT
+}
+
+enum SessionStatus {
+  PLANNED
+  COMPLETED
+  CANCELLED
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  WHATSAPP
+  IN_APP
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+enum DynamicPageStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
 model User {
   id              String     @id @default(uuid()) @db.Uuid
   email           String?    @unique @db.VarChar(320)
@@ -115,8 +176,10 @@ model User {
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
-  ownedCenters Center[]   @relation("CenterOwner")
-  roles        UserRole[]
+  ownedCenters  Center[]       @relation("CenterOwner")
+  customers     Customer[]
+  notifications Notification[]
+  roles         UserRole[]
 
   @@index([status])
   @@index([createdAt])
@@ -208,11 +271,18 @@ model Center {
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
-  owner         User?          @relation("CenterOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  owner         User?             @relation("CenterOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   roles         Role[]
   userRoles     UserRole[]
   subscriptions Subscription[]
   domains       Domain[]
+  customers     Customer[]
+  services      Service[]
+  appointments  Appointment[]
+  sessions      Session[]
+  notifications Notification[]
+  dynamicPages  DynamicPage[]
+  branding      BrandingSettings?
 
   @@index([ownerUserId])
   @@index([status])
@@ -267,4 +337,177 @@ model Domain {
   @@index([centerId, status])
   @@index([centerId, isPrimary])
   @@index([status])
+}
+
+model Customer {
+  id         String             @id @default(uuid()) @db.Uuid
+  centerId   String             @db.Uuid
+  userId     String?            @db.Uuid
+  fullName   String             @db.VarChar(160)
+  email      String?            @db.VarChar(320)
+  phone      String?            @db.VarChar(32)
+  status     CustomerStatus     @default(ACTIVE)
+  language   SupportedLanguage?
+  notes      String?
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+  archivedAt DateTime?
+
+  center        Center         @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  user          User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  appointments  Appointment[]
+  sessions      Session[]
+  notifications Notification[]
+
+  @@index([centerId, status])
+  @@index([centerId, email])
+  @@index([centerId, phone])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Service {
+  id              String        @id @default(uuid()) @db.Uuid
+  centerId        String        @db.Uuid
+  name            Json
+  description     Json?
+  category        String?       @db.VarChar(120)
+  status          ServiceStatus @default(DRAFT)
+  durationMinutes Int?
+  price           Decimal?      @db.Decimal(10, 2)
+  currency        String?       @db.VarChar(3)
+  sortOrder       Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  archivedAt      DateTime?
+
+  center       Center        @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+  sessions     Session[]
+
+  @@index([centerId, status])
+  @@index([centerId, category])
+  @@index([centerId, sortOrder])
+}
+
+model Appointment {
+  id          String             @id @default(uuid()) @db.Uuid
+  centerId    String             @db.Uuid
+  customerId  String             @db.Uuid
+  serviceId   String?            @db.Uuid
+  status      AppointmentStatus  @default(REQUESTED)
+  source      AppointmentSource  @default(ADMIN)
+  startsAt    DateTime
+  endsAt      DateTime?
+  language    SupportedLanguage?
+  notes       String?
+  cancelledAt DateTime?
+  completedAt DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  center   Center    @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  customer Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  service  Service?  @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  sessions Session[]
+
+  @@index([centerId, status])
+  @@index([centerId, startsAt])
+  @@index([customerId, startsAt])
+  @@index([serviceId])
+}
+
+model Session {
+  id            String        @id @default(uuid()) @db.Uuid
+  centerId      String        @db.Uuid
+  customerId    String        @db.Uuid
+  appointmentId String?       @db.Uuid
+  serviceId     String?       @db.Uuid
+  status        SessionStatus @default(PLANNED)
+  sessionNumber Int?
+  performedAt   DateTime?
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  center      Center       @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  service     Service?     @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+
+  @@index([centerId, status])
+  @@index([centerId, performedAt])
+  @@index([customerId, performedAt])
+  @@index([appointmentId])
+  @@index([serviceId])
+}
+
+model Notification {
+  id              String              @id @default(uuid()) @db.Uuid
+  centerId        String              @db.Uuid
+  customerId      String?             @db.Uuid
+  recipientUserId String?             @db.Uuid
+  channel         NotificationChannel
+  status          NotificationStatus  @default(PENDING)
+  eventKey        String              @db.VarChar(120)
+  language        SupportedLanguage   @default(EN)
+  title           Json?
+  body            Json?
+  recipientEmail  String?             @db.VarChar(320)
+  recipientPhone  String?             @db.VarChar(32)
+  sentAt          DateTime?
+  failedAt        DateTime?
+  failureReason   String?
+  metadata        Json?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  center        Center    @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  customer      Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  recipientUser User?     @relation(fields: [recipientUserId], references: [id], onDelete: SetNull)
+
+  @@index([centerId, status])
+  @@index([centerId, eventKey])
+  @@index([customerId])
+  @@index([recipientUserId])
+  @@index([createdAt])
+}
+
+model DynamicPage {
+  id             String            @id @default(uuid()) @db.Uuid
+  centerId       String            @db.Uuid
+  slug           String            @db.VarChar(160)
+  title          Json
+  content        Json
+  status         DynamicPageStatus @default(DRAFT)
+  seoTitle       Json?
+  seoDescription Json?
+  publishedAt    DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  archivedAt     DateTime?
+
+  center Center @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  @@unique([centerId, slug])
+  @@index([centerId, status])
+  @@index([publishedAt])
+}
+
+model BrandingSettings {
+  id               String            @id @default(uuid()) @db.Uuid
+  centerId         String            @unique @db.Uuid
+  logoUrl          String?           @db.VarChar(500)
+  primaryColor     String?           @db.VarChar(20)
+  secondaryColor   String?           @db.VarChar(20)
+  accentColor      String?           @db.VarChar(20)
+  defaultLanguage  SupportedLanguage @default(EN)
+  enabledLanguages Json
+  theme            Json?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  center Center @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  @@index([defaultLanguage])
 }
