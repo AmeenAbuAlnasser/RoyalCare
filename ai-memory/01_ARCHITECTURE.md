@@ -1,7 +1,7 @@
 # RoyalCare - Architecture
 
 Last updated: 2026-04-26
-Status: Initial architecture direction
+Status: Monorepo folder structure initialized
 
 ## 1. Architecture Goal
 
@@ -43,29 +43,27 @@ Needs Confirmation:
 - File storage provider.
 - Email/SMS/WhatsApp notification providers.
 
-## 3. Recommended Repository Structure
+## 3. Repository Structure
 
-Recommended starting structure:
+The project uses a production-ready monorepo layout with separate top-level areas for frontend apps, backend services, and shared packages.
 
 ```text
 RoyalCare/
   apps/
     web/
       # Next.js app for Super Admin, Center Admin, Customer Portal, and public websites
-    api/
-      # NestJS API
     mobile/
       # Future React Native Expo app
+  services/
+    api/
+      # NestJS backend API service
   packages/
+    database/
+      # Prisma schema, migrations, generated client setup, seeds, and database utilities
     shared/
       # Shared TypeScript types, constants, validation schemas
     ui/
-      # Shared UI components if useful
-    config/
-      # Shared lint, tsconfig, formatting config
-  prisma/
-    schema.prisma
-    migrations/
+      # Shared UI components for web and future compatible primitives where practical
   ai-memory/
     # Long-term project memory
   README.md
@@ -73,7 +71,20 @@ RoyalCare/
   CLAUDE.md
 ```
 
-If the project begins smaller, a simpler structure is acceptable, but it should not block future mobile or shared packages.
+Current folder status:
+- `apps/web` exists as the future Next.js frontend location.
+- `apps/mobile` exists as the future React Native Expo location.
+- `services/api` exists as the future NestJS backend API location.
+- `packages/database` exists as the future Prisma/PostgreSQL package location.
+- `packages/shared` exists for shared TypeScript contracts, constants, and validation schemas.
+- `packages/ui` exists for shared UI components.
+
+No dependencies have been installed yet. No framework scaffolding has been generated yet.
+
+Needs Confirmation:
+- Whether to use npm, pnpm, yarn, or bun workspaces.
+- Whether to use Turborepo, Nx, or simple package-manager workspaces.
+- Whether `packages/database` should own all Prisma files or only export database client utilities while migrations live elsewhere. Current recommendation: keep Prisma schema, migrations, seeds, and database client setup in `packages/database`.
 
 ## 4. High-Level System Components
 

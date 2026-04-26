@@ -1,11 +1,11 @@
 # RoyalCare - Current Status
 
 Last updated: 2026-04-26
-Status: Project memory initialized, implementation not started
+Status: Monorepo folder structure initialized, implementation not started
 
 ## 1. What Exists Now
 
-The project currently has AI memory and documentation files initialized.
+The project currently has AI memory/documentation files and a clean monorepo folder structure initialized.
 
 Files initialized:
 - `ai-memory/00_PROJECT_OVERVIEW.md`
@@ -23,6 +23,17 @@ Files initialized:
 - `AGENTS.md`
 - `README.md`
 
+Monorepo folders initialized:
+- `apps/web`
+- `apps/mobile`
+- `services/api`
+- `packages/database`
+- `packages/shared`
+- `packages/ui`
+
+Placeholder files:
+- `.gitkeep` files were added inside empty app/service/package folders so the structure can be preserved before framework scaffolding.
+
 ## 2. Implementation Status
 
 Application code:
@@ -30,13 +41,17 @@ Application code:
 
 Frontend:
 - Not scaffolded
+- Folder prepared at `apps/web`
+- Future mobile folder prepared at `apps/mobile`
 
 Backend:
 - Not scaffolded
+- Folder prepared at `services/api`
 
 Database:
 - Prisma schema not created yet
 - Migrations not created yet
+- Database package folder prepared at `packages/database`
 
 Authentication:
 - Not implemented
@@ -103,12 +118,13 @@ Product:
 Before writing application code, confirm MVP scope and infrastructure choices.
 
 Recommended first technical implementation:
-1. Scaffold monorepo.
-2. Add Next.js web app.
-3. Add NestJS API app.
-4. Add Prisma with PostgreSQL.
-5. Create initial tenant-aware schema.
-6. Implement auth, tenancy guard, and permissions guard early.
+1. Choose package manager and monorepo tooling.
+2. Add root workspace configuration.
+3. Scaffold Next.js web app in `apps/web`.
+4. Scaffold NestJS API app in `services/api`.
+5. Add Prisma with PostgreSQL in `packages/database`.
+6. Create initial tenant-aware schema.
+7. Implement auth, tenancy guard, and permissions guard early.
 
 ## 6. Risk Notes
 

@@ -1,7 +1,7 @@
 # RoyalCare - Next Tasks
 
 Last updated: 2026-04-26
-Status: Initial task backlog
+Status: Monorepo structure created; framework scaffolding pending
 
 ## 1. Immediate Confirmation Tasks
 
@@ -63,16 +63,30 @@ Out of MVP unless confirmed:
 
 ## 3. Technical Setup Tasks
 
-1. Initialize repository tooling.
-2. Scaffold Next.js app with TypeScript.
-3. Scaffold NestJS API with TypeScript.
-4. Add shared TypeScript package if using monorepo.
-5. Configure linting and formatting.
-6. Add PostgreSQL and Prisma.
-7. Create initial Prisma schema.
-8. Add environment variable structure.
-9. Add Docker Compose for local PostgreSQL if useful.
-10. Add basic CI checks.
+Completed:
+- Create monorepo folders:
+  - `apps/web`
+  - `apps/mobile`
+  - `services/api`
+  - `packages/database`
+  - `packages/shared`
+  - `packages/ui`
+
+Next:
+1. Choose package manager.
+2. Choose monorepo tooling.
+3. Add root workspace configuration.
+4. Scaffold Next.js app with TypeScript in `apps/web`.
+5. Scaffold NestJS API with TypeScript in `services/api`.
+6. Prepare React Native Expo app in `apps/mobile` when mobile work begins.
+7. Add Prisma/PostgreSQL setup in `packages/database`.
+8. Add shared TypeScript package setup in `packages/shared`.
+9. Add shared UI package setup in `packages/ui`.
+10. Configure linting and formatting.
+11. Create initial Prisma schema.
+12. Add environment variable structure.
+13. Add Docker Compose for local PostgreSQL if useful.
+14. Add basic CI checks.
 
 Needs Confirmation:
 - Whether Docker should be used locally.
