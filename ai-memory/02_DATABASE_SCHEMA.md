@@ -1,7 +1,7 @@
 # RoyalCare - Database Schema
 
 Last updated: 2026-04-26
-Status: Initial conceptual schema
+Status: Phase 1 Prisma foundation implemented
 
 ## 1. Database Strategy
 
@@ -11,6 +11,20 @@ Database:
 ORM:
 - Prisma
 
+Initialized location:
+- `packages/database`
+- Prisma schema: `packages/database/prisma/schema.prisma`
+- Prisma config: `packages/database/prisma.config.ts`
+- Migrations folder: `packages/database/prisma/migrations`
+- Seeds folder: `packages/database/prisma/seeds`
+- TypeScript helpers: `packages/database/src`
+
+Current implementation status:
+- Prisma has been initialized correctly.
+- PostgreSQL datasource is configured.
+- Phase 1 foundation models are implemented.
+- Customer, appointment, service, session, notification, page, branding, and audit models are intentionally not created yet.
+
 Multi-tenancy:
 - Shared database
 - Shared schema
@@ -19,6 +33,7 @@ Multi-tenancy:
 Rule:
 - Every center-owned table must include `centerId` unless there is a documented reason not to.
 - Every query for tenant-owned data must be scoped by trusted `centerId`.
+- The database package exposes a tenant scope helper with `TENANT_ID_FIELD = 'centerId'`.
 
 ## 2. Global vs Tenant-Owned Data
 
@@ -47,7 +62,65 @@ Tenant-owned center data:
 
 ## 3. Core Models - Draft
 
-This is a conceptual schema, not the final Prisma schema.
+Phase 1 implemented models:
+- `User`
+- `Role`
+- `Permission`
+- `UserRole`
+- `RolePermission`
+- `Center`
+- `Subscription`
+- `Domain`
+
+Not implemented yet:
+- Customers
+- Appointments
+- Services
+- Sessions
+- Notifications
+- Dynamic Pages
+- Branding Settings
+- Audit Logs
+
+### 3.0 Phase 1 Implementation Notes
+
+Primary key strategy:
+- UUID string primary keys using PostgreSQL `uuid`.
+
+Timestamp strategy:
+- Implemented models include `createdAt`.
+- Mutable business records include `updatedAt`.
+- Access and lifecycle timestamps are included where needed, such as `lastLoginAt`, `activatedAt`, `suspendedAt`, `cancelledAt`, `assignedAt`, `revokedAt`, `verifiedAt`, and subscription period fields.
+
+Tenant strategy:
+- `Center` is the tenant.
+- Tenant-scoped role assignments use `UserRole.centerId`.
+- Center-owned roles can use `Role.centerId`.
+- `Subscription` and `Domain` are always center-owned and require `centerId`.
+
+RBAC strategy:
+- `Permission` defines atomic permission keys.
+- `Role` groups permissions and can be platform-level, center-level, or customer-level.
+- `RolePermission` is the explicit role-permission join table.
+- `UserRole` is the explicit user-role assignment table, optionally scoped to `centerId`.
+
+Subscription control:
+- `Subscription` includes `status`, `billingInterval`, `currentPeriodStart`, `currentPeriodEnd`, `trialEndsAt`, `expiresAt`, `cancelAt`, and `cancelledAt`.
+- Indexes support lookup by center/status, expiry, and period end.
+
+Domain control:
+- `Domain.hostname` is globally unique.
+- Domains are center-owned.
+- Domain verification and activation timestamps are included.
+- `isPrimary` is included; enforcing only one primary domain per center may require application logic or a future database-level partial index.
+
+Known Prisma/PostgreSQL limitation:
+- Some uniqueness rules involving nullable `centerId`, such as global platform role uniqueness, may require application-level enforcement or a future raw SQL partial unique index.
+
+Needs Confirmation:
+- Whether platform roles and center role templates should be separate tables later.
+- Whether subscriptions need a separate `SubscriptionPlan` table in Phase 2.
+- Whether domain primary uniqueness should be enforced with raw SQL partial indexes.
 
 ### 3.1 Center
 
@@ -67,8 +140,9 @@ Fields:
 
 Relationships:
 - Has many domains
-- Has one or many subscriptions
-- Has many users
+- Has many subscriptions
+- Has many user role assignments
+- Has many center-scoped roles
 - Has many customers
 - Has many appointments
 - Has branding settings
@@ -118,6 +192,11 @@ Statuses:
 Purpose:
 - Defines RoyalCare plans and allowed features.
 
+Implementation status:
+- Not implemented in Phase 1.
+- Phase 1 uses `Subscription.planCode` and `Subscription.planName`.
+- A dedicated plan table can be added later when pricing/feature limits are confirmed.
+
 Fields:
 - `id`
 - `name`
@@ -136,7 +215,7 @@ Needs Confirmation:
 - Currency.
 - Whether pricing differs by country or center type.
 
-### 3.4 CenterSubscription
+### 3.4 Subscription
 
 Purpose:
 - Tracks current and historical subscription state for a center.
@@ -144,15 +223,19 @@ Purpose:
 Fields:
 - `id`
 - `centerId`
-- `planId`
+- `planCode`
+- `planName`
 - `status`
-- `startedAt`
+- `billingInterval`
 - `currentPeriodStart`
 - `currentPeriodEnd`
+- `trialEndsAt`
+- `expiresAt`
 - `cancelAt`
 - `cancelledAt`
 - `externalProvider`
 - `externalSubscriptionId`
+- `metadata`
 - `createdAt`
 - `updatedAt`
 
@@ -219,10 +302,10 @@ Needs Confirmation:
 - Whether phone login is required.
 - Whether passwordless login is required.
 
-### 3.8 CenterUser
+### 3.8 UserRole
 
 Purpose:
-- Connects a user to a center with role and permissions.
+- Connects a user to a role and optionally scopes the assignment to a center.
 
 Fields:
 - `id`
@@ -230,12 +313,14 @@ Fields:
 - `userId`
 - `roleId`
 - `status`
+- `assignedAt`
+- `revokedAt`
 - `createdAt`
 - `updatedAt`
 
 Rules:
 - A user may belong to multiple centers if explicitly supported.
-- Access to center data requires active CenterUser membership, except Super Admin.
+- Access to center data requires an active center-scoped UserRole, except Super Admin/platform roles.
 
 ### 3.9 Role
 

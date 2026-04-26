@@ -2,6 +2,85 @@
 
 ## 2026-04-26
 
+Designed the Phase 1 production-ready Prisma schema foundation.
+
+Added models:
+- `User`
+- `Role`
+- `Permission`
+- `UserRole`
+- `RolePermission`
+- `Center`
+- `Subscription`
+- `Domain`
+
+Added enums:
+- `UserStatus`
+- `RoleStatus`
+- `PermissionStatus`
+- `UserRoleStatus`
+- `RoleScope`
+- `CenterType`
+- `CenterStatus`
+- `SupportedLanguage`
+- `SubscriptionStatus`
+- `BillingInterval`
+- `DomainType`
+- `DomainStatus`
+
+Architecture notes:
+- Uses UUID primary keys.
+- Uses explicit RBAC join tables.
+- Uses `centerId` for tenant-scoped assignments and center-owned subscription/domain records.
+- Includes status fields and lifecycle timestamps.
+- Supports subscription expiry/trial/cancel logic.
+- Supports custom domains and RoyalCare subdomains.
+
+Verified:
+- `npm run db:format` passes in `packages/database`.
+- `npm run db:validate` passes in `packages/database`.
+- `npm run typecheck` passes in `packages/database`.
+
+Deferred:
+- Customers
+- Appointments
+- Services
+- Sessions
+- Notifications
+- Dynamic Pages
+- Branding Settings
+- Audit Logs
+
+Initialized the database architecture in `packages/database`.
+
+Added:
+- Prisma ORM `7.8.0`
+- PostgreSQL datasource baseline
+- `@royalcare/database` package metadata
+- Prisma config at `packages/database/prisma.config.ts`
+- Minimal Prisma schema at `packages/database/prisma/schema.prisma`
+- Migration folder placeholder
+- Seed folder placeholder
+- TypeScript package configuration
+- Tenant scope helper using `centerId`
+- Database package scripts for:
+  - `db:generate`
+  - `db:validate`
+  - `db:format`
+  - `db:migrate:dev`
+  - `db:migrate:deploy`
+  - `db:studio`
+  - `typecheck`
+
+Verified:
+- `npm run db:validate` passes in `packages/database`.
+- `npm run typecheck` passes in `packages/database`.
+
+Notes:
+- Full RoyalCare application models were intentionally not created yet.
+- Prisma schema currently contains generator/datasource configuration and planning comments only.
+- npm reported `3 moderate severity vulnerabilities`; no automatic audit fix was run.
+
 Initialized the backend API in `services/api`.
 
 Added:

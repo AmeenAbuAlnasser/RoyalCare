@@ -1,11 +1,11 @@
 # RoyalCare - Current Status
 
 Last updated: 2026-04-26
-Status: Web and API apps scaffolded; mobile/database implementation not started
+Status: Web, API, and Phase 1 database foundation ready; mobile implementation not started
 
 ## 1. What Exists Now
 
-The project currently has AI memory/documentation files, a clean monorepo folder structure, the main web application scaffolded, and the backend API scaffolded.
+The project currently has AI memory/documentation files, a clean monorepo folder structure, the main web application scaffolded, the backend API scaffolded, and the database package initialized.
 
 Files initialized:
 - `ai-memory/00_PROJECT_OVERVIEW.md`
@@ -81,6 +81,37 @@ Backend API initialized:
   - Permissions
 - Tenant context interface prepared with `centerId`
 
+Database package initialized:
+- Location: `packages/database`
+- Package name: `@royalcare/database`
+- Prisma ORM `7.8.0`
+- PostgreSQL datasource baseline
+- Prisma schema: `prisma/schema.prisma`
+- Prisma config: `prisma.config.ts`
+- Migrations folder prepared
+- Seeds folder prepared
+- TypeScript helpers folder prepared
+- Tenant scope helper prepared with `centerId`
+- Phase 1 Prisma schema foundation implemented
+- Implemented models:
+  - User
+  - Role
+  - Permission
+  - UserRole
+  - RolePermission
+  - Center
+  - Subscription
+  - Domain
+- Deferred models:
+  - Customer
+  - Appointment
+  - Service
+  - Session
+  - Notification
+  - Dynamic Page
+  - Branding Settings
+  - Audit Log
+
 ## 2. Implementation Status
 
 Application code:
@@ -97,9 +128,10 @@ Backend:
 - Database not connected
 
 Database:
-- Prisma schema not created yet
+- Prisma schema baseline created
+- Phase 1 foundation models created
 - Migrations not created yet
-- Database package folder prepared at `packages/database`
+- Migration folder prepared at `packages/database/prisma/migrations`
 
 Authentication:
 - Not implemented
@@ -168,8 +200,8 @@ Before writing application code, confirm MVP scope and infrastructure choices.
 Recommended first technical implementation:
 1. Choose package manager and monorepo tooling.
 2. Add root workspace configuration.
-3. Add Prisma with PostgreSQL in `packages/database`.
-4. Create initial tenant-aware schema.
+3. Create the first Prisma migration when a PostgreSQL environment is confirmed.
+4. Add seed data for platform roles and permissions.
 5. Implement auth, tenancy guard, and permissions guard early.
 6. Start web app shell only after route/layout direction is confirmed.
 
@@ -181,6 +213,9 @@ Latest verification:
 - `npm run build` passed in `services/api`.
 - `npm test` passed in `services/api`.
 - `npm run test:e2e` passed in `services/api`.
+- `npm run db:validate` passed in `packages/database`.
+- `npm run typecheck` passed in `packages/database`.
+- `npm run db:format` passed in `packages/database`.
 
 ## 6. Risk Notes
 

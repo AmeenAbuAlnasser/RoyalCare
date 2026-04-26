@@ -1,7 +1,7 @@
 # RoyalCare - Architecture
 
 Last updated: 2026-04-26
-Status: Monorepo structure initialized; web and API apps scaffolded
+Status: Monorepo structure initialized; web, API, and database packages scaffolded
 
 ## 1. Architecture Goal
 
@@ -80,7 +80,7 @@ Current folder status:
 - `apps/web` contains the initialized Next.js web application.
 - `apps/mobile` exists as the future React Native Expo location.
 - `services/api` contains the initialized NestJS backend API application.
-- `packages/database` exists as the future Prisma/PostgreSQL package location.
+- `packages/database` contains the initialized Prisma/PostgreSQL database package.
 - `packages/shared` exists for shared TypeScript contracts, constants, and validation schemas.
 - `packages/ui` exists for shared UI components.
 
@@ -108,7 +108,20 @@ API baseline:
 - CORS is enabled for future web and mobile clients
 - Health check endpoint exists at `GET /api/v1/health`
 
-No mobile, database, shared package, or UI package framework scaffolding has been generated yet.
+Database package baseline:
+- Location: `packages/database`
+- Package name: `@royalcare/database`
+- Prisma ORM initialized
+- PostgreSQL datasource initialized
+- Prisma config exists at `packages/database/prisma.config.ts`
+- Prisma schema exists at `packages/database/prisma/schema.prisma`
+- Migration folder prepared at `packages/database/prisma/migrations`
+- Seed folder prepared at `packages/database/prisma/seeds`
+- TypeScript package structure prepared under `packages/database/src`
+- Tenant scope helper prepared with `centerId`
+- Full RoyalCare schema models are intentionally not created yet
+
+No mobile, shared package, or UI package framework scaffolding has been generated yet.
 
 Needs Confirmation:
 - Whether to use npm, pnpm, yarn, or bun workspaces.
@@ -248,6 +261,31 @@ Multi-tenancy strategy:
 - Global RoyalCare records do not use `centerId`
 
 Every query for tenant-owned data must be scoped by `centerId` from trusted context, not from arbitrary user input.
+
+Current database package structure:
+
+```text
+packages/database/
+  prisma/
+    schema.prisma
+    migrations/
+    seeds/
+  src/
+    backup/
+    client/
+    seeds/
+    tenant/
+    types/
+  prisma.config.ts
+  package.json
+  tsconfig.json
+```
+
+Current schema status:
+- Prisma and PostgreSQL are initialized.
+- No final application models exist yet.
+- The schema file documents the planned domains and tenant-isolation rule.
+- `DATABASE_URL` is configured through environment variables.
 
 ### 4.4 File Storage
 

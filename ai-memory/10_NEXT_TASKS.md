@@ -1,7 +1,7 @@
 # RoyalCare - Next Tasks
 
 Last updated: 2026-04-26
-Status: Web and API scaffolds created; database scaffolding pending
+Status: Web, API, and Phase 1 database foundation created; first migration pending
 
 ## 1. Immediate Confirmation Tasks
 
@@ -113,21 +113,47 @@ Completed:
   - Permissions
 - Prepare common backend folders for future guards, decorators, filters, interceptors, DTOs, and pipes.
 - Verify backend lint, build, unit test, and e2e test commands pass.
+- Initialize Prisma/PostgreSQL database package in `packages/database`.
+- Prepare database package structure:
+  - `prisma/schema.prisma`
+  - `prisma/migrations`
+  - `prisma/seeds`
+  - `src/client`
+  - `src/tenant`
+  - `src/backup`
+  - `src/types`
+- Add tenant scope helper using `centerId`.
+- Verify Prisma validation and TypeScript typecheck pass.
+- Create Phase 1 Prisma foundation models:
+  - User
+  - Role
+  - Permission
+  - UserRole
+  - RolePermission
+  - Center
+  - Subscription
+  - Domain
+- Verify Prisma format, validation, and TypeScript typecheck pass after Phase 1 schema.
 
 Next:
 1. Choose package manager.
 2. Choose monorepo tooling.
 3. Add root workspace configuration.
-4. Add Prisma/PostgreSQL setup in `packages/database`.
-5. Add shared TypeScript package setup in `packages/shared`.
-6. Add shared UI package setup in `packages/ui`.
-7. Add root-level lint/build scripts once workspaces are configured.
-8. Create initial Prisma schema.
-9. Add environment variable structure.
-10. Add Docker Compose for local PostgreSQL if useful.
-11. Add basic CI checks.
-12. Prepare React Native Expo app in `apps/mobile` when mobile work begins.
-13. Implement backend auth, tenancy guard, permission guard, module guard, and subscription guard.
+4. Confirm local/hosted PostgreSQL environment.
+5. Create first Prisma migration for Phase 1 models.
+6. Add seed data for:
+   - Platform owner role
+   - Platform admin role
+   - Center owner role
+   - Default Phase 1 permissions
+7. Add shared TypeScript package setup in `packages/shared`.
+8. Add shared UI package setup in `packages/ui`.
+9. Add root-level lint/build scripts once workspaces are configured.
+10. Add environment variable strategy across apps/services/packages.
+11. Add Docker Compose for local PostgreSQL if useful.
+12. Add basic CI checks.
+13. Prepare React Native Expo app in `apps/mobile` when mobile work begins.
+14. Implement backend auth, tenancy guard, permission guard, module guard, and subscription guard.
 
 Needs Confirmation:
 - Whether Docker should be used locally.
@@ -151,18 +177,27 @@ Needs Confirmation:
 
 ## 5. Database Tasks
 
-1. Create Prisma models for:
-   - Center
-   - Domain
+Completed:
+- Phase 1 foundation models:
+  - User
+  - Role
+  - Permission
+  - UserRole
+  - RolePermission
+  - Center
+  - Subscription
+  - Domain
+
+Next database tasks:
+1. Create first migration after PostgreSQL environment is confirmed.
+2. Add seed data for:
+   - Super Admin role
+   - Default permissions
+   - Center Owner role
+3. Add Phase 2 schema only after confirmation:
    - SubscriptionPlan
-   - CenterSubscription
    - ModuleDefinition
    - CenterModule
-   - User
-   - CenterUser
-   - Role
-   - Permission
-   - RolePermission
    - Customer
    - Service
    - StaffMember
@@ -174,13 +209,6 @@ Needs Confirmation:
    - NotificationTemplate
    - FileAsset
    - AuditLog
-2. Add indexes for tenant queries.
-3. Add seed data for:
-   - Super Admin role
-   - Default permissions
-   - Default modules
-   - Default templates
-4. Add migration.
 
 ## 6. Frontend Foundation Tasks
 

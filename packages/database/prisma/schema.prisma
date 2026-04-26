@@ -1,0 +1,270 @@
+// RoyalCare Prisma schema.
+//
+// Phase 1 foundation only:
+// - Identity
+// - RBAC permissions
+// - Centers / tenants
+// - Subscriptions
+// - Custom domains
+//
+// Tenant-owned models must include centerId unless explicitly documented as
+// global platform data.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum RoleStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum PermissionStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum UserRoleStatus {
+  ACTIVE
+  INACTIVE
+  REVOKED
+}
+
+enum RoleScope {
+  PLATFORM
+  CENTER
+  CUSTOMER
+}
+
+enum CenterType {
+  LASER
+  PHYSIOTHERAPY
+  HIJAMA
+  BEAUTY
+  WELLNESS
+  MULTI_SPECIALTY
+}
+
+enum CenterStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELLED
+  ARCHIVED
+}
+
+enum SupportedLanguage {
+  AR
+  HE
+  EN
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELLED
+  EXPIRED
+}
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+  CUSTOM
+}
+
+enum DomainType {
+  CUSTOM
+  SUBDOMAIN
+}
+
+enum DomainStatus {
+  PENDING
+  VERIFIED
+  ACTIVE
+  FAILED
+  DISABLED
+}
+
+model User {
+  id              String     @id @default(uuid()) @db.Uuid
+  email           String?    @unique @db.VarChar(320)
+  phone           String?    @unique @db.VarChar(32)
+  passwordHash    String?    @db.VarChar(255)
+  fullName        String     @db.VarChar(160)
+  status          UserStatus @default(INVITED)
+  emailVerifiedAt DateTime?
+  phoneVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  ownedCenters Center[]   @relation("CenterOwner")
+  roles        UserRole[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Role {
+  id          String     @id @default(uuid()) @db.Uuid
+  centerId    String?    @db.Uuid
+  key         String     @db.VarChar(120)
+  name        String     @db.VarChar(120)
+  description String?
+  scope       RoleScope
+  status      RoleStatus @default(ACTIVE)
+  isSystem    Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  center      Center?          @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@index([centerId])
+  @@index([scope, status])
+  @@index([key])
+}
+
+model Permission {
+  id          String           @id @default(uuid()) @db.Uuid
+  key         String           @unique @db.VarChar(160)
+  name        String           @db.VarChar(140)
+  description String?
+  scope       RoleScope
+  status      PermissionStatus @default(ACTIVE)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  roles RolePermission[]
+
+  @@index([scope, status])
+}
+
+model UserRole {
+  id         String         @id @default(uuid()) @db.Uuid
+  userId     String         @db.Uuid
+  roleId     String         @db.Uuid
+  centerId   String?        @db.Uuid
+  status     UserRoleStatus @default(ACTIVE)
+  assignedAt DateTime       @default(now())
+  revokedAt  DateTime?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role    @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  center Center? @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId, centerId])
+  @@index([userId, status])
+  @@index([roleId])
+  @@index([centerId, status])
+}
+
+model RolePermission {
+  id           String   @id @default(uuid()) @db.Uuid
+  roleId       String   @db.Uuid
+  permissionId String   @db.Uuid
+  createdAt    DateTime @default(now())
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([permissionId])
+}
+
+model Center {
+  id              String            @id @default(uuid()) @db.Uuid
+  ownerUserId     String?           @db.Uuid
+  name            String            @db.VarChar(160)
+  slug            String            @unique @db.VarChar(120)
+  type            CenterType
+  status          CenterStatus      @default(TRIAL)
+  primaryLanguage SupportedLanguage @default(EN)
+  timezone        String            @default("Asia/Jerusalem") @db.VarChar(80)
+  activatedAt     DateTime?
+  suspendedAt     DateTime?
+  cancelledAt     DateTime?
+  archivedAt      DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  owner         User?          @relation("CenterOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  roles         Role[]
+  userRoles     UserRole[]
+  subscriptions Subscription[]
+  domains       Domain[]
+
+  @@index([ownerUserId])
+  @@index([status])
+  @@index([type, status])
+  @@index([createdAt])
+}
+
+model Subscription {
+  id                     String             @id @default(uuid()) @db.Uuid
+  centerId               String             @db.Uuid
+  planCode               String             @db.VarChar(80)
+  planName               String             @db.VarChar(120)
+  status                 SubscriptionStatus @default(TRIALING)
+  billingInterval        BillingInterval    @default(MONTHLY)
+  currentPeriodStart     DateTime
+  currentPeriodEnd       DateTime
+  trialEndsAt            DateTime?
+  expiresAt              DateTime?
+  cancelAt               DateTime?
+  cancelledAt            DateTime?
+  externalProvider       String?            @db.VarChar(80)
+  externalSubscriptionId String?            @db.VarChar(160)
+  metadata               Json?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  center Center @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  @@index([centerId, status])
+  @@index([status, currentPeriodEnd])
+  @@index([expiresAt])
+  @@index([externalProvider, externalSubscriptionId])
+}
+
+model Domain {
+  id                String       @id @default(uuid()) @db.Uuid
+  centerId          String       @db.Uuid
+  hostname          String       @unique @db.VarChar(255)
+  type              DomainType
+  status            DomainStatus @default(PENDING)
+  isPrimary         Boolean      @default(false)
+  verificationToken String?      @unique @db.VarChar(160)
+  verifiedAt        DateTime?
+  activatedAt       DateTime?
+  failedAt          DateTime?
+  disabledAt        DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  center Center @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  @@index([centerId, status])
+  @@index([centerId, isPrimary])
+  @@index([status])
+}

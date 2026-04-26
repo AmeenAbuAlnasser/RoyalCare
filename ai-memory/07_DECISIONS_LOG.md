@@ -123,3 +123,51 @@ Impact:
 
 Needs Confirmation:
 - Whether the user specifically wants GraphQL.
+
+## 2026-04-26 - Database Package Initialized Before Final Schema
+
+Decision:
+- Prisma/PostgreSQL was initialized inside `packages/database`.
+- The full RoyalCare schema was not created yet.
+- The database package owns Prisma schema, migrations, seeds, TypeScript helpers, and tenant-scope helpers.
+
+Reason:
+- The project needs a correct production-ready database foundation before committing to final model fields.
+- The user explicitly requested Prisma initialization and architecture preparation without a full final schema.
+
+Impact:
+- Future schema work should happen in `packages/database/prisma/schema.prisma`.
+- Tenant-owned models must include `centerId`.
+- Database helpers and seed scripts should live under `packages/database/src`.
+
+Needs Confirmation:
+- Final MVP data model fields.
+- PostgreSQL hosting/local development strategy.
+- Backup retention and restore process.
+
+## 2026-04-26 - Phase 1 Prisma Foundation Models
+
+Decision:
+- The first production-ready Prisma foundation includes only:
+  - `User`
+  - `Role`
+  - `Permission`
+  - `UserRole`
+  - `RolePermission`
+  - `Center`
+  - `Subscription`
+  - `Domain`
+- Customer, appointment, service, session, notification, dynamic page, branding, and audit models are deferred.
+
+Reason:
+- Identity, RBAC, tenant lifecycle, subscription control, and custom domains are the foundation for every later RoyalCare feature.
+- Building these first reduces migration risk before adding operational center data.
+
+Impact:
+- Backend auth, tenancy, permissions, subscription, and domain modules can now be implemented against a stable Phase 1 schema.
+- Future tenant-owned tables must reference `Center` through `centerId`.
+
+Needs Confirmation:
+- Whether a dedicated `SubscriptionPlan` table should be added before billing integration.
+- Whether domain primary uniqueness should use application logic or a PostgreSQL partial unique index.
+- Whether platform role uniqueness should be enforced through application logic or raw SQL partial indexes.
