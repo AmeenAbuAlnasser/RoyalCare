@@ -1,7 +1,7 @@
 # RoyalCare - Next Tasks
 
-Last updated: 2026-04-26
-Status: Web, API, and Phase 2 database foundation created; first migration pending
+Last updated: 2026-04-27
+Status: Add New Center Wizard connected to real PostgreSQL-backed center creation
 
 ## 1. Immediate Confirmation Tasks
 
@@ -143,37 +143,143 @@ Completed:
   - DynamicPage
   - BrandingSettings
 - Verify Prisma format, validation, and TypeScript typecheck pass after Phase 2 schema.
+- Connect initial Super Admin core backend modules to Prisma:
+  - Centers
+  - Users
+  - Subscriptions
+- Add shared API `DatabaseModule` and `PrismaService`.
+- Add CRUD-ready controller/service/DTO structure for Centers, Users, and Subscriptions.
+- Verify database package generation/typecheck and API lint/build/tests pass.
+- Create first visible UI screen:
+  - Super Admin Login at `/super-admin/login`
+- Verify web lint and production build pass after login page.
+- Create first Super Admin Dashboard layout at `/super-admin/dashboard`.
+- Add reusable dashboard UI component, mock data file, locale config, and dashboard translation dictionary.
+- Verify web lint and production build pass after dashboard page.
+- Create Super Admin Centers Management UI at `/super-admin/centers`.
+- Add mock center data and English/Arabic/Hebrew dictionary for Centers Management.
+- Verify web lint and production build pass after Centers page.
+- Create Super Admin Add New Center wizard at `/super-admin/centers/new`.
+- Add English/Arabic/Hebrew dictionary for the Add New Center wizard.
+- Link the Centers Management "Add New Center" action to the wizard route.
+- Verify web lint and production build pass after Add New Center wizard.
+- Improve Add New Center wizard Step 4 Branding + Languages with controlled logo preview, color pickers, default language selector, and enabled language checkboxes.
+- Verify web lint and production build pass after Step 4 improvements.
+- Build Add New Center wizard Step 5 Center Admin Account with admin identity fields, permission presets, notification/security toggles, account status, and validation UI.
+- Verify web lint and production build pass after Step 5 improvements.
+- Build Add New Center wizard Step 6 Review + Confirm with full summary, logo preview, warning box, and final Create Center action.
+- Verify web lint and production build pass after Step 6 improvements.
+- Build Super Admin Center Details page at `/super-admin/centers/[id]`.
+- Add mock detail data, activity timeline, internal notes UI, and English/Arabic/Hebrew dictionary.
+- Link Centers Management `View` action to the Center Details route.
+- Verify web lint and production build pass after Center Details page.
+- Build Super Admin Subscriptions Management page at `/super-admin/subscriptions`.
+- Add summary cards, search/filters, desktop table, mobile cards with actions menu, expiring-soon section, and revenue snapshot.
+- Add English/Arabic/Hebrew dictionary for Subscriptions Management.
+- Link the shared Super Admin sidebar Subscriptions item to `/super-admin/subscriptions`.
+- Verify web lint and production build pass after Subscriptions Management page.
+- Build Super Admin Subscription Details page at `/super-admin/subscriptions/[id]`.
+- Add id-keyed mock subscription details, payment history, renewal history, billing information, internal notes, and translated not-found state.
+- Link Subscriptions Management `View` action to the matching Subscription Details route.
+- Verify web lint and production build pass after Subscription Details page.
+- Build Super Admin Domains Management page at `/super-admin/domains`.
+- Add summary cards, search/filters, desktop table, mobile cards with actions menu, pending verification, SSL expiry warning, and domain health overview.
+- Add English/Arabic/Hebrew dictionary for Domains Management.
+- Link the shared Super Admin sidebar Domains item to `/super-admin/domains`.
+- Verify web lint and production build pass after Domains Management page.
+- Build Super Admin Domain Details page at `/super-admin/domains/[id]`.
+- Add id-keyed mock domain details, DNS instructions, SSL certificate info, activity timeline, internal notes, and translated not-found state.
+- Link Domains Management `View` action to the matching Domain Details route.
+- Verify web lint and production build pass after Domain Details page.
+- Build Super Admin Plans Management page at `/super-admin/plans`.
+- Add summary cards, Add New Plan button, search/filters, plan cards, mobile actions menu, featured badges, and plan comparison preview.
+- Add English/Arabic/Hebrew dictionary for Plans Management.
+- Link the shared Super Admin sidebar Plans item to `/super-admin/plans`.
+- Verify web lint and production build pass after Plans Management page.
+- Build Super Admin Plan Details page at `/super-admin/plans/[id]`.
+- Add id-keyed mock plan details, included features, current subscribers, upgrade paths, internal notes, and translated not-found state.
+- Link Plans Management `View Plan` action to the matching Plan Details route.
+- Verify web lint and production build pass after Plan Details page.
+- Build Super Admin Users Management page at `/super-admin/users`.
+- Add summary cards, Add New User button, search/filters, desktop table, mobile cards with actions menu, and Roles Preview.
+- Add English/Arabic/Hebrew dictionary for Users Management.
+- Link the shared Super Admin sidebar Users item to `/super-admin/users`.
+- Prepare Users Management `View` action links for `/super-admin/users/[id]`.
+- Verify web lint and production build pass after Users Management page.
+- Build Super Admin User Details page at `/super-admin/users/[id]`.
+- Add id-keyed mock user details, permissions summary, activity timeline, responsibilities, internal notes, and translated not-found state.
+- Link Users Management `View` action to the matching User Details route.
+- Verify web lint, production build, and dynamic route smoke checks after User Details page.
+- Build Super Admin Notifications Management page at `/super-admin/notifications`.
+- Add summary cards, filters, notifications table, mobile notification cards, action menu, and templates preview.
+- Link the shared Super Admin sidebar Notifications item to `/super-admin/notifications`.
+- Verify web lint, production build, route smoke test, and locale direction checks after Notifications page.
+- Build Super Admin Settings Management page at `/super-admin/settings`.
+- Add general platform, branding, security, notification, subscription default, domain default, backup, and system health settings panels.
+- Link the shared Super Admin sidebar Settings item to `/super-admin/settings`.
+- Verify web lint, production build, route smoke test, and locale direction checks after Settings page.
+- Connect Add New Center wizard Step 6 Create Center action to the real API.
+- Create full initial center setup transaction for `Center`, `BrandingSettings`, `Subscription`, optional `Domain`, center admin `User`, center admin `Role`, and `UserRole`.
+- Add API-backed fetch behavior for Super Admin Centers Management and Center Details.
 
 Next:
-1. Choose package manager.
-2. Choose monorepo tooling.
-3. Add root workspace configuration.
-4. Confirm local/hosted PostgreSQL environment.
-5. Create first Prisma migration for Phase 1 and Phase 2 models.
-6. Add seed data for:
+1. Confirm local/hosted PostgreSQL environment.
+2. Create first Prisma migration for Phase 1 and Phase 2 models.
+3. Add seed data for:
    - Platform owner role
    - Platform admin role
    - Center owner role
    - Default Phase 1 permissions
-7. Add shared TypeScript package setup in `packages/shared`.
-8. Add shared UI package setup in `packages/ui`.
-9. Add root-level lint/build scripts once workspaces are configured.
-10. Add environment variable strategy across apps/services/packages.
-11. Add Docker Compose for local PostgreSQL if useful.
-12. Add basic CI checks.
-13. Prepare React Native Expo app in `apps/mobile` when mobile work begins.
-14. Implement backend auth, tenancy guard, permission guard, module guard, and subscription guard.
+4. Add global validation pipe and DTO validation decorators before public API use.
+5. Implement backend auth, tenancy guard, permission guard, module guard, and subscription guard.
+6. Add OpenAPI docs for implemented Centers, Users, and Subscriptions endpoints.
+7. Add integration tests for center creation, subscription creation, and center admin user linking after a PostgreSQL test database is available.
+8. Add shared TypeScript package setup in `packages/shared`.
+9. Add shared UI package setup in `packages/ui`.
+10. Add root-level lint/build scripts once workspaces are configured.
+11. Add environment variable strategy across apps/services/packages.
+12. Add Docker Compose for local PostgreSQL if useful.
+13. Add basic CI checks.
+14. Prepare React Native Expo app in `apps/mobile` when mobile work begins.
+15. Connect Super Admin Login to the future authentication flow after backend auth is implemented.
+16. Replace Super Admin Dashboard mock data with API-backed data after backend modules are secured.
+17. Replace Super Admin Centers mock data with API-backed data after Centers API auth/permissions are implemented.
+18. Replace Super Admin Center Details mock data with API-backed data after Centers, Subscriptions, Domains, Branding, and Users APIs are secured.
+19. Replace Super Admin Subscriptions mock data with API-backed data after Subscriptions and Payments APIs are implemented.
+20. Replace Super Admin Subscription Details mock data with API-backed data after Subscriptions, Payments, Invoices, and Billing APIs are implemented.
+21. Replace Super Admin Domains mock data with API-backed data after Domains and DNS verification APIs are implemented.
+22. Replace Super Admin Domain Details mock data with API-backed data after Domains, DNS verification, and SSL management APIs are implemented.
+23. Replace Super Admin Plans mock data with API-backed data after Plans and Modules APIs are implemented.
+24. Replace Super Admin Plan Details mock data with API-backed data after Plans, Modules, and Subscriptions APIs are implemented.
+25. Replace Super Admin Users mock data with API-backed data after Users and Permissions APIs are secured.
+26. Replace Super Admin User Details mock data with API-backed data after Users, Roles, Permissions, Activity Log, and Admin Notes APIs are implemented.
+27. Replace Super Admin Notifications mock data with API-backed data after Notifications, Activity Log, and delivery-channel APIs are implemented.
+28. Replace Super Admin Settings mock data with API-backed data after Platform Settings, Branding, Security, Notifications, Domains, Backups, and Health APIs are implemented.
+29. Add proper authenticated Super Admin protection around the center creation flow.
+30. Add integration tests for the real Add New Center creation transaction with PostgreSQL.
 
 Needs Confirmation:
 - Whether Docker should be used locally.
 
 ## 4. Backend Foundation Tasks
 
+Completed:
+- Create PrismaService and initial database module.
+- Create CentersModule controller/service/DTO foundation.
+- Create UsersModule controller/service/DTO foundation.
+- Create SubscriptionsModule controller/service/DTO foundation.
+- Create CRUD-ready foundation for:
+  - Create center
+  - View center
+  - List centers
+  - Create subscription
+  - Link center admin user
+
 1. Create AuthModule.
 2. Create TenancyModule.
-3. Create CentersModule.
+3. Add global validation pipe.
 4. Create RolesPermissionsModule.
-5. Create PrismaService and tenant-safe data access patterns.
+5. Harden tenant-safe data access patterns.
 6. Create guards:
    - Auth guard
    - Tenant guard
@@ -203,7 +309,12 @@ Completed:
   - Session
   - Notification
   - DynamicPage
-  - BrandingSettings
+- BrandingSettings
+- Reviewed and improved core Super Admin models:
+  - User
+  - Center
+  - Subscription
+- Added API-compatible Prisma Client generation.
 
 Next database tasks:
 1. Create first migration after PostgreSQL environment is confirmed.
@@ -226,7 +337,7 @@ Next database tasks:
 ## 6. Frontend Foundation Tasks
 
 1. Create app shell.
-2. Add auth pages.
+2. Add remaining auth pages.
 3. Add Super Admin routes.
 4. Add Center Admin routes.
 5. Add Customer Portal routes.
@@ -242,6 +353,31 @@ Next database tasks:
    - Tabs
    - Language switcher
 9. Add responsive navigation.
+
+Completed frontend tasks:
+- Super Admin login UI at `/super-admin/login`.
+- Super Admin dashboard UI at `/super-admin/dashboard`.
+- Super Admin centers management UI at `/super-admin/centers`.
+- Super Admin subscriptions management UI at `/super-admin/subscriptions`.
+- Super Admin subscription details UI at `/super-admin/subscriptions/[id]`.
+- Super Admin domains management UI at `/super-admin/domains`.
+- Super Admin domain details UI at `/super-admin/domains/[id]`.
+- Super Admin plans management UI at `/super-admin/plans`.
+- Super Admin plan details UI at `/super-admin/plans/[id]`.
+- Super Admin users management UI at `/super-admin/users`.
+- Super Admin user details UI at `/super-admin/users/[id]`.
+- Super Admin notifications management UI at `/super-admin/notifications`.
+- Super Admin settings management UI at `/super-admin/settings`.
+- Super Admin Add New Center wizard UI at `/super-admin/centers/new`.
+- Shared Super Admin layout used by Dashboard, Centers Management, and Add New Center wizard.
+
+Next frontend tasks:
+- Add stronger field-level disabled-state rules for Add New Center wizard before backend submission.
+- Add user-facing API error details for duplicate domains, duplicate emails, and duplicate slugs.
+- Decide whether center branding logo should upload immediately to storage or only after final wizard confirmation.
+- Add backend-backed Super Admin Users and User Details data after auth and permissions APIs exist.
+- Add backend-backed Super Admin Notifications data after notification APIs and read/archive actions exist.
+- Add backend-backed Super Admin Settings data after platform settings and system health APIs exist.
 
 ## 7. First Feature Implementation Order
 
@@ -275,11 +411,23 @@ Required test focus:
 - Subscription restricted behavior
 - Appointment status transitions
 - Customer portal ownership checks
+- Functional UI behavior before marking any feature complete
 
 Recommended:
 - Backend unit tests for services/guards
 - API integration tests for key endpoints
 - Frontend smoke tests for core workflows
+
+Permanent frontend QA checklist:
+- Dynamic `[id]` pages must be tested with at least 3 ids.
+- Each dynamic id must show different matching data.
+- List `View` buttons must navigate to the correct details page for the clicked row.
+- Edit buttons must open/edit the correct item, not the first item by accident.
+- Mock details pages must use id-keyed mock data rather than one hardcoded object.
+- Unknown ids must show a proper not-found or empty state.
+- English, Arabic, and Hebrew must be tested after navigation.
+- Desktop, tablet, and mobile widths must be tested.
+- Verify no hydration errors, no unwanted horizontal overflow, and correct button contrast before completion.
 
 ## 9. Documentation Maintenance Tasks
 

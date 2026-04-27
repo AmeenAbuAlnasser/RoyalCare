@@ -55,6 +55,29 @@ Planned stack:
 - Subscription restrictions must be enforced server-side.
 - Arabic and Hebrew require RTL support.
 - Admin UI must stay simple and practical.
+- Every new UI page must be responsive for desktop, tablet, and mobile by default.
+- Do not allow unwanted horizontal page scroll; tables may scroll only inside their own table containers.
+- Fix real overflow causes with `min-width: 0`, `max-width: 100%`, and responsive grid/flex constraints before using overflow hiding as a safety net.
+- All Super Admin pages must use `apps/web/src/features/super-admin/layout/SuperAdminLayout.tsx`.
+- Do not create custom page-specific Super Admin navbars, sidebars, headers, language switchers, or profile header controls.
+- Arabic/Hebrew Super Admin layouts must be RTL with sidebar/drawer on the right.
+- English Super Admin layouts must be LTR with sidebar/drawer on the left.
+- No UI feature is complete with visual checks only; it must pass functional UI testing.
+- Dynamic `[id]` pages must be tested with at least 3 different ids and each id must show matching, different data.
+- List `View` actions must navigate to the correct details page for the clicked row.
+- Edit actions must target the correct item and must not silently edit or open the first item.
+- Mock detail pages must not use one hardcoded object when a route id exists.
+- After navigation, test English, Arabic, and Hebrew language persistence.
+- Before completing a feature, verify route behavior, correct data, no hydration errors, no unwanted horizontal overflow, responsive desktop/tablet/mobile behavior, and correct button contrast.
+- No page is complete unless it meets professional ERP UI standards suitable for a paid enterprise SaaS platform.
+- Responsive design means intentional redesign per viewport, not shrinking desktop UI.
+- Mobile layouts must be intentionally redesigned: tables become cards or optimized layouts, action buttons become dropdowns/action menus, sidebars become drawers, filters become collapsible sections where needed, and stats become stacked cards.
+- Buttons must have consistent sizing, clear hierarchy, strong visual priority, and no ugly stacked clusters.
+- Spacing must be balanced: no compressed UI and no oversized empty areas.
+- Colors must follow RoyalCare branding with strong contrast, no random colors, and a premium SaaS feel.
+- Typography must have clear hierarchy, readable sizes, and no weak tiny text.
+- Hover, active, and navigation states must be professional, visible, and enterprise-grade.
+- Final UI quality question: would this be acceptable for a paid enterprise SaaS platform? If no, redesign is required.
 
 ## 5. Memory Maintenance Rules
 
@@ -89,11 +112,14 @@ Admin interfaces should use:
 - Simple navigation
 - Responsive layouts
 - RTL-aware spacing and alignment
+- Shared Super Admin shell for all Super Admin pages
 
 Avoid:
 - Complex decorative UI
 - Marketing-style admin pages
 - Hidden security enforced only by frontend state
+- Page-specific Super Admin navigation/header implementations
+- Page-level horizontal scrolling caused by tables, filters, cards, badges, or fixed-width containers
 
 ## 8. Current Status
 

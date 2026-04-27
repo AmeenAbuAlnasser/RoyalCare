@@ -18,8 +18,7 @@
 // global platform data.
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -173,6 +172,7 @@ model User {
   emailVerifiedAt DateTime?
   phoneVerifiedAt DateTime?
   lastLoginAt     DateTime?
+  deletedAt       DateTime?
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
@@ -182,6 +182,8 @@ model User {
   roles         UserRole[]
 
   @@index([status])
+  @@index([email, status])
+  @@index([phone, status])
   @@index([createdAt])
 }
 
@@ -286,6 +288,7 @@ model Center {
 
   @@index([ownerUserId])
   @@index([status])
+  @@index([slug, status])
   @@index([type, status])
   @@index([createdAt])
 }
@@ -312,6 +315,7 @@ model Subscription {
   center Center @relation(fields: [centerId], references: [id], onDelete: Cascade)
 
   @@index([centerId, status])
+  @@index([centerId, currentPeriodEnd])
   @@index([status, currentPeriodEnd])
   @@index([expiresAt])
   @@index([externalProvider, externalSubscriptionId])

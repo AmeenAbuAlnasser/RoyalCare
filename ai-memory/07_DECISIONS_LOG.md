@@ -88,16 +88,25 @@ Impact:
 Decision:
 - Arabic, Hebrew, and English are supported languages.
 - Arabic and Hebrew require RTL support.
+- English requires LTR support.
+- i18n applies to the Public Website, Super Admin Panel, Center Admin Panel, and Customer Portal.
+- User-facing UI text must come from translation dictionaries, not hardcoded component strings.
+- Language switching must be available from user profile/settings for authenticated experiences.
 
 Reason:
 - The platform targets centers and customers who may use RTL languages.
+- Retrofitting i18n later would require expensive rewrites across routing, layouts, forms, validation, status labels, and content management.
 
 Impact:
 - UI layout, content model, routing, templates, and translations must support RTL from the beginning.
+- Web app architecture needs locale/direction providers and translation namespaces.
+- Database content for center-managed public content should support `ar`, `he`, and `en`.
+- Admin panels must be designed with logical spacing and mirrored navigation behavior.
 
 Needs Confirmation:
 - Default language per center.
 - Whether every center must provide all three languages.
+- Preferred i18n library and URL strategy.
 
 ## 2026-04-26 - Admin UI Must Stay Simple and Practical
 
@@ -198,3 +207,56 @@ Needs Confirmation:
 - Whether staff assignment is required before MVP.
 - Whether reusable notification templates should be added.
 - Whether advanced page blocks should become a separate table.
+
+## 2026-04-26 - System-Wide i18n Architecture
+
+Decision:
+- RoyalCare will use a production-ready translation architecture across all user-facing surfaces:
+  - Public Website
+  - Super Admin Panel
+  - Center Admin Panel
+  - Customer Portal
+- Required locales are `ar`, `he`, and `en`.
+- Direction mapping is `ar -> rtl`, `he -> rtl`, `en -> ltr`.
+- Translation files will be organized by locale and namespace.
+- Language switching will be managed through user profile/settings for authenticated areas.
+- Public websites will use center enabled languages and center default language.
+
+Reason:
+- Multilingual behavior affects routing, layouts, validation, content, navigation, notifications, and database content.
+- Establishing the architecture now avoids a future rebuild.
+
+Impact:
+- Future UI components should not include hardcoded user-facing strings.
+- App shells must set `lang` and `dir` from active locale.
+- Admin layouts must use logical CSS properties and support mirrored RTL navigation.
+- Translation dictionaries should include namespaces such as `common`, `auth`, `super-admin`, `center-admin`, `portal`, `public-site`, `validation`, and `errors`.
+
+Needs Confirmation:
+- Preferred Next.js i18n library.
+- Whether locale prefixes are required in URLs for admin panels or only public websites.
+- Whether incomplete center translations should fall back to center default language or English.
+
+## 2026-04-26 - Official RoyalCare Branding System
+
+Decision:
+- The uploaded RoyalCare logo is the official platform logo.
+- The official RoyalCare platform colors are:
+  - Royal Navy Blue `#0B2D5C`
+  - Luxury Gold `#C8A45D`
+  - Soft White `#F8FAFC`
+  - Neutral Gray `#E5E7EB`
+- The Super Admin Login and Super Admin Dashboard now use this branding system.
+
+Reason:
+- RoyalCare needs a consistent, premium, medical SaaS visual identity before more screens are built.
+- Applying the brand system early prevents inconsistent colors and logo usage across future admin, portal, and public surfaces.
+
+Impact:
+- Future platform UI should reuse these brand tokens.
+- Royal Navy should be the primary action/sidebar/header color.
+- Luxury Gold should remain an accent color.
+- Cards, language switchers, and profile controls should use Soft White/white surfaces with Neutral Gray borders.
+
+Needs Confirmation:
+- Whether center admin surfaces should keep RoyalCare platform branding or blend RoyalCare structure with center brand colors.

@@ -1,7 +1,7 @@
 # RoyalCare - API Map
 
-Last updated: 2026-04-26
-Status: Initial API planning map; NestJS API scaffold initialized
+Last updated: 2026-04-27
+Status: NestJS API scaffold initialized; Super Admin Centers, Users, and Subscriptions foundation endpoints implemented
 
 ## 1. API Principles
 
@@ -42,6 +42,20 @@ List response:
 
 Currently implemented:
 - `GET /api/v1/health`
+- `GET /api/v1/super-admin/centers`
+- `POST /api/v1/super-admin/centers`
+- `GET /api/v1/super-admin/centers/:centerId`
+- `GET /api/v1/centers`
+- `POST /api/v1/centers`
+- `GET /api/v1/centers/:centerId`
+- `GET /api/v1/super-admin/users`
+- `POST /api/v1/super-admin/users`
+- `GET /api/v1/super-admin/users/:userId`
+- `POST /api/v1/super-admin/users/:userId/center-roles`
+- `GET /api/v1/super-admin/subscriptions`
+- `POST /api/v1/super-admin/subscriptions`
+- `GET /api/v1/super-admin/subscriptions/:subscriptionId`
+- `GET /api/v1/super-admin/centers/:centerId/subscription`
 
 Purpose:
 - Basic service health check for local development, deployment checks, and future monitoring.
@@ -56,8 +70,8 @@ Response:
 ```
 
 Notes:
-- Business endpoints below are planned API map entries and are not implemented yet.
-- Database and Prisma are not connected yet.
+- Centers, Users, and Subscriptions endpoints are the first real database-backed foundation endpoints.
+- Auth, permission guards, and tenant-aware request context still need to be added before production exposure.
 
 Error response:
 
@@ -100,13 +114,20 @@ Purpose:
 ## 5. Super Admin - Centers
 
 Endpoints:
-- `GET /api/v1/super-admin/centers`
-- `POST /api/v1/super-admin/centers`
-- `GET /api/v1/super-admin/centers/:centerId`
+- `GET /api/v1/super-admin/centers` - implemented
+- `POST /api/v1/super-admin/centers` - implemented
+- `GET /api/v1/super-admin/centers/:centerId` - implemented
 - `PATCH /api/v1/super-admin/centers/:centerId`
 - `POST /api/v1/super-admin/centers/:centerId/suspend`
 - `POST /api/v1/super-admin/centers/:centerId/activate`
 - `POST /api/v1/super-admin/centers/:centerId/cancel`
+
+Implemented foundation behavior:
+- List centers with pagination, search, status, and type filters.
+- View one center with owner, subscriptions, domains, and active user-role assignments.
+- Create a center with admin user upsert, center-scoped admin role assignment, branding settings, initial subscription, and optional domain in one transaction.
+- `POST /api/v1/centers` is available as a web-friendly creation alias for the Add New Center wizard; the existing Super Admin path remains available.
+- Creation validation currently enforces center name, owner/admin email, subscription plan, default language, enabled languages, and that enabled languages include the default language.
 
 Permissions:
 - `centers.read`
@@ -120,8 +141,17 @@ Endpoints:
 - `GET /api/v1/super-admin/plans`
 - `POST /api/v1/super-admin/plans`
 - `PATCH /api/v1/super-admin/plans/:planId`
-- `GET /api/v1/super-admin/centers/:centerId/subscription`
+- `GET /api/v1/super-admin/subscriptions` - implemented
+- `POST /api/v1/super-admin/subscriptions` - implemented
+- `GET /api/v1/super-admin/subscriptions/:subscriptionId` - implemented
+- `GET /api/v1/super-admin/centers/:centerId/subscription` - implemented
 - `PATCH /api/v1/super-admin/centers/:centerId/subscription`
+
+Implemented foundation behavior:
+- List subscriptions with pagination, search, status, and center filters.
+- View one subscription.
+- Create a subscription for a center.
+- Get the latest subscription for a center.
 
 Permissions:
 - `plans.read`
@@ -131,6 +161,26 @@ Permissions:
 
 Needs Confirmation:
 - Payment provider webhook endpoints.
+
+## 6.1 Super Admin - Users
+
+Endpoints:
+- `GET /api/v1/super-admin/users` - implemented
+- `POST /api/v1/super-admin/users` - implemented
+- `GET /api/v1/super-admin/users/:userId` - implemented
+- `POST /api/v1/super-admin/users/:userId/center-roles` - implemented
+
+Implemented foundation behavior:
+- List users with pagination, search, and status filters.
+- View one user with owned centers and role assignments.
+- Create a user with email or phone identity.
+- Link a user to a center role through `UserRole.centerId`.
+
+Permissions:
+- `users.read`
+- `users.create`
+- `users.update`
+- `roles.manage`
 
 ## 7. Super Admin - Domains
 

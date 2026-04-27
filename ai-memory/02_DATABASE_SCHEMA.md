@@ -1,7 +1,7 @@
 # RoyalCare - Database Schema
 
-Last updated: 2026-04-26
-Status: Phase 2 Prisma business foundation implemented
+Last updated: 2026-04-27
+Status: Phase 2 Prisma business foundation implemented; Super Admin core API database foundation connected
 
 ## 1. Database Strategy
 
@@ -24,6 +24,8 @@ Current implementation status:
 - PostgreSQL datasource is configured.
 - Phase 1 foundation models are implemented.
 - Phase 2 business foundation models are implemented.
+- Prisma Client now uses the standard `prisma-client-js` generator for API runtime compatibility.
+- Super Admin Centers, Users, and Subscriptions API modules now use the real Prisma schema foundation instead of mock-only architecture.
 - Payments, medical diagnosis details, staff scheduling, file assets, audit logs, module tables, and dedicated page-block tables are intentionally not created yet.
 
 Multi-tenancy:
@@ -98,6 +100,7 @@ Timestamp strategy:
 - Implemented models include `createdAt`.
 - Mutable business records include `updatedAt`.
 - Access and lifecycle timestamps are included where needed, such as `lastLoginAt`, `activatedAt`, `suspendedAt`, `cancelledAt`, `assignedAt`, `revokedAt`, `verifiedAt`, and subscription period fields.
+- Soft deletion is prepared on `User.deletedAt`.
 
 Tenant strategy:
 - `Center` is the tenant.
@@ -113,7 +116,7 @@ RBAC strategy:
 
 Subscription control:
 - `Subscription` includes `status`, `billingInterval`, `currentPeriodStart`, `currentPeriodEnd`, `trialEndsAt`, `expiresAt`, `cancelAt`, and `cancelledAt`.
-- Indexes support lookup by center/status, expiry, and period end.
+- Indexes support lookup by center/status, center/current-period-end, expiry, and period end.
 
 Domain control:
 - `Domain.hostname` is globally unique.
@@ -156,6 +159,7 @@ Purpose:
 
 Fields:
 - `id`
+- `ownerUserId` nullable
 - `name`
 - `slug`
 - `centerType`
@@ -170,6 +174,7 @@ Relationships:
 - Has many subscriptions
 - Has many user role assignments
 - Has many center-scoped roles
+- Optionally belongs to one owner/admin user through `ownerUserId`
 - Has many customers
 - Has many appointments
 - Has branding settings
@@ -321,6 +326,8 @@ Fields:
 - `passwordHash`
 - `fullName`
 - `status`
+- `lastLoginAt`
+- `deletedAt`
 - `createdAt`
 - `updatedAt`
 
@@ -697,8 +704,10 @@ Needs Confirmation:
 
 Recommended indexes:
 - `centerId` on all tenant-owned tables
+- User lookup by `email/status` and `phone/status`
 - Unique `Domain.hostname`
 - Unique `Center.slug`
+- Center lookup by `slug/status`
 - Appointment by `centerId`, `startsAt`
 - Customer by `centerId`, `phone`
 - Customer by `centerId`, `email`
@@ -706,6 +715,7 @@ Recommended indexes:
 - Service by `centerId`, `status`
 - Session by `centerId`, `performedAt`
 - Notification by `centerId`, `status`
+- Subscription by `centerId/status`, `centerId/currentPeriodEnd`, and `status/expiresAt`
 - BrandingSettings unique by `centerId`
 - AuditLog by `centerId`, `createdAt`
 
