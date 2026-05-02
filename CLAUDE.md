@@ -71,6 +71,11 @@ Planned stack:
 - Colors must follow RoyalCare branding, use strong contrast, avoid random colors, and preserve a premium SaaS feel.
 - Typography must use readable sizes and clear hierarchy; avoid weak tiny text.
 - Hover, active, and navigation states must be visible, polished, and enterprise-grade.
+- Generic user-facing errors are forbidden. Do not show normal users `Internal server error`, `Something went wrong`, `API error`, raw Prisma messages, stack traces, DTO names, enum internals, or transport failures.
+- All form errors must be field-specific, user-readable, translated, and mapped to stable field keys such as `centerName`, `adminEmail`, `adminPhone`, `subscriptionPlan`, `startDate`, `expiryDate`, and `domain`.
+- Backend endpoints must return structured validation errors, for example `{ message: "Validation failed", errors: { adminPhone: "Phone number is already used" } }`, with localized Arabic, Hebrew, and English messages where the flow is user-facing.
+- Prisma `P2002`, missing required fields, invalid enums, date ordering issues, and domain/email/phone duplicates must be converted into readable field messages before reaching the frontend.
+- Frontend forms must render errors under the exact input and may show a top alert summary only when it helps the workflow.
 - Final quality gate: if the UI would not be acceptable for a paid enterprise SaaS platform, redesign is required.
 
 ## 4. How To Work In This Project

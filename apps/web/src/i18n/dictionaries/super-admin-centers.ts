@@ -45,6 +45,16 @@ type CentersDictionary = {
     label: string;
     placeholder: string;
   };
+  states: {
+    actionPrepared: string;
+    emptyDescription: string;
+    emptyTitle: string;
+    errorDescription: string;
+    errorTitle: string;
+    loading: string;
+    noResultsDescription: string;
+    noResultsTitle: string;
+  };
   stats: {
     totalCenters: string;
     activeCenters: string;
@@ -73,9 +83,14 @@ type CentersDictionary = {
     hijama: string;
     beauty: string;
     wellness: string;
+    multiSpecialty: string;
   };
   plans: {
+    basic: string;
+    trial: string;
+    standard: string;
     starter: string;
+    premium: string;
     professional: string;
     enterprise: string;
   };
@@ -148,6 +163,18 @@ export const superAdminCentersDictionaries: Record<
       label: "Search",
       placeholder: "Search by center, owner, domain, or type",
     },
+    states: {
+      actionPrepared:
+        "This action is ready for confirmation once live actions are enabled.",
+      emptyDescription: "Create your first center to see it here.",
+      emptyTitle: "No centers found",
+      errorDescription:
+        "Centers could not be loaded right now. Try again in a moment.",
+      errorTitle: "Centers could not be loaded",
+      loading: "Loading centers...",
+      noResultsDescription: "Try changing the search text or status filter.",
+      noResultsTitle: "No matching centers",
+    },
     stats: {
       totalCenters: "Total centers",
       activeCenters: "Active centers",
@@ -176,9 +203,14 @@ export const superAdminCentersDictionaries: Record<
       hijama: "Hijama",
       beauty: "Beauty",
       wellness: "Wellness",
+      multiSpecialty: "Multi-specialty",
     },
     plans: {
+      basic: "Basic",
+      trial: "Trial",
+      standard: "Standard",
       starter: "Starter",
+      premium: "Premium",
       professional: "Professional",
       enterprise: "Enterprise",
     },
@@ -246,6 +278,16 @@ export const superAdminCentersDictionaries: Record<
       label: "بحث",
       placeholder: "ابحث حسب المركز أو المالك أو النطاق أو النوع",
     },
+    states: {
+      actionPrepared: "هذا الإجراء جاهز للتأكيد عند تفعيل الإجراءات المباشرة.",
+      emptyDescription: "أنشئ المركز الأول ليظهر هنا.",
+      emptyTitle: "لا توجد مراكز",
+      errorDescription: "تعذر تحميل المراكز الآن. حاول مرة أخرى بعد قليل.",
+      errorTitle: "تعذر تحميل المراكز",
+      loading: "جار تحميل المراكز...",
+      noResultsDescription: "جرّب تغيير نص البحث أو فلتر الحالة.",
+      noResultsTitle: "لا توجد مراكز مطابقة",
+    },
     stats: {
       totalCenters: "إجمالي المراكز",
       activeCenters: "المراكز النشطة",
@@ -274,9 +316,14 @@ export const superAdminCentersDictionaries: Record<
       hijama: "حجامة",
       beauty: "تجميل",
       wellness: "عافية",
+      multiSpecialty: "متعدد التخصصات",
     },
     plans: {
+      basic: "أساسي",
+      trial: "تجربة",
+      standard: "قياسي",
       starter: "البداية",
+      premium: "مميز",
       professional: "الاحترافية",
       enterprise: "المؤسسات",
     },
@@ -344,6 +391,16 @@ export const superAdminCentersDictionaries: Record<
       label: "חיפוש",
       placeholder: "חיפוש לפי מרכז, בעלים, דומיין או סוג",
     },
+    states: {
+      actionPrepared: "הפעולה הזו מוכנה לאישור לאחר הפעלת הפעולות החיות.",
+      emptyDescription: "צרו את המרכז הראשון כדי לראות אותו כאן.",
+      emptyTitle: "לא נמצאו מרכזים",
+      errorDescription: "לא ניתן לטעון מרכזים כרגע. נסו שוב בעוד רגע.",
+      errorTitle: "לא ניתן לטעון מרכזים",
+      loading: "טוען מרכזים...",
+      noResultsDescription: "נסו לשנות את החיפוש או את מסנן הסטטוס.",
+      noResultsTitle: "אין מרכזים תואמים",
+    },
     stats: {
       totalCenters: "כל המרכזים",
       activeCenters: "מרכזים פעילים",
@@ -372,9 +429,14 @@ export const superAdminCentersDictionaries: Record<
       hijama: "חיג'אמה",
       beauty: "יופי",
       wellness: "בריאות",
+      multiSpecialty: "רב-תחומי",
     },
     plans: {
+      basic: "בסיסי",
+      trial: "ניסיון",
+      standard: "סטנדרטי",
       starter: "מתחילים",
+      premium: "פרימיום",
       professional: "מקצועי",
       enterprise: "ארגוני",
     },

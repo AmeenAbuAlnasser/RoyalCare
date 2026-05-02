@@ -61,7 +61,7 @@ function trimDecimal(value: number, maximumFractionDigits = 1) {
 }
 
 function parseIsoDate(value: string): DateParts | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/.exec(value);
 
   if (!match) {
     return null;

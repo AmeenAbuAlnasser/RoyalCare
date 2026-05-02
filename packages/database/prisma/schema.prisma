@@ -114,16 +114,23 @@ enum CustomerStatus {
   ARCHIVED
 }
 
-enum ServiceStatus {
-  DRAFT
+enum PatientGender {
+  MALE
+  FEMALE
+  OTHER
+  UNKNOWN
+}
+
+enum PatientStatus {
   ACTIVE
   INACTIVE
   ARCHIVED
 }
 
 enum AppointmentStatus {
-  REQUESTED
+  SCHEDULED
   CONFIRMED
+  IN_PROGRESS
   COMPLETED
   CANCELLED
   NO_SHOW
@@ -162,6 +169,31 @@ enum DynamicPageStatus {
   ARCHIVED
 }
 
+enum InvoiceStatus {
+  PENDING
+  PARTIAL
+  PAID
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  CHECK
+  OTHER
+}
+
+enum CreditTransactionType {
+  CREDIT_ADD
+  CREDIT_USE
+}
+
+enum CreditTransactionSource {
+  OVERPAYMENT
+  MANUAL
+  ADJUSTMENT
+}
+
 model User {
   id              String     @id @default(uuid()) @db.Uuid
   email           String?    @unique @db.VarChar(320)
@@ -176,10 +208,16 @@ model User {
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
-  ownedCenters  Center[]       @relation("CenterOwner")
-  customers     Customer[]
-  notifications Notification[]
-  roles         UserRole[]
+  ownedCenters        Center[]             @relation("CenterOwner")
+  customers           Customer[]
+  staffAppointments   Appointment[]        @relation("AppointmentStaffUser")
+  createdAppointments Appointment[]        @relation("AppointmentCreatedBy")
+  internalNotes       CenterInternalNote[] @relation("CenterInternalNoteAuthor")
+  notifications       Notification[]
+  roles               UserRole[]
+  staffInvoices          Invoice[]            @relation("InvoiceStaff")
+  paymentsCreated        Payment[]            @relation("PaymentCreatedBy")
+  creditTransactionsCreated CreditTransaction[] @relation("CreditTransactionCreatedBy")
 
   @@index([status])
   @@index([email, status])
@@ -273,18 +311,23 @@ model Center {
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
-  owner         User?             @relation("CenterOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  owner         User?                @relation("CenterOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   roles         Role[]
   userRoles     UserRole[]
   subscriptions Subscription[]
   domains       Domain[]
   customers     Customer[]
+  patients      Patient[]
   services      Service[]
   appointments  Appointment[]
   sessions      Session[]
   notifications Notification[]
   dynamicPages  DynamicPage[]
   branding      BrandingSettings?
+  internalNotes CenterInternalNote[]
+  invoices           Invoice[]
+  payments           Payment[]
+  creditTransactions CreditTransaction[]
 
   @@index([ownerUserId])
   @@index([status])
@@ -293,24 +336,40 @@ model Center {
   @@index([createdAt])
 }
 
+model CenterInternalNote {
+  id        String   @id @default(uuid()) @db.Uuid
+  centerId  String   @db.Uuid
+  authorId  String   @db.Uuid
+  note      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  center Center @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  author User   @relation("CenterInternalNoteAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([centerId, createdAt])
+  @@index([authorId])
+  @@index([createdAt])
+}
+
 model Subscription {
-  id                     String             @id @default(uuid()) @db.Uuid
-  centerId               String             @db.Uuid
-  planCode               String             @db.VarChar(80)
-  planName               String             @db.VarChar(120)
-  status                 SubscriptionStatus @default(TRIALING)
-  billingInterval        BillingInterval    @default(MONTHLY)
-  currentPeriodStart     DateTime
-  currentPeriodEnd       DateTime
-  trialEndsAt            DateTime?
-  expiresAt              DateTime?
-  cancelAt               DateTime?
-  cancelledAt            DateTime?
-  externalProvider       String?            @db.VarChar(80)
-  externalSubscriptionId String?            @db.VarChar(160)
-  metadata               Json?
-  createdAt              DateTime           @default(now())
-  updatedAt              DateTime           @updatedAt
+  id                 String             @id @default(uuid()) @db.Uuid
+  centerId           String             @db.Uuid
+  planCode           String             @db.VarChar(80)
+  planName           String             @db.VarChar(120)
+  status             SubscriptionStatus @default(TRIALING)
+  billingInterval    BillingInterval    @default(MONTHLY)
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  nextRenewalDate    DateTime?
+  billingNotes       String?
+  trialEndsAt        DateTime?
+  expiresAt          DateTime?
+  cancelAt           DateTime?
+  cancelledAt        DateTime?
+  metadata           Json?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
   center Center @relation(fields: [centerId], references: [id], onDelete: Cascade)
 
@@ -318,7 +377,6 @@ model Subscription {
   @@index([centerId, currentPeriodEnd])
   @@index([status, currentPeriodEnd])
   @@index([expiresAt])
-  @@index([externalProvider, externalSubscriptionId])
 }
 
 model Domain {
@@ -359,7 +417,6 @@ model Customer {
 
   center        Center         @relation(fields: [centerId], references: [id], onDelete: Cascade)
   user          User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
-  appointments  Appointment[]
   sessions      Session[]
   notifications Notification[]
 
@@ -370,55 +427,98 @@ model Customer {
   @@index([createdAt])
 }
 
+model Patient {
+  id            String        @id @default(uuid()) @db.Uuid
+  centerId      String        @db.Uuid
+  fullName      String        @db.VarChar(160)
+  phone         String        @db.VarChar(32)
+  email         String?       @db.VarChar(320)
+  gender        PatientGender @default(UNKNOWN)
+  dateOfBirth   DateTime?
+  nationalId    String?       @db.VarChar(80)
+  notes         String?
+  status        PatientStatus @default(ACTIVE)
+  creditBalance Decimal       @default(0) @db.Decimal(12, 2)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  center             Center               @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  appointments       Appointment[]
+  invoices           Invoice[]
+  payments           Payment[]
+  creditTransactions CreditTransaction[]
+
+  @@unique([centerId, phone])
+  @@index([centerId])
+  @@index([centerId, status])
+  @@index([centerId, fullName])
+  @@index([centerId, createdAt])
+}
+
 model Service {
-  id              String        @id @default(uuid()) @db.Uuid
-  centerId        String        @db.Uuid
-  name            Json
-  description     Json?
-  category        String?       @db.VarChar(120)
-  status          ServiceStatus @default(DRAFT)
+  id              String    @id @default(uuid()) @db.Uuid
+  centerId        String    @db.Uuid
+  nameEn          String    @default("") @db.VarChar(160)
+  nameAr          String    @default("") @db.VarChar(160)
+  nameHe          String    @default("") @db.VarChar(160)
+  descriptionEn   String?
+  descriptionAr   String?
+  descriptionHe   String?
   durationMinutes Int?
-  price           Decimal?      @db.Decimal(10, 2)
-  currency        String?       @db.VarChar(3)
-  sortOrder       Int           @default(0)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  price           Decimal?  @db.Decimal(10, 2)
+  currency        String    @default("ILS") @db.VarChar(3)
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
   archivedAt      DateTime?
 
   center       Center        @relation(fields: [centerId], references: [id], onDelete: Cascade)
   appointments Appointment[]
   sessions     Session[]
+  invoices     Invoice[]
 
-  @@index([centerId, status])
-  @@index([centerId, category])
-  @@index([centerId, sortOrder])
+  @@index([centerId])
+  @@index([centerId, isActive])
+  @@index([centerId, nameEn])
+  @@index([centerId, nameAr])
+  @@index([centerId, nameHe])
 }
 
 model Appointment {
-  id          String             @id @default(uuid()) @db.Uuid
-  centerId    String             @db.Uuid
-  customerId  String             @db.Uuid
-  serviceId   String?            @db.Uuid
-  status      AppointmentStatus  @default(REQUESTED)
-  source      AppointmentSource  @default(ADMIN)
-  startsAt    DateTime
-  endsAt      DateTime?
-  language    SupportedLanguage?
-  notes       String?
-  cancelledAt DateTime?
-  completedAt DateTime?
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  id                 String            @id @default(uuid()) @db.Uuid
+  centerId           String            @db.Uuid
+  patientId          String            @db.Uuid
+  serviceId          String            @db.Uuid
+  staffUserId        String            @db.Uuid
+  createdByUserId    String            @db.Uuid
+  appointmentDate    DateTime          @db.Date
+  startTime          String            @db.VarChar(5)
+  endTime            String            @db.VarChar(5)
+  durationMinutes    Int
+  status             AppointmentStatus @default(SCHEDULED)
+  notes              String?
+  internalNotes      String?
+  isCancelled        Boolean           @default(false)
+  cancellationReason String?
+  reminderSent       Boolean           @default(false)
+  cancelledAt        DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
 
-  center   Center    @relation(fields: [centerId], references: [id], onDelete: Cascade)
-  customer Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  service  Service?  @relation(fields: [serviceId], references: [id], onDelete: SetNull)
-  sessions Session[]
+  center        Center    @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  patient       Patient   @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  service       Service   @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  staffUser     User      @relation("AppointmentStaffUser", fields: [staffUserId], references: [id], onDelete: Restrict)
+  createdByUser User      @relation("AppointmentCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  sessions      Session[]
 
   @@index([centerId, status])
-  @@index([centerId, startsAt])
-  @@index([customerId, startsAt])
+  @@index([centerId, appointmentDate])
+  @@index([centerId, staffUserId, appointmentDate])
+  @@index([centerId, patientId, appointmentDate])
   @@index([serviceId])
+  @@index([createdByUserId])
 }
 
 model Session {
@@ -514,4 +614,82 @@ model BrandingSettings {
   center Center @relation(fields: [centerId], references: [id], onDelete: Cascade)
 
   @@index([defaultLanguage])
+}
+
+model Invoice {
+  id          String        @id @default(uuid()) @db.Uuid
+  centerId    String        @db.Uuid
+  patientId   String        @db.Uuid
+  serviceId   String        @db.Uuid
+  staffUserId String?       @db.Uuid
+  amount      Decimal       @db.Decimal(12, 2)
+  currency    String        @default("ILS") @db.VarChar(10)
+  status      InvoiceStatus @default(PENDING)
+  notes       String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  center             Center               @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  patient            Patient              @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  service            Service              @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  staff              User?                @relation("InvoiceStaff", fields: [staffUserId], references: [id], onDelete: SetNull)
+  payments           Payment[]
+  creditTransactions CreditTransaction[]
+
+  @@index([centerId])
+  @@index([centerId, status])
+  @@index([centerId, patientId])
+  @@index([centerId, createdAt])
+  @@index([serviceId])
+  @@index([staffUserId])
+}
+
+model Payment {
+  id              String        @id @default(uuid()) @db.Uuid
+  centerId        String        @db.Uuid
+  invoiceId       String        @db.Uuid
+  patientId       String        @db.Uuid
+  createdByUserId String        @db.Uuid
+  amount          Decimal       @db.Decimal(12, 2)
+  currency        String        @default("ILS") @db.VarChar(10)
+  method          PaymentMethod @default(CASH)
+  notes           String?
+  paidAt          DateTime
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  center    Center  @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  createdBy User    @relation("PaymentCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([centerId])
+  @@index([invoiceId])
+  @@index([centerId, invoiceId])
+  @@index([centerId, patientId])
+  @@index([createdByUserId])
+}
+
+model CreditTransaction {
+  id               String                  @id @default(uuid()) @db.Uuid
+  centerId         String                  @db.Uuid
+  patientId        String                  @db.Uuid
+  createdByUserId  String                  @db.Uuid
+  amount           Decimal                 @db.Decimal(12, 2)
+  type             CreditTransactionType
+  source           CreditTransactionSource
+  relatedInvoiceId String?                 @db.Uuid
+  notes            String?
+  createdAt        DateTime                @default(now())
+
+  center         Center   @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  patient        Patient  @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  createdBy      User     @relation("CreditTransactionCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  relatedInvoice Invoice? @relation(fields: [relatedInvoiceId], references: [id], onDelete: SetNull)
+
+  @@index([centerId])
+  @@index([centerId, patientId])
+  @@index([patientId, createdAt])
+  @@index([relatedInvoiceId])
+  @@index([centerId, type])
 }

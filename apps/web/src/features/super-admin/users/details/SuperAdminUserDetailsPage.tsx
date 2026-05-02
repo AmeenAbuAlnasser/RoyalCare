@@ -42,7 +42,9 @@ function Badge({
   };
 
   return (
-    <span className={`inline-flex min-h-7 items-center rounded-full border px-2.5 text-xs font-semibold ${styles[tone]}`}>
+    <span
+      className={`inline-flex min-h-7 items-center rounded-full border px-2.5 text-xs font-semibold ${styles[tone]}`}
+    >
       {label}
     </span>
   );
@@ -66,7 +68,10 @@ function DetailList({ items }: { items: Array<[string, ReactNode]> }) {
   return (
     <dl className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
       {items.map(([label, value]) => (
-        <div className="min-w-0 rounded-md border border-[#E5E7EB] bg-[#F8FAFC] px-3 py-3" key={label}>
+        <div
+          className="min-w-0 rounded-md border border-[#E5E7EB] bg-[#F8FAFC] px-3 py-3"
+          key={label}
+        >
           <dt className="text-xs font-medium text-[#66758a]">{label}</dt>
           <dd className="mt-1 min-w-0 break-words text-sm font-semibold text-[#24364f]">
             {value}
@@ -91,7 +96,10 @@ function ChipList({
   return (
     <div className="flex min-w-0 flex-wrap gap-2">
       {items.map((item) => (
-        <span className="rounded-full border border-[#E5E7EB] bg-white px-2.5 py-1 text-xs font-semibold text-[#24364f]" key={item}>
+        <span
+          className="rounded-full border border-[#E5E7EB] bg-white px-2.5 py-1 text-xs font-semibold text-[#24364f]"
+          key={item}
+        >
           {item}
         </span>
       ))}
@@ -99,7 +107,13 @@ function ChipList({
   );
 }
 
-function QuickActions({ dictionary, user }: { dictionary: Dictionary; user: UserDetails }) {
+function QuickActions({
+  dictionary,
+  user,
+}: {
+  dictionary: Dictionary;
+  user: UserDetails;
+}) {
   const canActivate = user.status !== "active";
   const canSuspend = user.status === "active" || user.status === "pending";
 
@@ -111,10 +125,24 @@ function QuickActions({ dictionary, user }: { dictionary: Dictionary; user: User
       <button className={buttonClassName("secondary", "md")} type="button">
         {dictionary.detailActions.resetPassword}
       </button>
-      <button className={buttonClassName("warning", "md")} disabled={!canSuspend} type="button">
+      <button className={buttonClassName("secondary", "md")} type="button">
+        {dictionary.detailActions.forcePasswordChange}
+      </button>
+      <button className={buttonClassName("secondary", "md")} type="button">
+        {dictionary.detailActions.sendWelcomeEmail}
+      </button>
+      <button
+        className={buttonClassName("warning", "md")}
+        disabled={!canSuspend}
+        type="button"
+      >
         {dictionary.detailActions.suspendUser}
       </button>
-      <button className={buttonClassName("success", "md")} disabled={!canActivate} type="button">
+      <button
+        className={buttonClassName("success", "md")}
+        disabled={!canActivate}
+        type="button"
+      >
         {dictionary.detailActions.activateUser}
       </button>
       <button className={buttonClassName("secondary", "md")} type="button">
@@ -148,7 +176,14 @@ export function SuperAdminUserDetailsPage({ userId }: { userId: string }) {
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[#66758a]">
             {dictionary.detailValues.notFoundDescription}
           </p>
-          <Link className={buttonClassName("secondary", "md", "mt-5 w-full sm:w-auto")} href="/super-admin/users">
+          <Link
+            className={buttonClassName(
+              "secondary",
+              "md",
+              "mt-5 w-full sm:w-auto",
+            )}
+            href="/super-admin/users"
+          >
             {dictionary.detailActions.backToUsers}
           </Link>
         </section>
@@ -156,10 +191,17 @@ export function SuperAdminUserDetailsPage({ userId }: { userId: string }) {
     );
   }
 
-  const timeline = activityTimelineById[userId as keyof typeof activityTimelineById] ?? [];
-  const directPermissions = user.directPermissions.map((permission) => dictionary.permissions[permission]);
-  const restrictedAreas = user.restrictedAreas.map((area) => dictionary.restrictedAreas[area]);
-  const responsibilities = user.responsibilities.map((responsibility) => dictionary.responsibilities[responsibility]);
+  const timeline =
+    activityTimelineById[userId as keyof typeof activityTimelineById] ?? [];
+  const directPermissions = user.directPermissions.map(
+    (permission) => dictionary.permissions[permission],
+  );
+  const restrictedAreas = user.restrictedAreas.map(
+    (area) => dictionary.restrictedAreas[area],
+  );
+  const responsibilities = user.responsibilities.map(
+    (responsibility) => dictionary.responsibilities[responsibility],
+  );
 
   return (
     <SuperAdminLayout activeNav="users" dictionary={dictionary}>
@@ -179,7 +221,10 @@ export function SuperAdminUserDetailsPage({ userId }: { userId: string }) {
               </p>
             </div>
           </div>
-          <Link className={buttonClassName("secondary", "md", "w-full sm:w-auto")} href="/super-admin/users">
+          <Link
+            className={buttonClassName("secondary", "md", "w-full sm:w-auto")}
+            href="/super-admin/users"
+          >
             {dictionary.detailActions.backToUsers}
           </Link>
         </section>
@@ -192,15 +237,38 @@ export function SuperAdminUserDetailsPage({ userId }: { userId: string }) {
                 [dictionary.fields.email, user.email],
                 [dictionary.fields.mobile, user.mobile],
                 [dictionary.fields.role, dictionary.roles[user.role]],
-                [dictionary.fields.department, dictionary.departments[user.department]],
+                [
+                  dictionary.fields.department,
+                  dictionary.departments[user.department],
+                ],
                 [
                   dictionary.fields.status,
-                  <Badge key="status" label={dictionary.statuses[user.status]} tone={statusTone(user.status)} />,
+                  <Badge
+                    key="status"
+                    label={dictionary.statuses[user.status]}
+                    tone={statusTone(user.status)}
+                  />,
                 ],
-                [dictionary.fields.createdDate, formatDate(user.createdDate, locale)],
-                [dictionary.fields.lastLogin, user.lastLogin ? formatDate(user.lastLogin, locale) : dictionary.values.neverLoggedIn],
-                [dictionary.fields.lastActivity, formatDate(user.lastActivity, locale)],
-                [dictionary.fields.twoFactor, user.twoFactorEnabled ? dictionary.detailValues.enabled : dictionary.detailValues.disabled],
+                [
+                  dictionary.fields.createdDate,
+                  formatDate(user.createdDate, locale),
+                ],
+                [
+                  dictionary.fields.lastLogin,
+                  user.lastLogin
+                    ? formatDate(user.lastLogin, locale)
+                    : dictionary.values.neverLoggedIn,
+                ],
+                [
+                  dictionary.fields.lastActivity,
+                  formatDate(user.lastActivity, locale),
+                ],
+                [
+                  dictionary.fields.twoFactor,
+                  user.twoFactorEnabled
+                    ? dictionary.detailValues.enabled
+                    : dictionary.detailValues.disabled,
+                ],
               ]}
             />
           </Section>
@@ -215,20 +283,36 @@ export function SuperAdminUserDetailsPage({ userId }: { userId: string }) {
             <div className="grid min-w-0 gap-4">
               <DetailList
                 items={[
-                  [dictionary.fields.assignedRole, dictionary.roles[user.assignedRole]],
-                  [dictionary.fields.accessLevel, dictionary.accessLevels[user.accessLevel]],
+                  [
+                    dictionary.fields.assignedRole,
+                    dictionary.roles[user.assignedRole],
+                  ],
+                  [
+                    dictionary.fields.accessLevel,
+                    dictionary.accessLevels[user.accessLevel],
+                  ],
                 ]}
               />
               <div className="min-w-0 rounded-md border border-[#E5E7EB] bg-[#F8FAFC] px-3 py-3">
-                <p className="text-xs font-medium text-[#66758a]">{dictionary.fields.directPermissions}</p>
+                <p className="text-xs font-medium text-[#66758a]">
+                  {dictionary.fields.directPermissions}
+                </p>
                 <div className="mt-2">
-                  <ChipList emptyLabel={dictionary.detailValues.noDirectPermissions} items={directPermissions} />
+                  <ChipList
+                    emptyLabel={dictionary.detailValues.noDirectPermissions}
+                    items={directPermissions}
+                  />
                 </div>
               </div>
               <div className="min-w-0 rounded-md border border-[#E5E7EB] bg-[#F8FAFC] px-3 py-3">
-                <p className="text-xs font-medium text-[#66758a]">{dictionary.fields.restrictedAreas}</p>
+                <p className="text-xs font-medium text-[#66758a]">
+                  {dictionary.fields.restrictedAreas}
+                </p>
                 <div className="mt-2">
-                  <ChipList emptyLabel={dictionary.detailValues.noRestrictedAreas} items={restrictedAreas} />
+                  <ChipList
+                    emptyLabel={dictionary.detailValues.noRestrictedAreas}
+                    items={restrictedAreas}
+                  />
                 </div>
               </div>
             </div>
@@ -237,8 +321,13 @@ export function SuperAdminUserDetailsPage({ userId }: { userId: string }) {
           <Section title={dictionary.sections.responsibilities}>
             <div className="grid min-w-0 gap-3 sm:grid-cols-2">
               {responsibilities.map((responsibility) => (
-                <div className="min-w-0 rounded-md border border-[#E5E7EB] bg-[#F8FAFC] px-3 py-3" key={responsibility}>
-                  <p className="break-words text-sm font-semibold text-[#24364f]">{responsibility}</p>
+                <div
+                  className="min-w-0 rounded-md border border-[#E5E7EB] bg-[#F8FAFC] px-3 py-3"
+                  key={responsibility}
+                >
+                  <p className="break-words text-sm font-semibold text-[#24364f]">
+                    {responsibility}
+                  </p>
                 </div>
               ))}
             </div>
@@ -249,13 +338,18 @@ export function SuperAdminUserDetailsPage({ userId }: { userId: string }) {
           <Section title={dictionary.sections.activityTimeline}>
             <ol className="space-y-4">
               {timeline.map((item) => (
-                <li className="flex min-w-0 gap-3" key={`${item.key}-${item.date}`}>
+                <li
+                  className="flex min-w-0 gap-3"
+                  key={`${item.key}-${item.date}`}
+                >
                   <span className="mt-1 h-3 w-3 shrink-0 rounded-full border-2 border-[#C8A45D] bg-[#0B2D5C]" />
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-[#24364f]">
                       {dictionary.timeline[item.key]}
                     </p>
-                    <p className="text-xs text-[#66758a]">{formatDate(item.date, locale)}</p>
+                    <p className="text-xs text-[#66758a]">
+                      {formatDate(item.date, locale)}
+                    </p>
                   </div>
                 </li>
               ))}
@@ -264,7 +358,9 @@ export function SuperAdminUserDetailsPage({ userId }: { userId: string }) {
 
           <Section title={dictionary.sections.internalNotes}>
             <label className="block min-w-0">
-              <span className="text-sm font-medium text-[#24364f]">{dictionary.notes.label}</span>
+              <span className="text-sm font-medium text-[#24364f]">
+                {dictionary.notes.label}
+              </span>
               <textarea
                 className="mt-2 min-h-36 w-full min-w-0 resize-y rounded-md border border-[#E5E7EB] bg-white px-3 py-3 text-sm text-[#132238] outline-none transition focus:border-[#0B2D5C] focus:ring-3 focus:ring-[#0B2D5C]/12"
                 defaultValue={user.notes}
@@ -272,8 +368,17 @@ export function SuperAdminUserDetailsPage({ userId }: { userId: string }) {
               />
             </label>
             <div className="mt-3 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-xs leading-5 text-[#66758a]">{dictionary.notes.helper}</p>
-              <button className={buttonClassName("secondary", "md", "w-full sm:w-auto")} type="button">
+              <p className="text-xs leading-5 text-[#66758a]">
+                {dictionary.notes.helper}
+              </p>
+              <button
+                className={buttonClassName(
+                  "secondary",
+                  "md",
+                  "w-full sm:w-auto",
+                )}
+                type="button"
+              >
                 {dictionary.detailActions.saveNotes}
               </button>
             </div>

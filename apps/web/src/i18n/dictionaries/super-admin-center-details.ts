@@ -1,4 +1,4 @@
-import type { SupportedLocale } from "../locales";
+﻿import type { SupportedLocale } from "../locales";
 
 type CenterDetailsDictionary = {
   brand: {
@@ -34,6 +34,9 @@ type CenterDetailsDictionary = {
     brandingLanguages: string;
     activityTimeline: string;
     notes: string;
+    subscriptionManagement: string;
+    staffUsers: string;
+    centerLoginAccess: string;
   };
   fields: {
     centerName: string;
@@ -48,6 +51,7 @@ type CenterDetailsDictionary = {
     autoRenewal: string;
     domain: string;
     createdDate: string;
+    updatedDate: string;
     adminName: string;
     email: string;
     mobile: string;
@@ -59,6 +63,11 @@ type CenterDetailsDictionary = {
     defaultLanguage: string;
     enabledLanguages: string;
     dnsVerificationStatus: string;
+    fullName: string;
+    role: string;
+    temporaryPassword: string;
+    centerSlug: string;
+    dedicatedLoginUrl: string;
   };
   actions: {
     backToCenters: string;
@@ -66,9 +75,22 @@ type CenterDetailsDictionary = {
     renewSubscription: string;
     suspendCenter: string;
     activateCenter: string;
+    deactivateCenter: string;
     deleteCenter: string;
     loginAsCenterAdmin: string;
+    resetAdminPassword: string;
+    forceAdminPasswordChange: string;
+    sendWelcomeEmail: string;
     saveNotes: string;
+    saveChanges: string;
+    cancelEdit: string;
+    addStaffUser: string;
+    editStaffUser: string;
+    activateStaffUser: string;
+    deactivateStaffUser: string;
+    resetStaffPassword: string;
+    copyLoginLink: string;
+    openLoginPage: string;
   };
   statuses: {
     active: string;
@@ -90,6 +112,33 @@ type CenterDetailsDictionary = {
     starter: string;
     professional: string;
     enterprise: string;
+  };
+  manualPlans: {
+    basic: string;
+    standard: string;
+    premium: string;
+    enterprise: string;
+  };
+  subscriptionStatuses: {
+    trial: string;
+    active: string;
+    expired: string;
+    overdue: string;
+    cancelled: string;
+  };
+  staffRoles: {
+    centerOwner: string;
+    centerManager: string;
+    doctor: string;
+    receptionist: string;
+    accountant: string;
+    staff: string;
+  };
+  staffStatuses: {
+    invited: string;
+    active: string;
+    inactive: string;
+    suspended: string;
   };
   centerTypes: {
     medicalCenter: string;
@@ -147,8 +196,48 @@ type CenterDetailsDictionary = {
     disabled: string;
     noLogo: string;
     futureAction: string;
+    loadingTitle: string;
+    errorTitle: string;
+    errorDescription: string;
     notFoundTitle: string;
     notFoundDescription: string;
+    editTitle: string;
+    editHelper: string;
+    saving: string;
+    updateSuccess: string;
+    updateError: string;
+    notesLoading: string;
+    notesEmpty: string;
+    notesSaving: string;
+    noteSaveError: string;
+    statusReason: string;
+    statusReasonPlaceholder: string;
+    statusSaving: string;
+    statusError: string;
+    updateSubscription: string;
+    subscriptionSaving: string;
+    subscriptionError: string;
+    expiringSoon: string;
+    expired: string;
+    overdue: string;
+    billingNotes: string;
+    nextRenewalDate: string;
+    staffLoading: string;
+    staffEmpty: string;
+    staffSaveError: string;
+    staffSaving: string;
+    staffSaved: string;
+    staffResetSuccess: string;
+    staffResetConfirmTitle: string;
+    staffResetConfirmDescription: string;
+    staffResetGeneratedTitle: string;
+    staffResetGeneratedDescription: string;
+    newTemporaryPassword: string;
+    copyTemporaryPassword: string;
+    temporaryPasswordCopied: string;
+    staffFormTitle: string;
+    loginLinkCopied: string;
+    loginLinkUnavailable: string;
   };
 };
 
@@ -194,6 +283,9 @@ export const superAdminCenterDetailsDictionaries: Record<
       brandingLanguages: "Branding + Languages",
       activityTimeline: "Activity Timeline",
       notes: "Internal Notes",
+      subscriptionManagement: "Subscription Management",
+      staffUsers: "Center Staff Users",
+      centerLoginAccess: "Center Login Access",
     },
     fields: {
       centerName: "Center Name",
@@ -208,6 +300,7 @@ export const superAdminCenterDetailsDictionaries: Record<
       autoRenewal: "Auto Renewal",
       domain: "Domain",
       createdDate: "Created Date",
+      updatedDate: "Updated Date",
       adminName: "Admin Name",
       email: "Email",
       mobile: "Mobile",
@@ -219,6 +312,11 @@ export const superAdminCenterDetailsDictionaries: Record<
       defaultLanguage: "Default Language",
       enabledLanguages: "Enabled Languages",
       dnsVerificationStatus: "DNS Verification Status",
+      fullName: "Full Name",
+      role: "Role",
+      temporaryPassword: "Temporary Password",
+      centerSlug: "Center Slug",
+      dedicatedLoginUrl: "Dedicated Login URL",
     },
     actions: {
       backToCenters: "Back to Centers",
@@ -226,9 +324,22 @@ export const superAdminCenterDetailsDictionaries: Record<
       renewSubscription: "Renew Subscription",
       suspendCenter: "Suspend Center",
       activateCenter: "Activate Center",
+      deactivateCenter: "Deactivate Center",
       deleteCenter: "Delete Center",
       loginAsCenterAdmin: "Login as Center Admin",
+      resetAdminPassword: "Reset Admin Password",
+      forceAdminPasswordChange: "Force Password Change",
+      sendWelcomeEmail: "Send Welcome Email",
       saveNotes: "Save Notes",
+      saveChanges: "Save Changes",
+      cancelEdit: "Cancel",
+      addStaffUser: "Add Staff User",
+      editStaffUser: "Edit Staff User",
+      activateStaffUser: "Activate",
+      deactivateStaffUser: "Deactivate",
+      resetStaffPassword: "Reset Password",
+      copyLoginLink: "Copy Login Link",
+      openLoginPage: "Open Login Page",
     },
     statuses: {
       active: "Active",
@@ -250,6 +361,33 @@ export const superAdminCenterDetailsDictionaries: Record<
       starter: "Starter",
       professional: "Professional",
       enterprise: "Enterprise",
+    },
+    manualPlans: {
+      basic: "Basic",
+      standard: "Standard",
+      premium: "Premium",
+      enterprise: "Enterprise",
+    },
+    subscriptionStatuses: {
+      trial: "Trial",
+      active: "Active",
+      expired: "Expired",
+      overdue: "Overdue",
+      cancelled: "Cancelled",
+    },
+    staffRoles: {
+      centerOwner: "Center Owner",
+      centerManager: "Center Manager",
+      doctor: "Doctor",
+      receptionist: "Receptionist",
+      accountant: "Accountant",
+      staff: "Staff",
+    },
+    staffStatuses: {
+      invited: "Invited",
+      active: "Active",
+      inactive: "Inactive",
+      suspended: "Suspended",
     },
     centerTypes: {
       medicalCenter: "Medical Center",
@@ -299,16 +437,60 @@ export const superAdminCenterDetailsDictionaries: Record<
     },
     notes: {
       label: "Super Admin notes",
-      placeholder: "Add internal notes about this center. These notes are visible only to RoyalCare admins.",
-      helper: "UI only. Notes are not saved yet.",
+      placeholder:
+        "Add internal notes about this center. These notes are visible only to RoyalCare admins.",
+      helper: "Private Super Admin notes are saved for this center only.",
     },
     values: {
       enabled: "Enabled",
       disabled: "Disabled",
       noLogo: "No logo uploaded",
       futureAction: "Future action",
+      loadingTitle: "Loading center details...",
+      errorTitle: "Center details could not be loaded",
+      errorDescription: "Try again in a moment or return to Centers Management.",
       notFoundTitle: "Center not found",
-      notFoundDescription: "No mock center exists for this route id. Return to Centers Management and choose an existing center.",
+      notFoundDescription:
+        "This center was not found. Return to Centers Management and choose an existing center.",
+      editTitle: "Edit center",
+      editHelper: "Update center, admin, subscription, and domain details.",
+      saving: "Saving...",
+      updateSuccess: "Center updated successfully.",
+      updateError: "Review the highlighted fields and try again.",
+      notesLoading: "Loading notes...",
+      notesEmpty: "No internal notes yet.",
+      notesSaving: "Saving...",
+      noteSaveError: "Enter a note before saving.",
+      statusReason: "Reason",
+      statusReasonPlaceholder: "Add a clear reason for this status change.",
+      statusSaving: "Updating status...",
+      statusError: "Review the status action and try again.",
+      updateSubscription: "Update Subscription",
+      subscriptionSaving: "Saving subscription...",
+      subscriptionError: "Review the subscription fields and try again.",
+      expiringSoon: "Expiring soon",
+      expired: "Expired",
+      overdue: "Overdue",
+      billingNotes: "Billing Notes",
+      nextRenewalDate: "Next Renewal Date",
+      staffLoading: "Loading staff users...",
+      staffEmpty: "No staff users yet.",
+      staffSaveError: "Review the staff fields and try again.",
+      staffSaving: "Saving staff user...",
+      staffSaved: "Staff user saved.",
+      staffResetSuccess: "Temporary password was reset.",
+      staffResetConfirmTitle: "Reset staff password?",
+      staffResetConfirmDescription:
+        "A new temporary password will replace the current staff password.",
+      staffResetGeneratedTitle: "Temporary Password Generated",
+      staffResetGeneratedDescription:
+        "Share this temporary password with the staff user through a secure channel.",
+      newTemporaryPassword: "New Password",
+      copyTemporaryPassword: "Copy",
+      temporaryPasswordCopied: "Copied",
+      staffFormTitle: "Staff user details",
+      loginLinkCopied: "Login link copied successfully",
+      loginLinkUnavailable: "Login link is unavailable because this center has no slug.",
     },
   },
   ar: {
@@ -349,6 +531,9 @@ export const superAdminCenterDetailsDictionaries: Record<
       brandingLanguages: "الهوية واللغات",
       activityTimeline: "سجل النشاط",
       notes: "ملاحظات داخلية",
+      subscriptionManagement: "إدارة الاشتراك",
+      staffUsers: "مستخدمو طاقم المركز",
+      centerLoginAccess: "رابط دخول المركز",
     },
     fields: {
       centerName: "اسم المركز",
@@ -363,6 +548,7 @@ export const superAdminCenterDetailsDictionaries: Record<
       autoRenewal: "التجديد التلقائي",
       domain: "النطاق",
       createdDate: "تاريخ الإنشاء",
+      updatedDate: "تاريخ التحديث",
       adminName: "اسم المدير",
       email: "البريد الإلكتروني",
       mobile: "رقم الجوال",
@@ -374,6 +560,11 @@ export const superAdminCenterDetailsDictionaries: Record<
       defaultLanguage: "اللغة الافتراضية",
       enabledLanguages: "اللغات المفعلة",
       dnsVerificationStatus: "حالة تحقق DNS",
+      fullName: "الاسم الكامل",
+      role: "الدور",
+      temporaryPassword: "كلمة المرور المؤقتة",
+      centerSlug: "معرّف رابط المركز",
+      dedicatedLoginUrl: "رابط الدخول المخصص",
     },
     actions: {
       backToCenters: "العودة إلى المراكز",
@@ -381,9 +572,22 @@ export const superAdminCenterDetailsDictionaries: Record<
       renewSubscription: "تجديد الاشتراك",
       suspendCenter: "إيقاف المركز",
       activateCenter: "تفعيل المركز",
+      deactivateCenter: "إلغاء تفعيل المركز",
       deleteCenter: "حذف المركز",
       loginAsCenterAdmin: "الدخول كمدير المركز",
+      resetAdminPassword: "إعادة تعيين كلمة مرور المدير",
+      forceAdminPasswordChange: "فرض تغيير كلمة المرور",
+      sendWelcomeEmail: "إرسال بريد الترحيب",
       saveNotes: "حفظ الملاحظات",
+      saveChanges: "حفظ التغييرات",
+      cancelEdit: "إلغاء",
+      addStaffUser: "إضافة موظف",
+      editStaffUser: "تعديل الموظف",
+      activateStaffUser: "تفعيل",
+      deactivateStaffUser: "إلغاء التفعيل",
+      resetStaffPassword: "إعادة تعيين كلمة المرور",
+      copyLoginLink: "نسخ رابط الدخول",
+      openLoginPage: "فتح صفحة الدخول",
     },
     statuses: {
       active: "نشط",
@@ -405,6 +609,33 @@ export const superAdminCenterDetailsDictionaries: Record<
       starter: "البداية",
       professional: "الاحترافية",
       enterprise: "المؤسسات",
+    },
+    manualPlans: {
+      basic: "أساسي",
+      standard: "قياسي",
+      premium: "مميز",
+      enterprise: "مؤسسات",
+    },
+    subscriptionStatuses: {
+      trial: "تجربة",
+      active: "نشط",
+      expired: "منتهي",
+      overdue: "متأخر",
+      cancelled: "ملغى",
+    },
+    staffRoles: {
+      centerOwner: "مالك المركز",
+      centerManager: "مدير المركز",
+      doctor: "طبيب",
+      receptionist: "موظف استقبال",
+      accountant: "محاسب",
+      staff: "موظف",
+    },
+    staffStatuses: {
+      invited: "مدعو",
+      active: "نشط",
+      inactive: "غير نشط",
+      suspended: "موقوف",
     },
     centerTypes: {
       medicalCenter: "مركز طبي",
@@ -454,7 +685,8 @@ export const superAdminCenterDetailsDictionaries: Record<
     },
     notes: {
       label: "ملاحظات مدير المنصة",
-      placeholder: "أضف ملاحظات داخلية عن هذا المركز. هذه الملاحظات تظهر فقط لمديري رويال كير.",
+      placeholder:
+        "أضف ملاحظات داخلية عن هذا المركز. هذه الملاحظات تظهر فقط لمديري رويال كير.",
       helper: "واجهة فقط. لا يتم حفظ الملاحظات حاليا.",
     },
     values: {
@@ -462,8 +694,52 @@ export const superAdminCenterDetailsDictionaries: Record<
       disabled: "غير مفعل",
       noLogo: "لم يتم رفع شعار",
       futureAction: "إجراء مستقبلي",
+      loadingTitle: "جار تحميل تفاصيل المركز...",
+      errorTitle: "تعذر تحميل تفاصيل المركز",
+      errorDescription:
+        "حاول مرة أخرى بعد قليل أو ارجع إلى إدارة المراكز.",
       notFoundTitle: "المركز غير موجود",
-      notFoundDescription: "لا يوجد مركز تجريبي لهذا المعرف. ارجع إلى إدارة المراكز واختر مركزا موجودا.",
+      notFoundDescription:
+        "لم يتم العثور على هذا المركز. ارجع إلى إدارة المراكز واختر مركزا موجودا.",
+      editTitle: "تعديل المركز",
+      editHelper: "حدّث بيانات المركز والمدير والاشتراك والنطاق.",
+      saving: "جار الحفظ...",
+      updateSuccess: "تم تحديث المركز بنجاح.",
+      updateError: "راجع الحقول المحددة ثم حاول مرة أخرى.",
+      notesLoading: "جار تحميل الملاحظات...",
+      notesEmpty: "لا توجد ملاحظات داخلية بعد.",
+      notesSaving: "جار الحفظ...",
+      noteSaveError: "أدخل الملاحظة قبل الحفظ.",
+      statusReason: "السبب",
+      statusReasonPlaceholder: "أضف سببًا واضحًا لهذا التغيير.",
+      statusSaving: "جار تحديث الحالة...",
+      statusError: "راجع إجراء الحالة ثم حاول مرة أخرى.",
+      updateSubscription: "تحديث الاشتراك",
+      subscriptionSaving: "جار حفظ الاشتراك...",
+      subscriptionError: "راجع حقول الاشتراك ثم حاول مرة أخرى.",
+      expiringSoon: "ينتهي قريبًا",
+      expired: "منتهي",
+      overdue: "متأخر",
+      billingNotes: "ملاحظات الفوترة",
+      nextRenewalDate: "تاريخ التجديد القادم",
+      staffLoading: "جار تحميل مستخدمي الطاقم...",
+      staffEmpty: "لا يوجد مستخدمو طاقم بعد.",
+      staffSaveError: "راجع حقول الموظف ثم حاول مرة أخرى.",
+      staffSaving: "جار حفظ مستخدم الطاقم...",
+      staffSaved: "تم حفظ مستخدم الطاقم.",
+      staffResetSuccess: "تمت إعادة تعيين كلمة المرور المؤقتة.",
+      staffResetConfirmTitle: "إعادة تعيين كلمة مرور الموظف؟",
+      staffResetConfirmDescription:
+        "سيتم استبدال كلمة مرور الموظف الحالية بكلمة مرور مؤقتة جديدة.",
+      staffResetGeneratedTitle: "تم إنشاء كلمة مرور مؤقتة",
+      staffResetGeneratedDescription:
+        "شارك كلمة المرور المؤقتة مع الموظف عبر قناة آمنة.",
+      newTemporaryPassword: "كلمة المرور الجديدة",
+      copyTemporaryPassword: "نسخ",
+      temporaryPasswordCopied: "تم النسخ",
+      staffFormTitle: "بيانات مستخدم الطاقم",
+      loginLinkCopied: "تم نسخ رابط الدخول بنجاح",
+      loginLinkUnavailable: "رابط الدخول غير متاح لأن هذا المركز لا يملك معرّف رابط.",
     },
   },
   he: {
@@ -504,6 +780,9 @@ export const superAdminCenterDetailsDictionaries: Record<
       brandingLanguages: "מיתוג ושפות",
       activityTimeline: "ציר פעילות",
       notes: "הערות פנימיות",
+      subscriptionManagement: "ניהול מינוי",
+      staffUsers: "משתמשי צוות המרכז",
+      centerLoginAccess: "גישת כניסה למרכז",
     },
     fields: {
       centerName: "שם המרכז",
@@ -518,6 +797,7 @@ export const superAdminCenterDetailsDictionaries: Record<
       autoRenewal: "חידוש אוטומטי",
       domain: "דומיין",
       createdDate: "תאריך יצירה",
+      updatedDate: "תאריך עדכון",
       adminName: "שם מנהל",
       email: "אימייל",
       mobile: "נייד",
@@ -529,6 +809,11 @@ export const superAdminCenterDetailsDictionaries: Record<
       defaultLanguage: "שפת ברירת מחדל",
       enabledLanguages: "שפות פעילות",
       dnsVerificationStatus: "סטטוס אימות DNS",
+      fullName: "שם מלא",
+      role: "תפקיד",
+      temporaryPassword: "סיסמה זמנית",
+      centerSlug: "מזהה קישור המרכז",
+      dedicatedLoginUrl: "קישור כניסה ייעודי",
     },
     actions: {
       backToCenters: "חזרה למרכזים",
@@ -536,9 +821,22 @@ export const superAdminCenterDetailsDictionaries: Record<
       renewSubscription: "חידוש מינוי",
       suspendCenter: "השהיית מרכז",
       activateCenter: "הפעלת מרכז",
+      deactivateCenter: "השבתת מרכז",
       deleteCenter: "מחיקת מרכז",
       loginAsCenterAdmin: "כניסה כמנהל המרכז",
+      resetAdminPassword: "איפוס סיסמת מנהל",
+      forceAdminPasswordChange: "חובת שינוי סיסמה",
+      sendWelcomeEmail: "שליחת אימייל ברוכים הבאים",
       saveNotes: "שמירת הערות",
+      saveChanges: "שמירת שינויים",
+      cancelEdit: "ביטול",
+      addStaffUser: "הוספת איש צוות",
+      editStaffUser: "עריכת איש צוות",
+      activateStaffUser: "הפעלה",
+      deactivateStaffUser: "השבתה",
+      resetStaffPassword: "איפוס סיסמה",
+      copyLoginLink: "העתקת קישור כניסה",
+      openLoginPage: "פתיחת דף כניסה",
     },
     statuses: {
       active: "פעיל",
@@ -560,6 +858,33 @@ export const superAdminCenterDetailsDictionaries: Record<
       starter: "מתחילים",
       professional: "מקצועי",
       enterprise: "ארגוני",
+    },
+    manualPlans: {
+      basic: "בסיסי",
+      standard: "סטנדרטי",
+      premium: "פרימיום",
+      enterprise: "ארגוני",
+    },
+    subscriptionStatuses: {
+      trial: "ניסיון",
+      active: "פעיל",
+      expired: "פג תוקף",
+      overdue: "באיחור",
+      cancelled: "מבוטל",
+    },
+    staffRoles: {
+      centerOwner: "בעלי המרכז",
+      centerManager: "מנהל המרכז",
+      doctor: "רופא",
+      receptionist: "קבלה",
+      accountant: "חשבונות",
+      staff: "צוות",
+    },
+    staffStatuses: {
+      invited: "הוזמן",
+      active: "פעיל",
+      inactive: "לא פעיל",
+      suspended: "מושהה",
     },
     centerTypes: {
       medicalCenter: "מרכז רפואי",
@@ -609,7 +934,8 @@ export const superAdminCenterDetailsDictionaries: Record<
     },
     notes: {
       label: "הערות מנהל מערכת",
-      placeholder: "הוספת הערות פנימיות על המרכז. ההערות גלויות רק למנהלי RoyalCare.",
+      placeholder:
+        "הוספת הערות פנימיות על המרכז. ההערות גלויות רק למנהלי RoyalCare.",
       helper: "ממשק בלבד. ההערות לא נשמרות כרגע.",
     },
     values: {
@@ -617,8 +943,55 @@ export const superAdminCenterDetailsDictionaries: Record<
       disabled: "כבוי",
       noLogo: "לא הועלה לוגו",
       futureAction: "פעולה עתידית",
+      loadingTitle: "טוען פרטי מרכז...",
+      errorTitle: "לא ניתן לטעון את פרטי המרכז",
+      errorDescription:
+        "נסו שוב בעוד רגע או חזרו לניהול המרכזים.",
       notFoundTitle: "המרכז לא נמצא",
-      notFoundDescription: "לא קיים מרכז דמו עבור מזהה הנתיב הזה. חזרו לניהול המרכזים ובחרו מרכז קיים.",
+      notFoundDescription:
+        "המרכז הזה לא נמצא. חזרו לניהול המרכזים ובחרו מרכז קיים.",
+      editTitle: "עריכת מרכז",
+      editHelper: "עדכון פרטי המרכז, המנהל, המינוי והדומיין.",
+      saving: "שומר...",
+      updateSuccess: "המרכז עודכן בהצלחה.",
+      updateError: "בדקו את השדות המסומנים ונסו שוב.",
+      notesLoading: "טוען הערות...",
+      notesEmpty: "אין עדיין הערות פנימיות.",
+      notesSaving: "שומר...",
+      noteSaveError: "יש להזין הערה לפני שמירה.",
+      statusReason: "סיבה",
+      statusReasonPlaceholder: "הוסיפו סיבה ברורה לשינוי הסטטוס.",
+      statusSaving: "מעדכן סטטוס...",
+      statusError: "בדקו את פעולת הסטטוס ונסו שוב.",
+      updateSubscription: "עדכון מינוי",
+      subscriptionSaving: "שומר מינוי...",
+      subscriptionError: "בדקו את שדות המינוי ונסו שוב.",
+      expiringSoon: "מסתיים בקרוב",
+      expired: "פג תוקף",
+      overdue: "באיחור",
+      billingNotes: "הערות חיוב",
+      nextRenewalDate: "תאריך חידוש הבא",
+      staffLoading: "טוען משתמשי צוות...",
+      staffEmpty: "אין עדיין משתמשי צוות.",
+      staffSaveError: "בדקו את שדות איש הצוות ונסו שוב.",
+      staffSaving: "שומר משתמש צוות...",
+      staffSaved: "משתמש הצוות נשמר.",
+      staffResetSuccess: "הסיסמה הזמנית אופסה.",
+      staffResetConfirmTitle: "לאפס סיסמת איש צוות?",
+      staffResetConfirmDescription:
+        "סיסמת איש הצוות הנוכחית תוחלף בסיסמה זמנית חדשה.",
+      staffResetGeneratedTitle: "נוצרה סיסמה זמנית",
+      staffResetGeneratedDescription:
+        "יש לשתף את הסיסמה הזמנית עם איש הצוות בערוץ מאובטח.",
+      newTemporaryPassword: "סיסמה חדשה",
+      copyTemporaryPassword: "העתקה",
+      temporaryPasswordCopied: "הועתק",
+      staffFormTitle: "פרטי משתמש צוות",
+      loginLinkCopied: "קישור הכניסה הועתק בהצלחה",
+      loginLinkUnavailable: "קישור הכניסה אינו זמין כי למרכז אין מזהה קישור.",
     },
   },
 };
+
+
+

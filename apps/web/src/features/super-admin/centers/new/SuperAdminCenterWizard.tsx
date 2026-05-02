@@ -10,7 +10,7 @@ import { ToggleSwitch } from "@/components/ui/ToggleSwitch";
 import { useLanguage } from "@/i18n/LanguageProvider";
 import { SuperAdminLayout } from "@/features/super-admin/layout/SuperAdminLayout";
 import {
-  API_BASE_URL,
+  ApiRequestError,
   createSuperAdminCenter,
   type ApiCenterType,
   type ApiLanguage,
@@ -46,6 +46,16 @@ const serviceOfferOrder = [
 type StepKey = (typeof stepKeys)[number];
 type ServiceKey = (typeof serviceOfferOrder)[number];
 type OptionKey<T> = Extract<keyof T, string>;
+type CreateCenterFieldKey =
+  | "adminName"
+  | "adminEmail"
+  | "adminPhone"
+  | "centerName"
+  | "defaultLanguage"
+  | "enabledLanguages"
+  | "subscriptionPlan"
+  | "temporaryPassword";
+type CreateCenterFieldErrors = Partial<Record<CreateCenterFieldKey, string>>;
 type BrandingState = {
   defaultLanguage: SupportedLocale;
   enabledLanguages: SupportedLocale[];
@@ -86,7 +96,11 @@ type AdminAccountState = {
   confirmPassword: string;
   mobileNumber: string;
   password: string;
-  permissionsPreset: "fullAccess" | "standardManagement" | "limitedAccess" | "customPermissions";
+  permissionsPreset:
+    | "fullAccess"
+    | "standardManagement"
+    | "limitedAccess"
+    | "customPermissions";
   twoFactorAuthentication: boolean;
 };
 
@@ -135,10 +149,7 @@ function buildCreateCenterPayload(
   return {
     admin: {
       email: adminAccount.adminEmail.trim(),
-      fullName:
-        adminAccount.adminFullName.trim() ||
-        centerProfile.ownerName.trim() ||
-        adminAccount.adminEmail.trim(),
+      fullName: adminAccount.adminFullName.trim(),
       permissionsPreset: adminAccount.permissionsPreset,
       phone: adminAccount.mobileNumber.trim() || undefined,
       temporaryPassword: adminAccount.password || undefined,
@@ -192,28 +203,56 @@ function validateCreateCenterForm(
   dictionary: CenterWizardDictionary,
   subscription: SubscriptionState,
 ) {
+  const fieldErrors: CreateCenterFieldErrors = {};
   const missingFields: string[] = [];
   const invalidFields: string[] = [];
 
   if (!centerProfile.centerName.trim()) {
+    fieldErrors.centerName = dictionary.validation.requiredField;
     missingFields.push(dictionary.fields.centerName);
   }
 
   if (!adminAccount.adminEmail.trim()) {
+    fieldErrors.adminEmail = dictionary.validation.requiredField;
     missingFields.push(dictionary.fields.adminEmail);
   } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminAccount.adminEmail)) {
+    fieldErrors.adminEmail = dictionary.validation.invalidEmail;
     invalidFields.push(dictionary.validation.invalidEmail);
   }
 
+  if (!adminAccount.adminFullName.trim()) {
+    fieldErrors.adminName = dictionary.validation.requiredField;
+    missingFields.push(dictionary.fields.adminName);
+  }
+
+  if (!adminAccount.mobileNumber.trim()) {
+    fieldErrors.adminPhone = dictionary.validation.requiredField;
+    missingFields.push(dictionary.fields.mobileNumber);
+  } else if (!/^\+?[0-9][0-9\s().-]{6,24}$/.test(adminAccount.mobileNumber)) {
+    fieldErrors.adminPhone = dictionary.validation.invalidPhone;
+    invalidFields.push(dictionary.validation.invalidPhone);
+  }
+
+  if (!adminAccount.password) {
+    fieldErrors.temporaryPassword = dictionary.validation.requiredField;
+    missingFields.push(dictionary.fields.password);
+  } else if (adminAccount.password.length < 8) {
+    fieldErrors.temporaryPassword = dictionary.validation.shortPassword;
+    invalidFields.push(dictionary.validation.shortPassword);
+  }
+
   if (!subscription.plan) {
+    fieldErrors.subscriptionPlan = dictionary.validation.requiredField;
     missingFields.push(dictionary.fields.subscriptionPlan);
   }
 
   if (!branding.defaultLanguage) {
+    fieldErrors.defaultLanguage = dictionary.validation.requiredField;
     missingFields.push(dictionary.fields.defaultLanguage);
   }
 
   if (branding.enabledLanguages.length === 0) {
+    fieldErrors.enabledLanguages = dictionary.validation.requiredField;
     missingFields.push(dictionary.fields.enabledLanguages);
   }
 
@@ -235,6 +274,7 @@ function validateCreateCenterForm(
   }
 
   return {
+    fieldErrors,
     invalidFields,
     missingFields,
   };
@@ -257,6 +297,116 @@ function formatValidationMessage(
   }
 
   return messages.join(" ");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function resolveLocalizedApiError(
+  value: unknown,
+  locale: SupportedLocale,
+): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => resolveLocalizedApiError(item, locale))
+      .filter(Boolean)
+      .join(", ");
+  }
+
+  if (isRecord(value)) {
+    const localizedValue = value[locale] ?? value.en ?? value.message;
+
+    if (typeof localizedValue === "string") {
+      return localizedValue;
+    }
+
+    return Object.values(value)
+      .map((item) => resolveLocalizedApiError(item, locale))
+      .filter(Boolean)
+      .join(", ");
+  }
+
+  return "";
+}
+
+function extractApiFieldErrors(details: unknown) {
+  if (!isRecord(details)) {
+    return null;
+  }
+
+  if (isRecord(details.errors)) {
+    return details.errors;
+  }
+
+  if (isRecord(details.message) && isRecord(details.message.errors)) {
+    return details.message.errors;
+  }
+
+  return null;
+}
+
+function getCreateCenterApiErrorMessage(
+  error: unknown,
+  dictionary: CenterWizardDictionary,
+  locale: SupportedLocale,
+) {
+  if (error instanceof ApiRequestError) {
+    const fieldErrors = extractApiFieldErrors(error.details);
+    const fieldErrorMessage = fieldErrors
+      ? Object.values(fieldErrors)
+          .map((value) => resolveLocalizedApiError(value, locale))
+          .filter(Boolean)
+          .join(" ")
+      : "";
+
+    if (fieldErrorMessage) {
+      return fieldErrorMessage;
+    }
+  }
+
+  return error instanceof Error ? error.message : dictionary.wizard.saveError;
+}
+
+function getCreateCenterApiFieldErrors(
+  error: unknown,
+  locale: SupportedLocale,
+): CreateCenterFieldErrors {
+  if (!(error instanceof ApiRequestError)) {
+    return {};
+  }
+
+  const fieldErrors = extractApiFieldErrors(error.details);
+
+  if (!fieldErrors) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(fieldErrors)
+      .map(([field, value]) => [
+        field,
+        resolveLocalizedApiError(value, locale),
+      ])
+      .filter(
+        (entry): entry is [CreateCenterFieldKey, string] =>
+          Boolean(entry[1]) &&
+          [
+            "adminEmail",
+            "adminName",
+            "adminPhone",
+            "centerName",
+            "defaultLanguage",
+            "enabledLanguages",
+            "subscriptionPlan",
+            "temporaryPassword",
+          ].includes(entry[0]),
+      ),
+  );
 }
 
 function FieldShell({
@@ -421,9 +571,7 @@ function LogoUpload({
                 src={previewUrl}
               />
             ) : (
-              <span className="text-xs font-semibold text-[#0B2D5C]">
-                RC
-              </span>
+              <span className="text-xs font-semibold text-[#0B2D5C]">RC</span>
             )}
           </div>
           <div className="min-w-0 flex-1">
@@ -435,7 +583,13 @@ function LogoUpload({
                 {dictionary.wizard.selectedLogo}: {fileName}
               </p>
             ) : null}
-            <label className={buttonClassName("secondary", "sm", "mt-3 cursor-pointer")}>
+            <label
+              className={buttonClassName(
+                "secondary",
+                "sm",
+                "mt-3 cursor-pointer",
+              )}
+            >
               {dictionary.wizard.chooseLogo}
               <input
                 accept="image/*"
@@ -509,11 +663,14 @@ function renderStepContent(
   branding: BrandingState,
   subscription: SubscriptionState,
   domain: DomainState,
+  fieldErrors: CreateCenterFieldErrors,
   logoFileName: string,
   logoPreviewUrl: string,
   onAdminAccountChange: (nextAdminAccount: Partial<AdminAccountState>) => void,
   onBrandingChange: (nextBranding: Partial<BrandingState>) => void,
-  onCenterProfileChange: (nextCenterProfile: Partial<CenterProfileState>) => void,
+  onCenterProfileChange: (
+    nextCenterProfile: Partial<CenterProfileState>,
+  ) => void,
   onSubscriptionChange: (nextSubscription: Partial<SubscriptionState>) => void,
   onDomainChange: (nextDomain: Partial<DomainState>) => void,
   onEnabledLanguageChange: (
@@ -657,7 +814,9 @@ function renderStepContent(
           <SelectInput
             label={dictionary.fields.dnsStatus}
             onChange={(dnsStatus) =>
-              onDomainChange({ dnsStatus: dnsStatus as DomainState["dnsStatus"] })
+              onDomainChange({
+                dnsStatus: dnsStatus as DomainState["dnsStatus"],
+              })
             }
             options={dictionary.dnsStatuses}
             value={domain.dnsStatus}
@@ -731,6 +890,7 @@ function renderStepContent(
         <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-2">
           <FormSection title={dictionary.groups.adminIdentity}>
             <TextInput
+              error={fieldErrors.adminName}
               label={dictionary.fields.adminName}
               onChange={(adminFullName) =>
                 onAdminAccountChange({ adminFullName })
@@ -741,7 +901,8 @@ function renderStepContent(
             />
             <TextInput
               error={
-                isEmailInvalid ? dictionary.validation.invalidEmail : undefined
+                fieldErrors.adminEmail ??
+                (isEmailInvalid ? dictionary.validation.invalidEmail : undefined)
               }
               inputMode="email"
               label={dictionary.fields.adminEmail}
@@ -752,6 +913,7 @@ function renderStepContent(
               value={adminAccount.adminEmail}
             />
             <TextInput
+              error={fieldErrors.adminPhone}
               inputMode="tel"
               label={dictionary.fields.mobileNumber}
               onChange={(mobileNumber) =>
@@ -763,6 +925,7 @@ function renderStepContent(
               value={adminAccount.mobileNumber}
             />
             <TextInput
+              error={fieldErrors.temporaryPassword}
               label={dictionary.fields.password}
               onChange={(password) => onAdminAccountChange({ password })}
               placeholder={dictionary.placeholders.password}
@@ -918,13 +1081,19 @@ function renderStepContent(
                 dictionary.fields.subdomain,
                 domain.subdomain || dictionary.placeholders.subdomain,
               ],
-              [dictionary.fields.dnsStatus, dictionary.dnsStatuses[domain.dnsStatus]],
+              [
+                dictionary.fields.dnsStatus,
+                dictionary.dnsStatuses[domain.dnsStatus],
+              ],
             ]}
           />
           <ReviewCard
             title={dictionary.groups.reviewBranding}
             items={[
-              [dictionary.fields.primaryColor, branding.primaryColor.toUpperCase()],
+              [
+                dictionary.fields.primaryColor,
+                branding.primaryColor.toUpperCase(),
+              ],
               [
                 dictionary.fields.secondaryColor,
                 branding.secondaryColor.toUpperCase(),
@@ -979,7 +1148,8 @@ function renderStepContent(
               ],
               [
                 dictionary.fields.mobileNumber,
-                adminAccount.mobileNumber || dictionary.placeholders.mobileNumber,
+                adminAccount.mobileNumber ||
+                  dictionary.placeholders.mobileNumber,
               ],
               [
                 dictionary.fields.permissionsPreset,
@@ -1061,13 +1231,17 @@ export function SuperAdminCenterWizard() {
   });
   const [logoFileName, setLogoFileName] = useState("");
   const [logoPreviewUrl, setLogoPreviewUrl] = useState("");
-  const [saveStatus, setSaveStatus] = useState<"error" | "idle" | "saving" | "success">("idle");
+  const [fieldErrors, setFieldErrors] = useState<CreateCenterFieldErrors>({});
+  const [saveStatus, setSaveStatus] = useState<
+    "error" | "idle" | "saving" | "success"
+  >("idle");
   const [saveMessage, setSaveMessage] = useState("");
   const dictionary = superAdminCenterWizardDictionaries[locale];
   const activeStep = stepKeys[activeStepIndex];
 
   const progressLabel = useMemo(
-    () => `${dictionary.wizard.progress} ${activeStepIndex + 1} / ${stepKeys.length}`,
+    () =>
+      `${dictionary.wizard.progress} ${activeStepIndex + 1} / ${stepKeys.length}`,
     [activeStepIndex, dictionary.wizard.progress],
   );
 
@@ -1105,6 +1279,21 @@ export function SuperAdminCenterWizard() {
       ...current,
       ...nextAdminAccount,
     }));
+    setFieldErrors((current) => ({
+      ...current,
+      ...(Object.hasOwn(nextAdminAccount, "adminEmail")
+        ? { adminEmail: undefined }
+        : {}),
+      ...(Object.hasOwn(nextAdminAccount, "adminFullName")
+        ? { adminName: undefined }
+        : {}),
+      ...(Object.hasOwn(nextAdminAccount, "mobileNumber")
+        ? { adminPhone: undefined }
+        : {}),
+      ...(Object.hasOwn(nextAdminAccount, "password")
+        ? { temporaryPassword: undefined }
+        : {}),
+    }));
   }
 
   function handleCenterProfileChange(
@@ -1113,6 +1302,12 @@ export function SuperAdminCenterWizard() {
     setCenterProfile((current) => ({
       ...current,
       ...nextCenterProfile,
+    }));
+    setFieldErrors((current) => ({
+      ...current,
+      ...(Object.hasOwn(nextCenterProfile, "centerName")
+        ? { centerName: undefined }
+        : {}),
     }));
   }
 
@@ -1132,10 +1327,7 @@ export function SuperAdminCenterWizard() {
     }));
   }
 
-  function handleServiceOfferedChange(
-    service: ServiceKey,
-    isEnabled: boolean,
-  ) {
+  function handleServiceOfferedChange(service: ServiceKey, isEnabled: boolean) {
     setCenterProfile((current) => {
       const servicesOffered = isEnabled
         ? Array.from(new Set([...current.servicesOffered, service]))
@@ -1168,7 +1360,9 @@ export function SuperAdminCenterWizard() {
 
   async function handlePrimaryAction() {
     if (activeStepIndex < stepKeys.length - 1) {
-      setActiveStepIndex((current) => Math.min(stepKeys.length - 1, current + 1));
+      setActiveStepIndex((current) =>
+        Math.min(stepKeys.length - 1, current + 1),
+      );
       return;
     }
 
@@ -1186,14 +1380,18 @@ export function SuperAdminCenterWizard() {
     ) {
       const validationMessage = formatValidationMessage(validation, dictionary);
 
+      setFieldErrors(validation.fieldErrors);
       setSaveStatus("error");
       setSaveMessage(validationMessage);
 
-      // TODO(debug): Remove after Create Center submit flow is verified in browser Network tab.
-      console.warn("[RoyalCare submit debug] validation blocked submit", {
-        invalidFields: validation.invalidFields,
-        missingFields: validation.missingFields,
-      });
+      if (
+        validation.fieldErrors.adminEmail ||
+        validation.fieldErrors.adminName ||
+        validation.fieldErrors.adminPhone ||
+        validation.fieldErrors.temporaryPassword
+      ) {
+        setActiveStepIndex(stepKeys.indexOf("adminAccount"));
+      }
 
       return;
     }
@@ -1207,12 +1405,9 @@ export function SuperAdminCenterWizard() {
       subscription,
     );
 
-    // TODO(debug): Remove after Create Center submit flow is verified in browser Network tab.
-    console.log("[RoyalCare submit debug] payload before submit", payload);
-    console.log("[RoyalCare submit debug] configured API base URL", API_BASE_URL);
-
     setSaveStatus("saving");
     setSaveMessage("");
+    setFieldErrors({});
 
     try {
       await createSuperAdminCenter(payload);
@@ -1220,19 +1415,26 @@ export function SuperAdminCenterWizard() {
       setSaveMessage(dictionary.wizard.saveSuccess);
       router.push("/super-admin/centers");
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : dictionary.wizard.saveError;
+      const apiFieldErrors = getCreateCenterApiFieldErrors(error, locale);
+      const message = getCreateCenterApiErrorMessage(error, dictionary, locale);
 
+      setFieldErrors(apiFieldErrors);
       setSaveStatus("error");
       setSaveMessage(message);
+
+      if (
+        apiFieldErrors.adminEmail ||
+        apiFieldErrors.adminName ||
+        apiFieldErrors.adminPhone ||
+        apiFieldErrors.temporaryPassword
+      ) {
+        setActiveStepIndex(stepKeys.indexOf("adminAccount"));
+      }
     }
   }
 
   return (
-    <SuperAdminLayout
-      activeNav="centers"
-      dictionary={dictionary}
-    >
+    <SuperAdminLayout activeNav="centers" dictionary={dictionary}>
       <div className="min-w-0 max-w-full space-y-5">
         <section className="min-w-0 rounded-lg border border-[#E5E7EB] bg-white p-5 shadow-[0_12px_30px_rgba(11,45,92,0.04)]">
           <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -1322,6 +1524,7 @@ export function SuperAdminCenterWizard() {
           branding,
           subscription,
           domain,
+          fieldErrors,
           logoFileName,
           logoPreviewUrl,
           handleAdminAccountChange,
@@ -1346,10 +1549,7 @@ export function SuperAdminCenterWizard() {
             {dictionary.wizard.previous}
           </button>
           <div className="flex min-w-0 flex-col gap-3 sm:flex-row">
-            <button
-              className={buttonClassName("warning", "md")}
-              type="button"
-            >
+            <button className={buttonClassName("warning", "md")} type="button">
               {dictionary.wizard.saveDraft}
             </button>
             <button

@@ -364,6 +364,31 @@ Forms should:
 - Use confirmation dialogs for destructive actions
 - Use translated labels, helper text, validation messages, and action labels
 
+Permanent RoyalCare error handling standard:
+- Generic user-facing errors are not allowed anywhere in RoyalCare forms or workflows.
+- Do not show normal users messages such as `Internal server error`, `Something went wrong`, `API error`, raw Prisma messages, stack traces, DTO names, invalid enum names, or HTTP transport details.
+- User-facing errors must be clear for normal users, not developers.
+- Good error examples:
+  - `رقم الهاتف مستخدم مسبقًا`
+  - `البريد الإلكتروني مطلوب`
+  - `اسم المركز مطلوب`
+  - `تاريخ انتهاء الاشتراك يجب أن يكون بعد تاريخ البداية`
+- Every form error must point to the exact field through a stable field key.
+- Required field keys for current Super Admin forms include:
+  - `centerName`
+  - `adminEmail`
+  - `adminPhone`
+  - `subscriptionPlan`
+  - `startDate`
+  - `expiryDate`
+  - `domain`
+- Frontend forms must show field-level errors under the exact input.
+- Top alert summaries are allowed only when they improve scanning or when multiple fields need attention.
+- The alert summary must repeat readable user-facing messages, not technical details.
+- Error messages must support Arabic, Hebrew, and English.
+- Add New Center Wizard, Users forms, Subscriptions forms, Domains forms, and Plans forms must follow this standard first.
+- Technical details may be logged in development for debugging, but production UI must never expose them to normal users.
+
 For multilingual content:
 - Use tabs or segmented controls for language fields.
 - Show missing translations clearly.

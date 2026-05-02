@@ -1,6 +1,543 @@
 # RoyalCare - Changelog
 
+## 2026-05-02 — Tenant Payments Module + Reopen Invoice
+
+Added full manual payment recording capability to the tenant billing module.
+
+Changed:
+- Schema: `PARTIAL` added to `InvoiceStatus` enum; new `PaymentMethod` enum (CASH, BANK_TRANSFER, CHECK, OTHER); new `Payment` model with back-relations on Invoice, User, Center, Patient; `prisma db push` applied.
+- Backend: `TenantPaymentService` with `create()` (overpayment guard, atomic `$transaction`, CANCELLED-invoice block) and `list()` (aggregate totals).
+- Backend: `TenantBillingService.updateStatus()` extended for PARTIAL status and Reopen Invoice (CANCELLED → PENDING recalculates status from payment aggregate).
+- Backend: `BillingController` has two new routes: `POST /tenant/billing/:invoiceId/payments` and `GET /tenant/billing/:invoiceId/payments`.
+- Frontend: `TenantInvoiceDetailsPage` rebuilt with payment summary bar, Add Payment form, and payment history table; form hidden for PAID/CANCELLED invoices.
+- Frontend: `TenantBillingPage` updated with PARTIAL badge (indigo), PARTIAL filter option, and PARTIAL-aware action buttons.
+- Frontend API client: `TenantPayment`, `PaymentSummary`, `CreatePaymentPayload`, `CreatePaymentResult` types; `listTenantPayments()`, `createTenantPayment()` functions.
+- `billing-permissions.ts`: added `hasPaymentPermission()` and `paymentRolePermissions`.
+- i18n: 16 payment keys + `PARTIAL` status added to EN, AR, and HE billing dictionaries.
+
+Verified:
+- `npm run build` and `tsc --noEmit` passed in `services/api` and `apps/web`.
+- Payment routes return `401` (auth guard alive) confirming registration.
+
+## 2026-04-30 — Appointment Overlap Bug Fix (Hardened Detection)
+
+Fixed critical bug where overlapping appointments could be saved without showing the conflict alert.
+
+Root cause investigated: `ensureNoOverlap` passed a JavaScript Date directly to Prisma for a `@db.Date` column. While this typically works, any timezone drift between Node.js and PostgreSQL session could cause the date filter to return zero rows, silently passing the overlap check. Additionally, if `conflictDetails` was somehow null, the frontend alert would not render.
+
+Changed:
+- Backend `ensureNoOverlap`: extract date string with `dateOnlyText` before the query, re-construct an explicit UTC midnight Date (`new Date(\`${targetDateStr}T00:00:00.000Z\`)`) to eliminate timezone ambiguity.
+- Backend: added in-memory application-layer filter after the Prisma query to keep only rows whose `dateOnlyText(appt.appointmentDate)` matches `targetDateStr`, providing a second safety net.
+- Backend: `conflictDetails` in the thrown `BadRequestException` is now guaranteed non-null via `?? { fallback object }`.
+- Frontend `extractConflictDetails`: hardened to also detect a conflict when `conflictDetails` key is absent but `message` contains "conflict", returning a minimal placeholder object so the alert still renders.
+
+Verified:
+- `tsc --noEmit` passed in both `services/api` and `apps/web`.
+- `npm run build` passed in `apps/web` (all routes compiled).
+
+## 2026-04-30 — Appointment Overlap Conflict Alert
+
+Replaced simple overlap text error with a full styled conflict details alert box.
+
+Changed:
+- Backend `ensureNoOverlap` now queries full patient name, service names (EN/AR/HE), and provider name for the conflicting appointment.
+- Backend overlap error response now includes a top-level `conflictDetails` object: `patientName`, `serviceNameEn/Ar/He`, `providerName`, `appointmentDate`, `startTime`, `endTime`.
+- Backend overlap error message changed from `"Validation failed"` to `"Appointment conflict detected"`.
+- Frontend: new `AppointmentConflictAlert` component renders a red bordered alert box with warning icon, conflict title, a labeled detail grid (patient, service, provider, date, start, end), and a "choose a different time slot" message.
+- Frontend: `TenantAppointmentFormPage` extracts `conflictDetails` from API error responses and shows the alert below the form fields.
+- Frontend: conflict alert clears on each new submit attempt.
+- i18n: added 8 new keys to the `appointments` dictionary for EN, AR, and HE: `conflictTitle`, `conflictMessage`, `conflictPatient`, `conflictService`, `conflictProvider`, `conflictDate`, `conflictStart`, `conflictEnd`.
+- RTL support: conflict alert uses `rtl:flex-row-reverse` on icon+content row and on each label–value pair.
+- Pre-existing build failure in `TenantServiceFormPage.tsx` fixed by adding missing `durationUnitMinutes` and `durationUnitHours` dictionary keys in EN, AR, and HE.
+
+Verified:
+- `npm run lint` passed in `services/api` and `apps/web`.
+- `npm run build` passed in `services/api`.
+- `npm run build` passed in `apps/web` (all appointment routes compiled).
+
+## 2026-04-30
+
+Fixed Tenant Services default-language-only service form validation.
+
+Changed:
+- Tenant Services create/edit forms now require only the center default-language service name.
+- Service descriptions are optional in English, Arabic, and Hebrew.
+- Non-default language name fields are optional and marked with localized Optional labels.
+- Backend service validation no longer rejects missing non-default language fields or missing descriptions.
+- Tenant Services still store English, Arabic, and Hebrew name/description fields separately.
+
+Verified:
+- Arabic default-language center created a service with Arabic name only.
+- Hebrew default-language center created a service with Hebrew name only.
+- English default-language center created a service with English name only.
+- Missing default-language name returned `400`.
+- Created services appeared in `/tenant/services` and `/tenant/appointments/options`.
+- No online payment functionality was added.
+
+Fixed Super Admin Center Details default-language editing.
+
+Changed:
+- Center Details now treats `Center.primaryLanguage` as the displayed default language source.
+- Edit Center now includes a translated Default Language selector with English, Arabic, and Hebrew options.
+- `PATCH /api/v1/centers/:centerId` now accepts `primaryLanguage` and validates it against `EN`, `AR`, and `HE`.
+- Updating `primaryLanguage` also aligns `BrandingSettings.defaultLanguage` and ensures the selected language is included in enabled languages when branding settings exist.
+- The Super Admin center API client now includes `primaryLanguage` in update payloads.
+
+Verified:
+- API build passed after adding the update-field support.
+- Web `tsc --noEmit` passed after adding the edit form field.
+- Full lint/build QA is tracked with the implementation report.
+
+Notes:
+- No duplicate language field was added.
+- Dedicated tenant login and Tenant Services continue to read the center default from `Center.primaryLanguage`.
+- No online payment functionality was added.
+
+## 2026-04-29
+
+Fixed Tenant Patients Search UX.
+
+Changed:
+- Patients list search now filters locally and instantly while typing; no Search button or Enter key is required.
+- Search matches patient full name and phone number with trimmed, case-insensitive partial matching.
+- Phone search also ignores common formatting separators such as spaces, dots, dashes, and parentheses.
+- Added localized no-results empty state for filtered searches in English, Arabic, and Hebrew.
+- Patient success messages now auto-hide after 4 seconds on list and details screens.
+- Patient list only calls the API for initial load and mutation refreshes, not on every keystroke.
+
+Verified:
+- Source audit confirmed the Patients page no longer uses submitted query state or a search button.
+- Source audit confirmed `listPatients()` is not called on search input changes.
+- Source audit confirmed localized no-results labels exist for EN/AR/HE.
+- Source audit confirmed success notices use a 4-second auto-hide timer.
+- `npm.cmd run lint`, `npx.cmd tsc --noEmit`, and `npm.cmd run build` passed in `apps/web`.
+
+Implemented Tenant Patients Management foundation.
+
+Changed:
+- Added Prisma `Patient` model with `centerId`, identity/contact fields, gender, date of birth, national ID, notes, status, timestamps, center relation, and tenant lookup indexes.
+- Added per-center unique patient phone rule through `@@unique([centerId, phone])`.
+- Added tenant Patients API:
+  - `GET /api/v1/patients`
+  - `POST /api/v1/patients`
+  - `GET /api/v1/patients/:patientId`
+  - `PATCH /api/v1/patients/:patientId`
+  - `PATCH /api/v1/patients/:patientId/status`
+- Patients API derives `centerId` from the signed center session cookie and never accepts client-supplied tenant ids.
+- Added tenant `/dashboard/patients` list/search/create/edit/archive page.
+- Added tenant `/dashboard/patients/[id]` details/edit/archive page.
+- Refactored the tenant dashboard shell into a reusable center admin shell with localized navigation and RTL behavior.
+- Added English, Arabic, and Hebrew patient labels, statuses, genders, empty/loading states, form labels, and validation text.
+
+Verified:
+- Prisma format, validate, generate, database push, and database package typecheck passed.
+- `npm.cmd run build` and `npm.cmd run lint` passed in `services/api`.
+- `npm.cmd run lint`, `npx.cmd tsc --noEmit`, and `npm.cmd run build` passed in `apps/web`.
+- Created a patient through the tenant API and confirmed it used the authenticated center id.
+- Duplicate phone in the same center returned `409`.
+- The same phone in a different center was allowed.
+- Invalid phone returned `400`.
+- Blank patient name on update returned `400`.
+- Edit patient persisted.
+- Archive patient persisted.
+- Invalid patient status returned `400`.
+- Search by name returned the updated patient.
+- Refresh/list after archive returned the persisted archived patient.
+- Cross-center patient details access returned `404`.
+- Patient list/detail/create responses contained no password, passwordHash, token, secret, auth verification, last-login, or deleted metadata fields.
+- `/dashboard/patients` route checks confirmed EN renders LTR and AR/HE render RTL.
+
+Fixed Tenant Dashboard Shell i18n and RTL completeness.
+
+Changed:
+- Replaced broken Arabic/Hebrew tenant dashboard dictionary text with valid localized strings.
+- Added localized tenant center status labels for `TRIAL`, `ACTIVE`, `PAST_DUE`, `SUSPENDED`, `CANCELLED`, and `ARCHIVED`.
+- Tenant dashboard center status now renders through the dictionary instead of raw API enum text.
+- Tenant dashboard role and center status API types now use explicit shared key unions.
+- Tenant dashboard desktop shell mirrors the sidebar to the right for Arabic/Hebrew and keeps it on the left for English.
+- Tenant dashboard mobile drawer now opens from the correct physical side for RTL/LTR.
+
+Verified:
+- Source audit found no hardcoded sidebar/dashboard English labels in the tenant dashboard component.
+- English, Arabic, and Hebrew tenant dashboard nav, role, status, title, subtitle, card, loading, and logout labels exist in the dictionary.
+- Built route checks confirmed `/dashboard` renders `lang="en" dir="ltr"`, `lang="ar" dir="rtl"`, and `lang="he" dir="rtl"` from locale cookies.
+- `npm.cmd run lint` passed in `apps/web`.
+- `npx.cmd tsc --noEmit` passed in `apps/web`.
+- `npm.cmd run build` passed in `apps/web`.
+
+Fixed Center Staff Reset Password usability.
+
+Changed:
+- `POST /api/v1/centers/:centerId/staff/:userId/reset-password` now returns the newly generated temporary password for the Super Admin reset operation.
+- The reset endpoint still stores only the hashed password in `User.passwordHash`.
+- Center Details now shows a confirmation dialog before resetting a center staff password.
+- After reset, Center Details shows a modal with the generated temporary password plus Copy and Close actions.
+- The reset flow no longer shows only the generic “Staff user saved” message.
+
+Verified:
+- Reset password returned `201`, `resetComplete: true`, and a generated `temporaryPassword`.
+- The copied/generated temporary password worked for tenant login.
+- Direct database inspection confirmed `User.passwordHash` exists, starts with `scrypt$`, and is not equal to the temporary password.
+- Reset response did not expose `passwordHash`, tokens, secrets, auth verification timestamps, last login, or deleted metadata.
+- `npm.cmd run build` and `npm.cmd run lint` passed in `services/api`.
+- `npm.cmd run lint`, `npx.cmd tsc --noEmit`, and `npm.cmd run build` passed in `apps/web`.
+
+Implemented Tenant Login and Center Dashboard Shell foundation.
+
+Changed:
+- Added tenant-side center staff auth endpoints:
+  - `POST /api/v1/auth/center/login`
+  - `GET /api/v1/auth/center/me`
+  - `POST /api/v1/auth/center/logout`
+- Added secure password verification for existing scrypt password hashes.
+- Added signed HttpOnly center session cookie handling.
+- Tenant login authenticates only center-scoped staff users with active `UserRole.centerId` assignments.
+- Inactive users are blocked.
+- Suspended, cancelled, and archived centers are blocked from tenant login.
+- Added tenant login page at `/login`.
+- Added tenant dashboard shell at `/dashboard`.
+- Dashboard shell shows center name, current user, role, center status, placeholder summary cards, responsive sidebar/drawer navigation, and logout.
+- Added English, Arabic, and Hebrew tenant dashboard/login dictionary.
+- Super Admin login semantics were not changed.
+
+Verified:
+- Valid tenant login returned `201`.
+- Invalid password returned `401`.
+- Inactive staff login returned `401`.
+- `/auth/center/me` returned `200` after login and matched the assigned center id.
+- Logout returned `201` and `/auth/center/me` returned `401` after logout.
+- Wrong-center staff access returned `404`.
+- Tenant auth responses contained no `password`, `passwordHash`, token, secret, verification, last-login, or deleted metadata fields.
+- `npm.cmd run build` and `npm.cmd run lint` passed in `services/api`.
+- `npm.cmd run lint`, `npx.cmd tsc --noEmit`, and `npm.cmd run build` passed in `apps/web`.
+
+Implemented Center Staff Users Management foundation.
+
+Changed:
+- Added center-scoped staff endpoints under `/api/v1/centers/:centerId/staff`.
+- Staff users are tenant users, not platform admins; they are represented by safe `User` records assigned through `UserRole.centerId`.
+- Supported center staff roles: `CENTER_OWNER`, `CENTER_MANAGER`, `DOCTOR`, `RECEPTIONIST`, `ACCOUNTANT`, and `STAFF`.
+- Added create, list, edit, status update, and reset temporary password workflows.
+- Staff validation returns field-specific errors for `fullName`, `email`, `phone`, `role`, `status`, and `temporaryPassword`.
+- Center Details now includes a permission-aware Center Staff Users section with list, add, edit, activate/deactivate, and reset password actions.
+- Added English, Arabic, and Hebrew dictionary labels for the staff section, roles, statuses, buttons, empty/loading states, and form text.
+- Staff responses never return passwords, password hashes, tokens, secrets, or auth metadata.
+
+Verified:
+- Staff user creation returned `201`.
+- Duplicate email returned `409 errors.email`.
+- Duplicate phone returned `409 errors.phone`.
+- Invalid email returned `400 errors.email`.
+- Invalid phone returned `400 errors.phone`.
+- Invalid role returned `400 errors.role`.
+- Invalid status returned `400 errors.status`.
+- Staff edit returned `200` and changed the role to `ACCOUNTANT`.
+- Deactivate returned `200` with user status `INACTIVE`.
+- Activate returned `200` with user status `ACTIVE`.
+- Reset temporary password returned `201`, reported `resetComplete: true`, and did not leak `password`, `passwordHash`, token, secret, or auth metadata fields.
+- Cross-center staff list did not include the staff user from another center.
+- Cross-center staff update returned `404`.
+- Missing center returned `404`.
+- English, Arabic, and Hebrew staff labels exist in the Center Details dictionary.
+- `npm.cmd run build` and `npm.cmd run lint` passed in `services/api`.
+- `npm.cmd run lint`, `npx.cmd tsc --noEmit`, and `npm.cmd run build` passed in `apps/web`.
+
+## 2026-04-28
+
+Implemented Super Admin Users & Permissions Foundation.
+
+Changed:
+- Added platform RBAC seed definitions for Super Admin, Platform Admin, Finance Admin, Support Admin, and Read Only Admin.
+- Added granular platform permissions such as `view:centers`, `edit:centers`, `suspend:centers`, `manage:subscriptions`, `view:internal_notes`, `manage:internal_notes`, `view:users`, and `manage:users`.
+- Added permission decorators and a NestJS permission guard.
+- Added `GET /api/v1/permissions/me`, `GET /api/v1/permissions/platform-roles`, and `POST /api/v1/permissions/platform-users/:userId/roles`.
+- Protected Centers endpoints with permission checks for view/create/edit/status/subscription/internal-notes actions.
+- Protected Super Admin Users endpoints with `view:users` and `manage:users`.
+- Centers List and Center Details now hide UI actions and sections when the current platform user lacks the required permission.
+- API clients forward the temporary development `x-royalcare-super-admin-user-id` header from `localStorage.royalcare.superAdminUserId`.
+
+Verified:
+- Default Super Admin returned all 11 implemented platform permissions.
+- Platform roles endpoint returned all 5 implemented roles.
+- Finance Admin could update manual subscriptions and received `403` for center status actions.
+- Support Admin could create internal notes and received `403` for subscription updates.
+- Read Only Admin could list centers and received `403` for center update and internal-note access.
+- Center detail/list responses after RBAC changes did not include `password`, `passwordHash`, `token`, `secret`, `emailVerifiedAt`, `phoneVerifiedAt`, `lastLoginAt`, or `deletedAt`.
+- `npm.cmd run build` and `npm.cmd run lint` passed in `services/api`.
+- `npm.cmd run lint`, `npx.cmd tsc --noEmit`, and `npm.cmd run build` passed in `apps/web`.
+
+Implemented manual Subscription & Plan Management.
+
+Changed:
+- Added manual-only subscription fields `nextRenewalDate` and `billingNotes`.
+- Removed old external payment provider fields from the Prisma subscription schema.
+- Added `PATCH /api/v1/centers/:centerId/subscription`.
+- Supported manual plans: `BASIC`, `STANDARD`, `PREMIUM`, `ENTERPRISE`.
+- Supported manual statuses: `TRIAL`, `ACTIVE`, `EXPIRED`, `OVERDUE`, `CANCELLED`.
+- Manual subscription updates validate plan, status, and date ordering with field-specific errors.
+- Manual subscription changes create automatic private internal notes.
+- Center Details now includes a Subscription Management section, expiry/overdue/expired warning badges, and a manual update modal.
+- No Stripe, PayPal, checkout, card payment, or external provider fields were added; old provider fields were removed.
+
+Verified:
+- Valid subscription update returned `200` and persisted manual plan/status/dates/billing notes.
+- Invalid plan returned `400 errors.subscriptionPlan`.
+- Invalid status returned `400 errors.subscriptionStatus`.
+- End date before start date returned `400 errors.subscriptionDates`.
+- Expired subscription status/date persisted and is available for warning display.
+- Centers list and Center Details reflected subscription updates.
+- Automatic internal notes were created for manual subscription changes.
+- Responses did not expose auth-sensitive fields or payment-provider fields.
+- `npm.cmd run db:format`, `npm.cmd run db:validate`, `npm.cmd run db:generate`, `npx.cmd prisma db push`, and `npm.cmd run typecheck` passed in `packages/database`.
+- `npm.cmd run build` and `npm.cmd run lint` passed in `services/api`.
+- `npm.cmd run lint`, `npx.cmd tsc --noEmit`, and `npm.cmd run build` passed in `apps/web`.
+
+Implemented Super Admin Center Status Actions.
+
+Changed:
+- Added `PATCH /api/v1/centers/:centerId/status` and Super Admin alias.
+- Supported status actions: activate to `ACTIVE`, suspend to `SUSPENDED`, and deactivate to `CANCELLED` because the current Prisma status model does not include `INACTIVE`.
+- Status action validation rejects unsupported statuses with `errors.status`.
+- Suspend/deactivate require a reason and reject missing reasons with `errors.reason`.
+- Status changes run in a database transaction and create an automatic private internal note describing the status transition and reason.
+- Center Details quick actions now open a confirmation/reason dialog, submit the status action, refresh center details, and refresh internal notes.
+
+Verified:
+- Activate returned `200` and persisted `ACTIVE`.
+- Suspend without reason returned `400 errors.reason`.
+- Suspend with reason returned `200` and persisted `SUSPENDED`.
+- Deactivate returned `200` and persisted `CANCELLED`.
+- Invalid `INACTIVE` status returned `400 errors.status`.
+- Invalid center id returned `404`.
+- Centers list and Center Details reflected the updated status after refresh.
+- Automatic internal notes were created newest first for status actions.
+- Status action responses did not expose passwords, password hashes, tokens, secrets, or auth metadata.
+- `npm.cmd run build` and `npm.cmd run lint` passed in `services/api`.
+- `npm.cmd run lint`, `npx.cmd tsc --noEmit`, and `npm.cmd run build` passed in `apps/web`.
+
+Implemented real Super Admin Center Internal Notes.
+
+Changed:
+- Added `CenterInternalNote` Prisma model with `centerId`, `authorId`, note text, timestamps, center relation, author relation, and lookup indexes.
+- Added `GET /api/v1/centers/:centerId/internal-notes` to list private center notes newest first.
+- Added `POST /api/v1/centers/:centerId/internal-notes` to create private Super Admin notes.
+- Internal notes validate required/non-empty note text and return `400 errors.note`.
+- Missing and malformed center ids return `404 Center not found`.
+- Internal note responses include safe author info only and never expose passwords, password hashes, tokens, secrets, or auth metadata.
+- Center Details now loads real internal notes, saves notes, shows newest-first history, loading state, saving state, empty state, and field-level validation.
+- Removed the UI-only notes behavior from Center Details.
+
+Verified:
+- Prisma schema format, validation, generation, database push, and database package typecheck passed.
+- Created two notes through the API and confirmed they persisted after reload.
+- Notes list returned newest first.
+- Empty note POST returned `400 errors.note`.
+- Invalid and malformed center ids returned `404`.
+- Normal Center Details response did not expose internal notes.
+- Notes responses did not include sensitive auth fields.
+- `npm.cmd run build` and `npm.cmd run lint` passed in `services/api`.
+- `npm.cmd run lint`, `npx.cmd tsc --noEmit`, and `npm.cmd run build` passed in `apps/web`.
+
+Implemented Edit Center / Update Center.
+
+Changed:
+- Added `PATCH /api/v1/centers/:centerId` and `PATCH /api/v1/super-admin/centers/:centerId`.
+- Center updates can change center name, type, status, owner/admin full name, email, phone, latest subscription plan/dates, and primary domain.
+- Update validation now returns field-specific errors for invalid or duplicate admin email, invalid or duplicate admin phone, duplicate domain, invalid center name, invalid dates, and invalid ids.
+- Update responses reuse safe user/domain projections and do not expose passwords, password hashes, tokens, secrets, or auth-adjacent user metadata.
+- Center Details now supports `/super-admin/centers/{id}?mode=edit` with a real prefilled edit form and PATCH submission.
+- Center Details edit form shows loading/saving state and field-level backend errors.
+
+Verified:
+- Valid PATCH updated a real PostgreSQL center and changed details/list data.
+- Invalid email returned `400 errors.adminEmail`.
+- Invalid phone returned `400 errors.adminPhone`.
+- Duplicate email returned `409 errors.adminEmail`.
+- Duplicate phone returned `409 errors.adminPhone`.
+- Duplicate domain returned `409 errors.domain`.
+- Blank center name returned `400 errors.centerName`.
+- Missing and malformed center ids returned `404`.
+- List/details responses reflected the update and contained no sensitive fields.
+- `npm.cmd run build` and `npm.cmd run lint` pass in `services/api`.
+- `npm.cmd run lint`, `npx.cmd tsc --noEmit`, and `npm.cmd run build` pass in `apps/web`.
+
 ## 2026-04-27
+
+Finalized real-data Super Admin Center Details integration.
+
+Changed:
+- Removed the old `center-details-data.ts` mock dependency from Center Details.
+- Center Details activity timeline now derives from real center, subscription, domain, and admin timestamps returned by `GET /api/v1/centers/:centerId`.
+- Backend center detail/list/create responses now select safe domain fields and exclude domain verification tokens.
+- Malformed center detail IDs now return a clean `404 Center not found` instead of a Prisma-backed `500`.
+
+Verified:
+- `npm.cmd run build` and `npm.cmd run lint` pass in `services/api`.
+- `npm.cmd run lint`, `npx.cmd tsc --noEmit`, and `npm.cmd run build` pass in `apps/web`.
+- `GET /api/v1/centers/:centerId` returned three different real PostgreSQL centers with matching IDs, names, owners, domains, and plans.
+- `GET /api/v1/centers/not-a-real-center-id` returned `404`.
+- Serialized list and detail responses did not include `passwordHash`, password fields, or token fields.
+- Source search found no remaining `center-details-data` or `centerDetailsById` usage in the Centers details flow.
+
+Fixed QA production-blocking Create Center validation and sensitive logging issues.
+
+Changed:
+- Removed temporary frontend API and submit debug logs that could print full create payloads, including `temporaryPassword`.
+- Add New Center frontend validation now blocks missing admin name, missing temporary password, invalid phone, and short password before sending a request.
+- Backend `POST /api/v1/centers` now rejects missing admin name, missing temporary password, invalid email, invalid phone, and short password with field-specific `400` errors.
+- Center name validation now uses `errors.centerName` instead of `errors.name`.
+- Duplicate domain creation now returns `409 Conflict` with `errors.domain` instead of `errors.unique`.
+- Domain is not required in the current frontend flow because neither custom domain nor subdomain is marked required; backend still validates and maps duplicate domain errors when a domain is provided.
+
+Verified:
+- Valid create returned `201`.
+- Missing admin name returned `400 errors.adminName`.
+- Missing password returned `400 errors.temporaryPassword`.
+- Invalid email returned `400 errors.adminEmail`.
+- Invalid phone returned `400 errors.adminPhone`.
+- Short password returned `400 errors.temporaryPassword`.
+- Duplicate domain returned `409 errors.domain`.
+- Missing center name returned `400 errors.centerName`.
+- API responses did not include `passwordHash` or plaintext `TemporaryPassword123!`.
+- Source search found no remaining `console.*`, `RoyalCare submit debug`, or full payload logging in the Create Center frontend API path.
+- `npm.cmd run build` and `npm.cmd run lint` pass in `services/api`.
+- `npm.cmd run lint`, `npx.cmd tsc --noEmit`, and `npm.cmd run build` pass in `apps/web`.
+
+Fixed required owner/admin phone validation in Create Center.
+
+Changed:
+- Add New Center Wizard now requires the Center Admin mobile number before submitting.
+- Missing admin phone sets a field-level error under the mobile number input and prevents the POST request.
+- Backend center creation validation now rejects missing, blank, or null `admin.phone` with `400 Bad Request`.
+- Backend response uses `errors.adminPhone` with English, Arabic, and Hebrew user-facing messages.
+- Duplicate phone validation remains in place and still returns `409 Conflict` for already-used phone numbers.
+- Successful center creation still hashes temporary passwords and does not return `passwordHash`.
+
+Verified:
+- `POST /api/v1/centers` without `admin.phone` returned `400` with `errors.adminPhone`.
+- `POST /api/v1/centers` with a unique admin phone returned `201` and created center `c382aa07-be04-444e-9618-29ba417ec2c8`.
+- Duplicate phone POST still returned `409` with `errors.adminPhone`.
+- The successful create response did not contain `passwordHash`.
+- `npm.cmd run build` passes in `services/api`.
+- `npm.cmd run lint` passes in `services/api`.
+- `npm.cmd run lint` passes in `apps/web`.
+- `npx.cmd tsc --noEmit` passes in `apps/web`.
+- `npm.cmd run build` passes in `apps/web` when allowed to run outside the sandbox.
+
+Connected Super Admin Center Details to real PostgreSQL data.
+
+Changed:
+- `/super-admin/centers/[id]` now loads center details only from `GET /api/v1/centers/:centerId`.
+- Removed the mock details fallback from the live Center Details page.
+- Added explicit loading, not-found, and user-friendly load-error states.
+- Center Details now renders real center info, owner/admin info, subscription, domain, branding, languages, status, created date, and updated date from the API response.
+- Added frontend API typing for `updatedAt`.
+- Kept password-safe behavior: center detail responses use safe user selection and do not expose passwords or `passwordHash`.
+
+Verified:
+- `npm.cmd run build` passes in `services/api`.
+- `npm.cmd run lint` passes in `services/api`.
+- `npm.cmd run lint` passes in `apps/web`.
+- `npx.cmd tsc --noEmit` passes in `apps/web`.
+- `npm.cmd run build` passes in `apps/web` when allowed to run outside the sandbox.
+- Live API probe against the built NestJS API returned three real centers from `GET /api/v1/centers?pageSize=3`.
+- `GET /api/v1/centers/3f30ab62-a797-4692-8797-548b9a0750d5` returned matching center `hammam` and the serialized response did not contain `passwordHash`.
+- Detail probes for three different centers returned three matching, different records: `hammam`, `مركز سيرين`, and `Validation Success Test 1777319664`.
+
+Audited and hardened Center Admin user password security.
+
+Changed:
+- Added secure backend password hashing helper at `services/api/src/common/security/password-hashing.ts` using Node.js `crypto.scrypt`.
+- Center Admin temporary passwords from Create Center are now hashed before writing `User.passwordHash`.
+- Super Admin user creation now accepts `password` instead of client-supplied `passwordHash` and hashes it server-side.
+- Added shared `safeUserSelect` at `services/api/src/common/database/safe-user-select.ts`.
+- Replaced user response selections in Centers and Users services so `passwordHash` is not returned in centers list, center details, user list, user details, create user, or center-role assignment responses.
+- Added Reset Admin Password, Force Password Change, and Send Welcome Email actions to Center Details quick actions.
+- Added Force Password Change and Send Welcome Email actions to Users table/detail UI.
+
+Verified:
+- Source audit found no remaining `owner: true`, `user: true`, or user response include paths that can return `passwordHash`.
+- `hashPassword("TemporaryPassword123!")` returned an `scrypt$...` hash that does not equal the plaintext password.
+- `npm.cmd run build` passes in `services/api`.
+- `npm.cmd run lint` passes in `services/api`.
+- `npm.cmd run lint` passes in `apps/web`.
+- `npx.cmd tsc --noEmit` passes in `apps/web`.
+
+Finished and hardened real PostgreSQL-backed Centers Management list.
+
+Changed:
+- `/super-admin/centers` fetches real centers from `GET /api/v1/centers`.
+- The list shows real center name, owner/admin, center type, subscription plan, expiry date, domain, status, and actions.
+- Center type labels are translated through the Centers dictionary instead of showing raw API enum text.
+- View actions open `/super-admin/centers/{realCenterId}`.
+- Edit actions open `/super-admin/centers/{realCenterId}?mode=edit`, allowing the real details page to fetch the same real center id.
+- Row action menu open state now uses the real center id instead of the visible row index, so filtering/searching cannot attach an action menu to the wrong row.
+- Suspend, Renew Subscription, and Delete remain safe prepared actions with no database mutation until confirmed endpoints are added.
+- Loading, empty, no-results, and load-error states are translated and do not expose technical API or transport errors to normal users.
+
+Verified:
+- `GET /api/v1/centers?pageSize=5` returned real PostgreSQL center rows, including `8c54075c-0e2c-4ed5-8ce1-77dc109b749b` and `e809f844-574a-4b1e-8057-d07f040e2ad3`.
+- `GET /api/v1/centers/e809f844-574a-4b1e-8057-d07f040e2ad3` returned the matching real center details.
+- `npm.cmd run lint` passes in `apps/web`.
+- `npx.cmd tsc --noEmit` passes in `apps/web`.
+
+Added permanent RoyalCare error handling standard.
+
+Changed:
+- Added a project-wide rule that generic user-facing errors are forbidden.
+- Documented that form errors must be clear, translated, non-technical, and tied to exact field keys.
+- Standardized backend validation responses around `{ message, errors }` with stable field keys such as `centerName`, `adminEmail`, `adminPhone`, `subscriptionPlan`, `startDate`, `expiryDate`, and `domain`.
+- Documented that Prisma `P2002`, missing required fields, invalid enums, duplicate values, and date-ordering failures must be mapped to readable field-specific messages.
+- Documented frontend behavior: show field-level errors under the exact input and use top alert summaries only when useful.
+- Marked Add New Center Wizard, Users forms, Subscriptions forms, Domains forms, and Plans forms as the first forms that must follow this standard.
+
+Updated:
+- `AGENTS.md`
+- `CLAUDE.md`
+- `ai-memory/05_UI_UX_RULES.md`
+- `ai-memory/04_API_MAP.md`
+
+Fixed Create Center duplicate admin phone/email validation.
+
+Changed:
+- `POST /api/v1/centers` and the Super Admin center creation path now pre-check duplicate center admin email and phone inside the creation transaction before creating or updating the admin `User`.
+- Replaced the previous user `upsert` behavior with explicit `update` by `userId` or `create` for a new admin, so a unique phone collision no longer chooses the wrong lookup key.
+- Added a Prisma `P2002` safety net that maps unique `User.phone` and `User.email` collisions to clean `409 Conflict` responses instead of `500 Internal Server Error`.
+- Duplicate admin phone now returns field-level localized messages:
+  - English: `Phone number is already used by another user.`
+  - Arabic: `رقم الهاتف مستخدم مسبقًا.`
+  - Hebrew: `מספר הטלפון כבר בשימוש.`
+- The Create Center API client now preserves status, raw response body, and parsed JSON details in `ApiRequestError`.
+- The Add New Center wizard now extracts backend field errors and shows the localized duplicate-phone/email message in the existing create alert instead of a generic error.
+
+Verified:
+- Duplicate phone POST to `http://localhost:3001/api/v1/centers` returned `409 Conflict` with `errors.adminPhone` and all three localized messages.
+- Duplicate email POST to `http://localhost:3001/api/v1/centers` returned `409 Conflict` with `errors.adminEmail` and all three localized messages.
+- New unique phone POST to `http://localhost:3001/api/v1/centers` succeeded and created center `e809f844-574a-4b1e-8057-d07f040e2ad3`.
+- `GET /api/v1/centers/e809f844-574a-4b1e-8057-d07f040e2ad3` returned the created center with the matching owner user.
+- `npm.cmd run build` passes in `services/api`.
+- `npm.cmd run lint` passes in `services/api`.
+- `npm.cmd run lint` passes in `apps/web`.
+- `npx.cmd tsc --noEmit` passes in `apps/web`.
+
+Connected Super Admin Centers Management list to real PostgreSQL data.
+
+Changed:
+- `/super-admin/centers` now uses `GET /api/v1/centers` for the centers table instead of mock/static rows.
+- Removed mock fallback behavior from the live centers list.
+- Added real loading, API error, empty, and no-results states while keeping the existing Super Admin table design.
+- Search and status filters now operate on real API rows.
+- Stats cards now count real API rows.
+- View actions now link to `/super-admin/centers/{realCenterId}`.
+- Edit actions now link to `/super-admin/centers/{realCenterId}?mode=edit`, allowing the real details page to load the real center data.
+- Suspend, Renew Subscription, and Delete now use safe prepared action handlers without mutating database state until real endpoints/confirmations are added.
+- Center Details API client now uses `GET /api/v1/centers/:centerId`.
+
+Verified:
+- `GET /api/v1/centers?pageSize=5` returned real PostgreSQL center rows.
+- `GET /api/v1/centers/2f0dd844-e04d-4d41-80a6-60cbbf9b8e03` returned the matching real center.
+- `npm.cmd run lint` passes in `apps/web`.
+- `npx.cmd tsc --noEmit` passes in `apps/web`.
 
 Fixed services/api PostgreSQL connection source.
 
@@ -1219,3 +1756,255 @@ Added:
 Notes:
 - No application code has been generated yet.
 - Many product and infrastructure details are intentionally marked as `Needs Confirmation`.
+
+## 2026-04-28 - Centers i18n, RTL, Date, and Responsive Audit Fix
+
+Updated the Centers Module UI localization and responsive hardening for:
+- Centers List
+- Center Details
+- Edit Center
+- Internal Notes
+- Status Actions
+- Manual Subscription Management
+
+Changed:
+- Centers List now maps API subscription plan codes to translated dictionary labels instead of showing raw API plan names.
+- Center Details now translates manual subscription plans and subscription statuses instead of displaying enum values.
+- Arabic and Hebrew dictionary entries were completed for newer edit, notes, status-action, and subscription-management UI text.
+- Field-level API validation errors now choose the active UI locale when the backend returns localized error objects.
+- Subscription and status modals now constrain height and scroll internally on small screens.
+- Shared date formatter now formats ISO date-time strings by date part, preventing raw API timestamps such as `2027-06-01T00:00:00.000Z` from appearing in UI.
+
+Verified:
+- `npm.cmd run lint` passed in `apps/web`.
+- `npx.cmd tsc --noEmit` passed in `apps/web`.
+- `npm.cmd run build` passed in `apps/web`.
+- SSR checks confirmed Centers List renders English as `lang="en" dir="ltr"` and Arabic/Hebrew as `lang="ar|he" dir="rtl"`.
+- SSR checks confirmed Center Details route preserves Arabic RTL on `/super-admin/centers/:id?mode=edit`.
+
+Notes:
+- No new business features were added.
+- No payment gateway or online payment UI was added.
+
+## 2026-04-29 - Tenant Services Management
+
+Implemented real Tenant Services Management inside the Center Admin dashboard.
+
+Changed:
+- Added the Prisma-backed tenant `Service` shape with `centerId`, multilingual names/descriptions, duration, manual price/currency metadata, active/archive status, timestamps, and tenant indexes.
+- Added tenant API endpoints for service list, create, details, update, archive, and activate.
+- Added backend center isolation by deriving `centerId` from the authenticated center session.
+- Added service permissions: `services.view`, `services.create`, `services.update`, `services.archive`, and `services.activate`.
+- Replaced the `/tenant/services` placeholder with real list, search, filter, create, details, edit, archive, and activate UI.
+- Added `/tenant/services/new`, `/tenant/services/:id`, and `/tenant/services/:id/edit`.
+- Added English, Arabic, and Hebrew service labels, statuses, validation text, empty states, and route text.
+
+Verified:
+- Prisma format, validate, generate, db push, and database package typecheck passed.
+- API lint and build passed.
+- Web lint, `tsc --noEmit`, and production build passed.
+- Production route table includes all Services routes.
+- Live API QA passed for create, list, details, update, archive, activate, validation errors, permissions, center isolation, and sensitive response leak checks.
+- Existing `/tenant/patients` and `/api/v1/patients` still load after Services changes.
+- Built `/tenant/services` route renders English LTR and Arabic/Hebrew RTL from the locale cookie.
+
+Notes:
+- Services pricing is manual metadata only. No online payment gateway, checkout, card, Stripe, or PayPal integration was added.
+
+## 2026-04-29 - Tenant Dashboard i18n and RTL Fix
+
+Fixed the tenant dashboard shell localization bug.
+
+Changed:
+- Added the same provider-backed language switcher pattern used by Super Admin to the Tenant Center Admin shell.
+- Added tenant language labels for English, Arabic, and Hebrew.
+- Tenant sidebar branding now uses translated dictionary values.
+- Tenant shell now sets `lang` and `dir` from the active locale and keeps desktop/mobile sidebar direction mirrored for Arabic and Hebrew.
+- Confirmed dashboard labels, role/status values, cards, logout, Patients, and Services surfaces use dictionary values instead of component hardcoded labels.
+
+Verified:
+- `npm.cmd run lint`, `npx.cmd tsc --noEmit`, and `npm.cmd run build` passed in `apps/web`.
+- Built route checks returned `200` for `/tenant/dashboard`, `/tenant/patients`, `/tenant/services`, `/tenant/appointments`, `/tenant/staff`, `/tenant/billing`, `/tenant/reports`, and `/tenant/settings`.
+- Built locale checks confirmed `/tenant/dashboard`, `/tenant/patients`, and `/tenant/services` render English as `lang="en" dir="ltr"` and Arabic/Hebrew as `lang="ar|he" dir="rtl"`.
+- Source scan found no reported tenant dashboard/sidebar English labels as component literals; remaining hits are dictionary entries or component/type names.
+
+Notes:
+- No business features or online payment functionality were added.
+
+## 2026-04-29 - Tenant Branding Shell Fix
+
+Fixed the Tenant Center Admin shell branding source.
+
+Changed:
+- Tenant auth session now selects `center.branding.logoUrl`.
+- Tenant frontend session type now includes `center.branding.logoUrl`.
+- Tenant sidebar no longer renders the platform `RoyalCareLogo`.
+- Tenant sidebar now renders the center's stored logo when available.
+- Tenant sidebar falls back to center initials when no logo is stored, instead of falling back to platform branding.
+- Tenant sidebar primary identity now shows the authenticated center name.
+
+Verified:
+- API lint and build passed.
+- Web lint, `tsc --noEmit`, and build passed.
+- Live `/api/v1/auth/center/login` and `/api/v1/auth/center/me` responses include `center.branding.logoUrl`.
+
+Notes:
+- The existing Create Center logo picker is still preview-only and does not upload/persist a logo URL. The backend field exists and is now wired when populated.
+
+## 2026-04-29 - Tenant Services Default-Language Validation Fix
+
+Fixed Tenant Services multilingual form validation.
+
+Changed:
+- Tenant Services backend now reads the authenticated center's `primaryLanguage` from the center session.
+- Only the default language name and description are required for service create/full edit.
+- English, Arabic, and Hebrew fields remain stored separately in the database.
+- Non-default language fields are optional and can be blank.
+- Explicitly blank default-language name/description is rejected on create and edit.
+- Partial service PATCH requests can still update non-language fields without resending language fields.
+- Tenant Services form now marks only the default-language name/description fields with `*`.
+- Tenant Services form performs matching client-side validation before submit.
+
+Verified:
+- API lint and build passed.
+- Web lint, `tsc --noEmit`, and build passed.
+- Live API QA passed for EN, AR, and HE default-language centers.
+- Valid create with only default language fields passed for EN, AR, and HE.
+- Missing default name returned field-specific errors for `nameEn`, `nameAr`, or `nameHe`.
+- Missing default description returned field-specific errors for `descriptionEn`, `descriptionAr`, or `descriptionHe`.
+- Optional non-default language fields were accepted blank.
+- Partial PATCH without language fields passed.
+- Explicit blank default-language field on edit was rejected.
+- Built `/tenant/services/new` route checks confirmed EN is LTR and AR/HE are RTL.
+
+Notes:
+- No auto-translation was added.
+- Multilingual structure was preserved.
+
+## 2026-04-29 - Dedicated Tenant Center Login
+
+Added branded center-specific login routing.
+
+Changed:
+- Added `/c/[centerSlug]/login` for dedicated tenant center login.
+- Added `/tenant/login` as the generic fallback login route.
+- Added safe center login resolution endpoint: `GET /api/v1/auth/center/resolve/:centerSlug`.
+- Center login resolution returns safe center identity, `branding.logoUrl`, primary language, status, and `loginAllowed`.
+- `POST /api/v1/auth/center/login` now accepts optional `centerSlug` and authenticates only against that center's active role assignment.
+- Tenant login UI resolves center branding by slug, shows center logo/name, applies the center default language through the shared locale provider, and blocks inactive/suspended centers before submit.
+- Tenant logout/session redirects now use `/tenant/login`.
+
+Verified:
+- API lint and build passed.
+- Web lint, `tsc --noEmit`, and build passed.
+- Live API QA passed for valid dedicated login, wrong-center login rejection, suspended center blocking, center branding/default-language resolution, and sensitive leak checks.
+- Built route checks returned `200` for `/c/royal-clinic/login`, `/c/alshifa-center/login`, `/c/jenin-care/login`, `/c/suspended-center/login`, `/tenant/login`, `/tenant/patients`, `/tenant/services`, and `/super-admin/login`.
+
+Notes:
+- Super Admin login and branding were not changed.
+- No online payment functionality was added.
+
+## 2026-04-29 - Documentation and QA Cleanup Before Appointments
+
+Updated source-of-truth AI memory docs after the dedicated branded tenant login and Tenant Services validation work.
+
+Changed:
+- Documented `/c/[centerSlug]/login` as the dedicated branded tenant login route.
+- Documented `/tenant/login` as the temporary generic fallback route.
+- Documented tenant logo resolution from center branding with initials fallback.
+- Documented center default language behavior and automatic RTL/LTR application.
+- Documented wrong-center login rejection and suspended/cancelled/archived center blocking.
+- Documented Tenant Services as private Center Admin ERP records by default.
+- Documented Services default-language-required validation with optional non-default language fields.
+- Reaffirmed manual/direct billing only and no online payment gateway, checkout, card, Stripe, or PayPal integration.
+- Set Appointments as the next tenant module.
+
+Verified:
+- Web lint passed.
+- Web `tsc --noEmit` passed.
+- Web production build passed and listed `/c/[centerSlug]/login`, `/tenant/login`, and Tenant Services routes.
+- API lint passed.
+- API build passed.
+
+Notes:
+- No business features were added.
+- No completed modules were rebuilt.
+
+## 2026-04-29 - Super Admin Centers Regression Diagnosis and Center Login Access
+
+Fixed Super Admin Centers operational visibility after tenant work.
+
+Changed:
+- Pinned the web dev script to port `3002` so the NestJS API can consistently serve `http://localhost:3001/api/v1`.
+- Improved Super Admin Centers permission and centers-list error messaging so API or permission failures show a clear in-page message.
+- Added a Center Login Access section to Super Admin Center Details.
+- Center Login Access shows the public-safe center slug and full dedicated `/c/[centerSlug]/login` URL.
+- Added Copy Login Link and Open Login Page actions.
+- Added English, Arabic, and Hebrew translations for the new Center Login Access labels, actions, success state, and missing-slug fallback.
+
+Verified:
+- Direct database check found 23 `Center` rows in `royalcare_dev`.
+- `GET /api/v1/permissions/me` returned `200` for the fallback local Super Admin with expected platform permissions.
+- `GET /api/v1/centers?pageSize=100` returned `200` with `pagination.total: 23`.
+- `GET /api/v1/centers/:centerId` returned real center details including `slug`.
+- `/super-admin/centers`, `/super-admin/centers/:id`, `/c/royal-clinic/login`, `/tenant/patients`, and `/tenant/services` route checks returned `200`.
+
+Notes:
+- No Super Admin auth semantics were merged with tenant auth.
+- No online payment functionality was added.
+
+## 2026-04-29 - Tenant Appointments Management
+
+Implemented real Tenant Appointments Management inside the Center Admin dashboard.
+
+Changed:
+- Reworked the Prisma `Appointment` model for operational tenant scheduling with `centerId`, `patientId`, `serviceId`, `staffUserId`, `createdByUserId`, date/time fields, status, notes, internal notes, cancellation fields, reminder flag, and timestamps.
+- Added tenant appointment statuses: `SCHEDULED`, `CONFIRMED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`, and `NO_SHOW`.
+- Added tenant appointment API endpoints for list, options, create, details, update, status update, and cancel.
+- Added backend validation for same-center patient, service, provider, invalid date/time, same-day end time, provider overlap, and patient overlap.
+- Added tenant appointment permissions: `appointments.view`, `appointments.create`, `appointments.update`, `appointments.cancel`, and `appointments.status.update`.
+- Replaced the `/tenant/appointments` placeholder with real list, live search, status/date/provider filters, today/upcoming summary cards, create, details, edit, cancel, and status update UI.
+- Added `/tenant/appointments/new`, `/tenant/appointments/:id`, and `/tenant/appointments/:id/edit`.
+- Added English, Arabic, and Hebrew appointment dictionary labels, statuses, validation text, empty states, and route text.
+
+Verified:
+- Prisma format, validate, generate, db push, and database package typecheck passed.
+- API lint and build passed.
+- Web lint, `tsc --noEmit`, and production build passed.
+- Live API QA passed for appointment create, list, details, edit, status update, cancellation, provider/patient overlap prevention, permission denial, cross-center protection, Patients API still working, Services API still working, and dedicated center login resolution.
+- Built route checks returned `200` for `/tenant/appointments`, `/tenant/appointments/new`, `/tenant/appointments/:id`, `/tenant/appointments/:id/edit`, `/tenant/patients`, `/tenant/services`, and `/c/royal-clinic/login`.
+- Locale route checks confirmed `/tenant/appointments` renders English as `lang="en" dir="ltr"` and Arabic/Hebrew as `lang="ar|he" dir="rtl"` when the locale cookie is set.
+
+Notes:
+- No hard delete endpoint was added.
+- No online payment functionality was added.
+- Advanced working-hours and staff-availability rules remain future scope.
+
+## 2026-04-30 - Tenant Staff Management
+
+Implemented production-grade Tenant Staff Management inside the Center Admin dashboard.
+
+Changed:
+- Replaced the `/tenant/staff` Coming Soon placeholder with a real staff list.
+- Added `/tenant/staff/new`, `/tenant/staff/:id`, and `/tenant/staff/:id/edit`.
+- Added Tenant Staff API endpoints for list, create, details, update, and activate/deactivate.
+- Staff create requires full name, email, role, status, and password; edit keeps password optional and never displays existing passwords.
+- Staff passwords are hashed with the existing scrypt password helper and `passwordHash` is never returned.
+- Added tenant staff permissions: `staff.view`, `staff.create`, `staff.update`, and `staff.activate`.
+- Tenant staff management uses existing center roles: `CENTER_OWNER`, `CENTER_MANAGER`, `DOCTOR`, `RECEPTIONIST`, `ACCOUNTANT`, and `STAFF`.
+- Staff list supports search by name/email plus role and status filters.
+- Added English, Arabic, and Hebrew staff translations with RTL support through the existing tenant shell.
+- Appointment provider options now include only same-center active provider-capable staff roles: `DOCTOR`, `STAFF`, and `CENTER_MANAGER`.
+- Appointment provider labels now prefer full name and safely fall back to email when full name is missing.
+
+Verified:
+- API build passed.
+- API lint passed.
+- Web lint passed.
+- Web `tsc --noEmit` passed.
+- Web production build passed and listed `/tenant/staff`, `/tenant/staff/new`, `/tenant/staff/:id`, and `/tenant/staff/:id/edit`.
+
+Notes:
+- No Prisma/database schema change was required; tenant staff uses the existing `User`, `Role`, and `UserRole` models.
+- No hard delete endpoint was added.
+- No online payment functionality was added.

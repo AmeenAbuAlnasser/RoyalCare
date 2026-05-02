@@ -1,7 +1,7 @@
 # RoyalCare - Next Tasks
 
-Last updated: 2026-04-27
-Status: Add New Center Wizard connected to real PostgreSQL-backed center creation
+Last updated: 2026-04-30
+Status: Ready for Sessions after tenant login, patients, services, appointments, tenant staff management, tenant billing (manual invoices), and center default-language foundations
 
 ## 1. Immediate Confirmation Tasks
 
@@ -12,7 +12,7 @@ Business:
 - Confirm target launch date or development phase goals.
 - Confirm first supported center type/template.
 - Confirm subscription plans and pricing model.
-- Confirm whether online payments are included in v1.
+- Keep online payments out of v1 unless explicitly approved later; current RoyalCare billing is manual/direct only.
 - Confirm whether RoyalCare handles domain purchase or only domain mapping.
 
 Technical:
@@ -221,17 +221,28 @@ Completed:
 - Connect Add New Center wizard Step 6 Create Center action to the real API.
 - Create full initial center setup transaction for `Center`, `BrandingSettings`, `Subscription`, optional `Domain`, center admin `User`, center admin `Role`, and `UserRole`.
 - Add API-backed fetch behavior for Super Admin Centers Management and Center Details.
+- Replace Super Admin Centers Management mock rows with real `GET /api/v1/centers` data, including real View/Edit ids and real-list empty/loading/error states.
+- Replace Super Admin Center Details mock fallback with real `GET /api/v1/centers/:centerId` data, loading state, not-found state, and safe error state.
+- Remove the old Center Details mock data file and derive the details activity timeline from real API timestamps.
+- Exclude domain verification tokens from Center list/detail/create responses.
+- Return clean `404 Not Found` responses for malformed Center Details ids.
+- Require owner/admin phone in the Create Center wizard and backend `POST /api/v1/centers` validation.
+- Remove Create Center sensitive debug logs and enforce field-specific backend validation for admin name, email format, phone format, temporary password, and duplicate domain.
+- Add real Edit Center persistence through `PATCH /api/v1/centers/:centerId` and `/super-admin/centers/{id}?mode=edit`.
+- Verify Edit Center valid update, field validation, duplicate email/phone/domain handling, invalid ids, list/detail refresh, and sensitive response field exclusions.
+- Add real Super Admin Center Internal Notes through `CenterInternalNote`, `GET /api/v1/centers/:centerId/internal-notes`, and `POST /api/v1/centers/:centerId/internal-notes`.
+- Verify internal note creation, persistence after reload, newest-first ordering, empty note validation, invalid center errors, normal center detail exclusion, and sensitive response field exclusions.
+- Add real Super Admin Center Status Actions through `PATCH /api/v1/centers/:centerId/status`.
+- Verify activate, suspend with/without reason, deactivate via `CANCELLED`, invalid status, invalid center id, list/detail persistence, automatic internal notes, and sensitive response field exclusions.
+- Add manual-only Subscription & Plan Management through `PATCH /api/v1/centers/:centerId/subscription`.
+- Verify valid manual subscription updates, invalid plan/status/date validation, expired warning data, list/detail persistence, automatic internal notes, and no auth/payment-provider field leaks.
 
 Next:
 1. Confirm local/hosted PostgreSQL environment.
 2. Create first Prisma migration for Phase 1 and Phase 2 models.
-3. Add seed data for:
-   - Platform owner role
-   - Platform admin role
-   - Center owner role
-   - Default Phase 1 permissions
+3. Extend seed data for Center Owner roles after Center Admin auth scope is implemented.
 4. Add global validation pipe and DTO validation decorators before public API use.
-5. Implement backend auth, tenancy guard, permission guard, module guard, and subscription guard.
+5. Implement backend auth, tenancy guard, module guard, and subscription guard; platform permission guard foundation is implemented for current Super Admin Centers and Users endpoints.
 6. Add OpenAPI docs for implemented Centers, Users, and Subscriptions endpoints.
 7. Add integration tests for center creation, subscription creation, and center admin user linking after a PostgreSQL test database is available.
 8. Add shared TypeScript package setup in `packages/shared`.
@@ -243,10 +254,10 @@ Next:
 14. Prepare React Native Expo app in `apps/mobile` when mobile work begins.
 15. Connect Super Admin Login to the future authentication flow after backend auth is implemented.
 16. Replace Super Admin Dashboard mock data with API-backed data after backend modules are secured.
-17. Replace Super Admin Centers mock data with API-backed data after Centers API auth/permissions are implemented.
-18. Replace Super Admin Center Details mock data with API-backed data after Centers, Subscriptions, Domains, Branding, and Users APIs are secured.
-19. Replace Super Admin Subscriptions mock data with API-backed data after Subscriptions and Payments APIs are implemented.
-20. Replace Super Admin Subscription Details mock data with API-backed data after Subscriptions, Payments, Invoices, and Billing APIs are implemented.
+17. Add real confirmed Delete and Renew Subscription persistence endpoints for Super Admin Centers.
+18. Continue improving Edit Center only for future confirmed fields beyond the completed default-language selector.
+19. Replace Super Admin Subscriptions mock data with API-backed manual subscription data.
+20. Replace Super Admin Subscription Details mock data with API-backed manual subscription and billing-note data.
 21. Replace Super Admin Domains mock data with API-backed data after Domains and DNS verification APIs are implemented.
 22. Replace Super Admin Domain Details mock data with API-backed data after Domains, DNS verification, and SSL management APIs are implemented.
 23. Replace Super Admin Plans mock data with API-backed data after Plans and Modules APIs are implemented.
@@ -256,7 +267,18 @@ Next:
 27. Replace Super Admin Notifications mock data with API-backed data after Notifications, Activity Log, and delivery-channel APIs are implemented.
 28. Replace Super Admin Settings mock data with API-backed data after Platform Settings, Branding, Security, Notifications, Domains, Backups, and Health APIs are implemented.
 29. Add proper authenticated Super Admin protection around the center creation flow.
-30. Add integration tests for the real Add New Center creation transaction with PostgreSQL.
+30. Replace the temporary internal-note author resolver with the authenticated Super Admin user after auth is implemented.
+31. Add integration tests for the real Add New Center creation transaction with PostgreSQL.
+32. Expand Center Staff Users Management into Center Admin auth flows after authentication and tenant guards are implemented.
+33. Add dedicated staff profile/scheduling model only when appointments/staff scheduling scope is confirmed.
+34. Add tenant-side route guards/helpers for future Center Admin modules so every data request uses the authenticated session center id. Dedicated center login now starts tenant isolation from `/c/[centerSlug]/login`; `/tenant/login` remains fallback.
+35. Build first real Center Admin module behind `/dashboard` after tenant auth and shell are expanded. Completed with Patients Management foundation.
+36. Add granular center-role permissions for tenant patients before widening tenant access rules.
+37. Build Tenant Services Management before Appointments. Completed with real PostgreSQL-backed CRUD, archive/activate, permissions, i18n, RTL, and responsive UI.
+38. Build Appointments next. Completed with real PostgreSQL-backed CRUD, cancel, status changes, overlap prevention, permissions, i18n, RTL, and responsive UI.
+39. Build Tenant Staff Management. Completed with real tenant staff list/create/details/edit/status, permissions, hashed passwords, i18n, RTL, and appointment provider filtering.
+40. Build Tenant Billing Management (manual invoices + payments). Completed with real PostgreSQL-backed invoice list/create/view/status, manual payment recording, PARTIAL status, overpayment protection, reopen invoice, payment history table, payment summary bar, permission matrix, Decimal serialization, i18n, RTL, and responsive UI.
+41. Build Sessions next on top of the completed Patients, Services, Staff, Appointments, Billing, and Payments foundations.
 
 Needs Confirmation:
 - Whether Docker should be used locally.
@@ -278,12 +300,11 @@ Completed:
 1. Create AuthModule.
 2. Create TenancyModule.
 3. Add global validation pipe.
-4. Create RolesPermissionsModule.
+4. Extend the implemented PermissionsModule with authenticated role management screens and Center Admin permissions.
 5. Harden tenant-safe data access patterns.
-6. Create guards:
+6. Create remaining guards:
    - Auth guard
    - Tenant guard
-   - Permission guard
    - Module guard
    - Subscription guard
 7. Add global validation pipe.
@@ -331,7 +352,7 @@ Next database tasks:
    - NotificationTemplate
    - FileAsset
    - AuditLog
-   - Payments
+   - Payments only if explicitly approved later; current rule is no online payment.
    - Medical/treatment detail tables
 
 ## 6. Frontend Foundation Tasks
@@ -372,9 +393,12 @@ Completed frontend tasks:
 - Shared Super Admin layout used by Dashboard, Centers Management, and Add New Center wizard.
 
 Next frontend tasks:
+- Improve Edit Center with any future confirmed fields beyond the completed default-language selector.
+- Add confirmation dialogs and real API calls for Centers list Suspend, Delete, and Renew Subscription actions.
 - Add stronger field-level disabled-state rules for Add New Center wizard before backend submission.
 - Add user-facing API error details for duplicate domains, duplicate emails, and duplicate slugs.
 - Decide whether center branding logo should upload immediately to storage or only after final wizard confirmation.
+- Build Sessions in the tenant dashboard using the existing dedicated login/session, Patients, Services, Appointments, and Billing foundations.
 - Add backend-backed Super Admin Users and User Details data after auth and permissions APIs exist.
 - Add backend-backed Super Admin Notifications data after notification APIs and read/archive actions exist.
 - Add backend-backed Super Admin Settings data after platform settings and system health APIs exist.
@@ -391,8 +415,8 @@ Recommended order:
 7. Branding/settings
 8. Services/staff
 9. Customers
-10. Appointments
-11. Sessions
+10. Appointments - completed foundation
+11. Sessions - next
 12. Pages/public website
 13. Customer portal
 14. Notifications

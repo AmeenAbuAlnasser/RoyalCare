@@ -13,8 +13,6 @@ export class CreateSubscriptionDto {
   currentPeriodEnd!: string;
   currentPeriodStart!: string;
   expiresAt?: string;
-  externalProvider?: string;
-  externalSubscriptionId?: string;
   planCode!: string;
   planName!: string;
   status?: SubscriptionStatus;

@@ -27,9 +27,9 @@ type DomainType = 'CUSTOM' | 'SUBDOMAIN';
 export class CreateCenterAdminDto {
   email?: string;
   fullName!: string;
-  phone?: string;
+  phone!: string;
   permissionsPreset?: string;
-  temporaryPassword?: string;
+  temporaryPassword!: string;
   userId?: string;
 }
 

@@ -34,6 +34,8 @@ type UserDetailsDictionary = (typeof superAdminUsersDictionaries)["en"] & {
     backToUsers: string;
     editUser: string;
     resetPassword: string;
+    forcePasswordChange: string;
+    sendWelcomeEmail: string;
     suspendUser: string;
     activateUser: string;
     forceLogout: string;
@@ -51,18 +53,37 @@ type UserDetailsDictionary = (typeof superAdminUsersDictionaries)["en"] & {
     string
   >;
   accessLevels: Record<
-    "financeOnly" | "fullPlatform" | "limitedCommercial" | "readOnly" | "supportOperations",
+    | "financeOnly"
+    | "fullPlatform"
+    | "limitedCommercial"
+    | "readOnly"
+    | "supportOperations",
     string
   >;
   restrictedAreas: Record<
-    "billing" | "billingExports" | "domainVerification" | "platformSettings" | "userManagement",
+    | "billing"
+    | "billingExports"
+    | "domainVerification"
+    | "platformSettings"
+    | "userManagement",
     string
   >;
   responsibilities: Record<
-    "domainVerification" | "salesFollowUp" | "subscriptionApprovals" | "supportEscalations" | "supportTickets",
+    | "domainVerification"
+    | "salesFollowUp"
+    | "subscriptionApprovals"
+    | "supportEscalations"
+    | "supportTickets",
     string
   >;
-  timeline: Record<"lastLogin" | "passwordReset" | "permissionUpdated" | "roleChanged" | "userCreated", string>;
+  timeline: Record<
+    | "lastLogin"
+    | "passwordReset"
+    | "permissionUpdated"
+    | "roleChanged"
+    | "userCreated",
+    string
+  >;
   notes: {
     label: string;
     placeholder: string;
@@ -83,7 +104,8 @@ const en: UserDetailsDictionary = {
   ...superAdminUsersDictionaries.en,
   detailHeader: {
     eyebrow: "Platform user",
-    subtitle: "Review identity, access, activity, responsibilities, and private administrative notes.",
+    subtitle:
+      "Review identity, access, activity, responsibilities, and private administrative notes.",
   },
   sections: {
     ...superAdminUsersDictionaries.en.sections,
@@ -114,6 +136,8 @@ const en: UserDetailsDictionary = {
     backToUsers: "Back to Users",
     editUser: "Edit User",
     resetPassword: "Reset Password",
+    forcePasswordChange: "Force Password Change",
+    sendWelcomeEmail: "Send Welcome Email",
     suspendUser: "Suspend User",
     activateUser: "Activate User",
     forceLogout: "Force Logout",
@@ -160,16 +184,19 @@ const en: UserDetailsDictionary = {
   notes: {
     label: "Private admin notes",
     placeholder: "Write internal notes for RoyalCare platform admins only.",
-    helper: "UI only for now. Notes will connect to secure audit-backed storage later.",
+    helper:
+      "UI only for now. Notes will connect to secure audit-backed storage later.",
   },
   detailValues: {
     enabled: "Enabled",
     disabled: "Disabled",
     noDirectPermissions: "No direct permissions",
     noRestrictedAreas: "No restricted areas",
-    futureAction: "UI-only action. Backend permissions and audit logging will be enforced later.",
+    futureAction:
+      "UI-only action. Backend permissions and audit logging will be enforced later.",
     notFoundTitle: "User not found",
-    notFoundDescription: "This user id does not match a RoyalCare platform user in the current mock dataset.",
+    notFoundDescription:
+      "This user id does not match a RoyalCare platform user in the current mock dataset.",
   },
 };
 
@@ -177,7 +204,8 @@ const ar: UserDetailsDictionary = {
   ...superAdminUsersDictionaries.ar,
   detailHeader: {
     eyebrow: "مستخدم المنصة",
-    subtitle: "مراجعة الهوية والوصول والنشاط والمسؤوليات والملاحظات الإدارية الخاصة.",
+    subtitle:
+      "مراجعة الهوية والوصول والنشاط والمسؤوليات والملاحظات الإدارية الخاصة.",
   },
   sections: {
     ...superAdminUsersDictionaries.ar.sections,
@@ -208,6 +236,8 @@ const ar: UserDetailsDictionary = {
     backToUsers: "العودة إلى المستخدمين",
     editUser: "تعديل المستخدم",
     resetPassword: "إعادة تعيين كلمة المرور",
+    forcePasswordChange: "فرض تغيير كلمة المرور",
+    sendWelcomeEmail: "إرسال بريد الترحيب",
     suspendUser: "إيقاف المستخدم",
     activateUser: "تفعيل المستخدم",
     forceLogout: "فرض تسجيل الخروج",
@@ -254,16 +284,19 @@ const ar: UserDetailsDictionary = {
   notes: {
     label: "ملاحظات إدارية خاصة",
     placeholder: "اكتب ملاحظات داخلية لمديري منصة RoyalCare فقط.",
-    helper: "واجهة فقط حالياً. سيتم ربط الملاحظات لاحقاً بتخزين آمن مدعوم بسجل تدقيق.",
+    helper:
+      "واجهة فقط حالياً. سيتم ربط الملاحظات لاحقاً بتخزين آمن مدعوم بسجل تدقيق.",
   },
   detailValues: {
     enabled: "مفعلة",
     disabled: "معطلة",
     noDirectPermissions: "لا توجد صلاحيات مباشرة",
     noRestrictedAreas: "لا توجد مناطق مقيدة",
-    futureAction: "إجراء واجهة فقط. سيتم فرض الصلاحيات وسجل التدقيق من الخادم لاحقاً.",
+    futureAction:
+      "إجراء واجهة فقط. سيتم فرض الصلاحيات وسجل التدقيق من الخادم لاحقاً.",
     notFoundTitle: "المستخدم غير موجود",
-    notFoundDescription: "معرف المستخدم هذا لا يطابق مستخدماً في بيانات RoyalCare التجريبية الحالية.",
+    notFoundDescription:
+      "معرف المستخدم هذا لا يطابق مستخدماً في بيانات RoyalCare التجريبية الحالية.",
   },
 };
 
@@ -302,6 +335,8 @@ const he: UserDetailsDictionary = {
     backToUsers: "חזרה למשתמשים",
     editUser: "עריכת משתמש",
     resetPassword: "איפוס סיסמה",
+    forcePasswordChange: "חובת שינוי סיסמה",
+    sendWelcomeEmail: "שליחת אימייל ברוכים הבאים",
     suspendUser: "השעת משתמש",
     activateUser: "הפעלת משתמש",
     forceLogout: "ניתוק כפוי",
@@ -357,11 +392,15 @@ const he: UserDetailsDictionary = {
     noRestrictedAreas: "אין אזורים מוגבלים",
     futureAction: "פעולת ממשק בלבד. הרשאות ויומן ביקורת יאכפו בהמשך בצד השרת.",
     notFoundTitle: "המשתמש לא נמצא",
-    notFoundDescription: "מזהה המשתמש אינו תואם משתמש במידע הדמה הנוכחי של RoyalCare.",
+    notFoundDescription:
+      "מזהה המשתמש אינו תואם משתמש במידע הדמה הנוכחי של RoyalCare.",
   },
 };
 
-export const superAdminUserDetailsDictionaries: Record<SupportedLocale, UserDetailsDictionary> = {
+export const superAdminUserDetailsDictionaries: Record<
+  SupportedLocale,
+  UserDetailsDictionary
+> = {
   en,
   ar,
   he,

@@ -8,6 +8,26 @@ import { ListSubscriptionsQueryDto } from './dto/list-subscriptions-query.dto';
 const DEFAULT_BILLING_INTERVAL = 'MONTHLY';
 const DEFAULT_SUBSCRIPTION_STATUS = 'TRIALING';
 
+const safeSubscriptionSelect = {
+  id: true,
+  centerId: true,
+  planCode: true,
+  planName: true,
+  status: true,
+  billingInterval: true,
+  currentPeriodStart: true,
+  currentPeriodEnd: true,
+  nextRenewalDate: true,
+  billingNotes: true,
+  trialEndsAt: true,
+  expiresAt: true,
+  cancelAt: true,
+  cancelledAt: true,
+  createdAt: true,
+  updatedAt: true,
+  center: true,
+} satisfies Prisma.SubscriptionSelect;
+
 function optionalDate(value?: string) {
   return value ? new Date(value) : undefined;
 }
@@ -43,7 +63,7 @@ export class SubscriptionsService {
         orderBy: { createdAt: 'desc' },
         skip,
         take,
-        include: { center: true },
+        select: safeSubscriptionSelect,
       }),
       prisma.subscription.count({ where }),
     ]);
@@ -58,7 +78,7 @@ export class SubscriptionsService {
     const prisma = await this.prisma.getClient();
     const subscription = await prisma.subscription.findUnique({
       where: { id: subscriptionId },
-      include: { center: true },
+      select: safeSubscriptionSelect,
     });
 
     if (!subscription) {
@@ -73,7 +93,7 @@ export class SubscriptionsService {
     const subscription = await prisma.subscription.findFirst({
       where: { centerId },
       orderBy: { createdAt: 'desc' },
-      include: { center: true },
+      select: safeSubscriptionSelect,
     });
 
     if (!subscription) {
@@ -97,10 +117,8 @@ export class SubscriptionsService {
         currentPeriodEnd: new Date(dto.currentPeriodEnd),
         trialEndsAt: optionalDate(dto.trialEndsAt),
         expiresAt: optionalDate(dto.expiresAt),
-        externalProvider: dto.externalProvider,
-        externalSubscriptionId: dto.externalSubscriptionId,
       },
-      include: { center: true },
+      select: safeSubscriptionSelect,
     });
   }
 }

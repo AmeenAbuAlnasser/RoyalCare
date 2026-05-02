@@ -1,13 +1,32 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../../common/database/prisma.service';
+import { safeUserSelect } from '../../common/database/safe-user-select';
+import { hashPassword } from '../../common/security/password-hashing';
 import { parsePagination } from '../../common/utils/pagination';
-import type { Prisma } from '../../../../../packages/database/node_modules/@prisma/client';
+import type {
+  Prisma,
+  SupportedLanguage,
+} from '../../../../../packages/database/node_modules/@prisma/client';
+import { CreateCenterInternalNoteDto } from './dto/create-center-internal-note.dto';
+import {
+  CreateCenterStaffDto,
+  type CenterStaffRole,
+  type CenterStaffStatus,
+} from './dto/create-center-staff.dto';
 import { CreateCenterDto } from './dto/create-center.dto';
 import { ListCentersQueryDto } from './dto/list-centers-query.dto';
+import { ResetCenterStaffPasswordDto } from './dto/reset-center-staff-password.dto';
+import { UpdateCenterStaffStatusDto } from './dto/update-center-staff-status.dto';
+import { UpdateCenterStaffDto } from './dto/update-center-staff.dto';
+import { UpdateCenterStatusDto } from './dto/update-center-status.dto';
+import { UpdateCenterSubscriptionDto } from './dto/update-center-subscription.dto';
+import { UpdateCenterDto } from './dto/update-center.dto';
 
 const ACTIVE_USER_ROLE_STATUS = 'ACTIVE';
 const DEFAULT_BILLING_INTERVAL = 'MONTHLY';
@@ -15,6 +34,296 @@ const DEFAULT_CENTER_STATUS = 'TRIAL';
 const DEFAULT_SUBSCRIPTION_STATUS = 'TRIALING';
 const DEFAULT_USER_STATUS = 'ACTIVE';
 const DEFAULT_TIMEZONE = 'Asia/Jerusalem';
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const CENTER_STATUSES = [
+  'TRIAL',
+  'ACTIVE',
+  'PAST_DUE',
+  'SUSPENDED',
+  'CANCELLED',
+  'ARCHIVED',
+] as const;
+const CENTER_STATUS_ACTIONS = ['ACTIVE', 'SUSPENDED', 'CANCELLED'] as const;
+const CENTER_STAFF_ROLES = [
+  'CENTER_OWNER',
+  'CENTER_MANAGER',
+  'DOCTOR',
+  'RECEPTIONIST',
+  'ACCOUNTANT',
+  'STAFF',
+] as const;
+const CENTER_STAFF_STATUSES = [
+  'INVITED',
+  'ACTIVE',
+  'INACTIVE',
+  'SUSPENDED',
+] as const;
+const CENTER_TYPES = [
+  'LASER',
+  'PHYSIOTHERAPY',
+  'HIJAMA',
+  'BEAUTY',
+  'WELLNESS',
+  'MULTI_SPECIALTY',
+] as const;
+const SUBSCRIPTION_STATUSES = [
+  'TRIALING',
+  'ACTIVE',
+  'PAST_DUE',
+  'SUSPENDED',
+  'CANCELLED',
+  'EXPIRED',
+] as const;
+const BILLING_INTERVALS = ['MONTHLY', 'YEARLY', 'CUSTOM'] as const;
+const DOMAIN_STATUSES = [
+  'PENDING',
+  'VERIFIED',
+  'ACTIVE',
+  'FAILED',
+  'DISABLED',
+] as const;
+const DOMAIN_TYPES = ['CUSTOM', 'SUBDOMAIN'] as const;
+const SUPPORTED_LANGUAGES = ['AR', 'HE', 'EN'] as const;
+const MANUAL_SUBSCRIPTION_PLANS = [
+  'BASIC',
+  'STANDARD',
+  'PREMIUM',
+  'ENTERPRISE',
+] as const;
+const MANUAL_SUBSCRIPTION_STATUSES = [
+  'TRIAL',
+  'ACTIVE',
+  'EXPIRED',
+  'OVERDUE',
+  'CANCELLED',
+] as const;
+const PLAN_NAMES: Record<(typeof MANUAL_SUBSCRIPTION_PLANS)[number], string> = {
+  BASIC: 'Basic',
+  ENTERPRISE: 'Enterprise',
+  PREMIUM: 'Premium',
+  STANDARD: 'Standard',
+};
+const SUBSCRIPTION_STATUS_MAP: Record<
+  (typeof MANUAL_SUBSCRIPTION_STATUSES)[number],
+  (typeof SUBSCRIPTION_STATUSES)[number]
+> = {
+  ACTIVE: 'ACTIVE',
+  CANCELLED: 'CANCELLED',
+  EXPIRED: 'EXPIRED',
+  OVERDUE: 'PAST_DUE',
+  TRIAL: 'TRIALING',
+};
+
+const safeDomainSelect = {
+  id: true,
+  centerId: true,
+  hostname: true,
+  type: true,
+  status: true,
+  isPrimary: true,
+  verifiedAt: true,
+  activatedAt: true,
+  failedAt: true,
+  disabledAt: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.DomainSelect;
+
+const safeSubscriptionSelect = {
+  id: true,
+  centerId: true,
+  planCode: true,
+  planName: true,
+  status: true,
+  billingInterval: true,
+  currentPeriodStart: true,
+  currentPeriodEnd: true,
+  nextRenewalDate: true,
+  billingNotes: true,
+  trialEndsAt: true,
+  expiresAt: true,
+  cancelAt: true,
+  cancelledAt: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.SubscriptionSelect;
+
+const safeCenterInternalNoteSelect = {
+  id: true,
+  centerId: true,
+  note: true,
+  createdAt: true,
+  updatedAt: true,
+  author: { select: safeUserSelect },
+} satisfies Prisma.CenterInternalNoteSelect;
+
+const safeCenterStaffUserRoleSelect = {
+  id: true,
+  centerId: true,
+  status: true,
+  assignedAt: true,
+  createdAt: true,
+  updatedAt: true,
+  role: {
+    select: {
+      id: true,
+      key: true,
+      name: true,
+    },
+  },
+  user: { select: safeUserSelect },
+} satisfies Prisma.UserRoleSelect;
+
+const duplicateAdminEmailError = {
+  en: 'Email is already used by another user.',
+  ar: 'البريد الإلكتروني مستخدم مسبقًا.',
+  he: 'האימייל כבר בשימוש.',
+};
+
+const duplicateAdminPhoneError = {
+  en: 'Phone number is already used by another user.',
+  ar: 'رقم الهاتف مستخدم مسبقًا.',
+  he: 'מספר הטלפון כבר בשימוש.',
+};
+
+const requiredAdminPhoneError = {
+  en: 'Owner phone is required.',
+  ar: 'رقم هاتف المالك مطلوب.',
+  he: 'טלפון הבעלים הוא שדה חובה.',
+};
+
+const requiredAdminNameError = {
+  en: 'Owner name is required.',
+  ar: 'اسم المالك مطلوب.',
+  he: 'שם הבעלים הוא שדה חובה.',
+};
+
+const requiredTemporaryPasswordError = {
+  en: 'Temporary password is required.',
+  ar: 'كلمة المرور المؤقتة مطلوبة.',
+  he: 'סיסמה זמנית היא שדה חובה.',
+};
+
+const shortTemporaryPasswordError = {
+  en: 'Temporary password must be at least 8 characters.',
+  ar: 'يجب أن تتكون كلمة المرور المؤقتة من 8 أحرف على الأقل.',
+  he: 'הסיסמה הזמנית חייבת להכיל לפחות 8 תווים.',
+};
+
+const invalidAdminEmailError = {
+  en: 'Enter a valid admin email.',
+  ar: 'أدخل بريد المدير بشكل صحيح.',
+  he: 'יש להזין אימייל מנהל תקין.',
+};
+
+const invalidAdminPhoneError = {
+  en: 'Enter a valid owner phone number.',
+  ar: 'أدخل رقم هاتف المالك بشكل صحيح.',
+  he: 'יש להזין מספר טלפון בעלים תקין.',
+};
+
+const duplicateDomainError = {
+  en: 'Domain is already used by another center.',
+  ar: 'النطاق مستخدم مسبقًا لمركز آخر.',
+  he: 'הדומיין כבר בשימוש על ידי מרכז אחר.',
+};
+
+const requiredCenterNameError = {
+  en: 'Center name is required.',
+  ar: 'Center name is required.',
+  he: 'Center name is required.',
+};
+
+const invalidSubscriptionDatesError = {
+  en: 'Expiry date must be after the start date.',
+  ar: 'Expiry date must be after the start date.',
+  he: 'Expiry date must be after the start date.',
+};
+
+const requiredInternalNoteError = {
+  en: 'Internal note is required.',
+  ar: 'Internal note is required.',
+  he: 'Internal note is required.',
+};
+
+const invalidCenterStatusError = {
+  en: 'Enter a valid center status.',
+  ar: 'Enter a valid center status.',
+  he: 'Enter a valid center status.',
+};
+
+const requiredStatusReasonError = {
+  en: 'Reason is required for this status change.',
+  ar: 'Reason is required for this status change.',
+  he: 'Reason is required for this status change.',
+};
+
+const invalidSubscriptionPlanError = {
+  en: 'Enter a valid subscription plan.',
+  ar: 'Enter a valid subscription plan.',
+  he: 'Enter a valid subscription plan.',
+};
+
+const invalidSubscriptionStatusError = {
+  en: 'Enter a valid subscription status.',
+  ar: 'Enter a valid subscription status.',
+  he: 'Enter a valid subscription status.',
+};
+
+const invalidDefaultLanguageError = {
+  en: 'Select a valid default language.',
+  ar: 'اختر لغة افتراضية صحيحة.',
+  he: 'בחרו שפת ברירת מחדל תקינה.',
+};
+
+const requiredStaffNameError = {
+  en: 'Staff name is required.',
+  ar: 'Staff name is required.',
+  he: 'Staff name is required.',
+};
+
+const invalidStaffEmailError = {
+  en: 'Enter a valid staff email.',
+  ar: 'Enter a valid staff email.',
+  he: 'Enter a valid staff email.',
+};
+
+const invalidStaffPhoneError = {
+  en: 'Enter a valid staff phone number.',
+  ar: 'Enter a valid staff phone number.',
+  he: 'Enter a valid staff phone number.',
+};
+
+const invalidStaffRoleError = {
+  en: 'Select a valid staff role.',
+  ar: 'Select a valid staff role.',
+  he: 'Select a valid staff role.',
+};
+
+const invalidStaffStatusError = {
+  en: 'Select a valid staff status.',
+  ar: 'Select a valid staff status.',
+  he: 'Select a valid staff status.',
+};
+
+const duplicateStaffEmailError = {
+  en: 'Email is already used by another user.',
+  ar: 'Email is already used by another user.',
+  he: 'Email is already used by another user.',
+};
+
+const duplicateStaffPhoneError = {
+  en: 'Phone number is already used by another user.',
+  ar: 'Phone number is already used by another user.',
+  he: 'Phone number is already used by another user.',
+};
+
+const shortStaffTemporaryPasswordError = {
+  en: 'Temporary password must be at least 8 characters.',
+  ar: 'Temporary password must be at least 8 characters.',
+  he: 'Temporary password must be at least 8 characters.',
+};
 
 function optionalDate(value?: string) {
   return value ? new Date(value) : undefined;
@@ -48,14 +357,35 @@ async function createUniqueSlug(
 }
 
 function validateCreateCenterDto(dto: CreateCenterDto) {
-  const errors: Record<string, string> = {};
+  const errors: Record<string, unknown> = {};
+  const adminEmail = dto.admin?.email?.trim();
+  const adminPhone = dto.admin?.phone?.trim();
+  const temporaryPassword = dto.admin?.temporaryPassword ?? '';
 
   if (!dto.name?.trim()) {
-    errors.name = 'Center name is required.';
+    errors.centerName = 'Center name is required.';
   }
 
-  if (!dto.admin?.email?.trim()) {
+  if (!dto.admin?.fullName?.trim()) {
+    errors.adminName = requiredAdminNameError;
+  }
+
+  if (!adminEmail) {
     errors.adminEmail = 'Owner/admin email is required.';
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) {
+    errors.adminEmail = invalidAdminEmailError;
+  }
+
+  if (!adminPhone) {
+    errors.adminPhone = requiredAdminPhoneError;
+  } else if (!/^\+?[0-9][0-9\s().-]{6,24}$/.test(adminPhone)) {
+    errors.adminPhone = invalidAdminPhoneError;
+  }
+
+  if (!temporaryPassword) {
+    errors.temporaryPassword = requiredTemporaryPasswordError;
+  } else if (temporaryPassword.length < 8) {
+    errors.temporaryPassword = shortTemporaryPasswordError;
   }
 
   if (!dto.subscription?.planCode?.trim()) {
@@ -88,6 +418,337 @@ function validateCreateCenterDto(dto: CreateCenterDto) {
   }
 }
 
+function isPrismaKnownRequestError(
+  error: unknown,
+): error is { code: string; meta?: { target?: unknown } } {
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    'code' in error &&
+    typeof (error as { code?: unknown }).code === 'string'
+  );
+}
+
+function throwDuplicateAdminError(errors: Record<string, unknown>) {
+  throw new ConflictException({
+    message: 'Center admin validation failed.',
+    errors,
+  });
+}
+
+function hasValue(value: unknown) {
+  return value !== undefined && value !== null;
+}
+
+function isAllowedValue<T extends readonly string[]>(
+  value: unknown,
+  allowedValues: T,
+): value is T[number] {
+  return typeof value === 'string' && allowedValues.includes(value);
+}
+
+function optionalTrimmed(value?: string) {
+  return typeof value === 'string' ? value.trim() : undefined;
+}
+
+function optionalLowerTrimmed(value?: string) {
+  return optionalTrimmed(value)?.toLowerCase();
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function isValidPhone(value: string) {
+  return /^\+?[0-9][0-9\s().-]{6,24}$/.test(value);
+}
+
+function parseDateField(
+  value: string | undefined,
+  fieldKey: 'startDate' | 'expiryDate',
+  errors: Record<string, unknown>,
+) {
+  if (!hasValue(value)) {
+    return undefined;
+  }
+
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    errors[fieldKey] =
+      fieldKey === 'startDate'
+        ? 'Enter a valid start date.'
+        : 'Enter a valid expiry date.';
+    return undefined;
+  }
+
+  return parsed;
+}
+
+function getManualSubscriptionValidation(dto: UpdateCenterSubscriptionDto) {
+  const errors: Record<string, unknown> = {};
+  const plan = optionalTrimmed(dto.subscriptionPlan)?.toUpperCase();
+  const status = optionalTrimmed(dto.subscriptionStatus)?.toUpperCase();
+  const startDate = parseDateField(
+    dto.subscriptionStartDate,
+    'startDate',
+    errors,
+  );
+  const endDate = parseDateField(dto.subscriptionEndDate, 'expiryDate', errors);
+  const nextRenewalDate = parseDateField(
+    dto.nextRenewalDate,
+    'expiryDate',
+    errors,
+  );
+
+  if (errors.startDate || errors.expiryDate) {
+    errors.subscriptionDates = 'Enter valid subscription dates.';
+    delete errors.startDate;
+    delete errors.expiryDate;
+  }
+
+  if (
+    hasValue(dto.subscriptionPlan) &&
+    !isAllowedValue(plan, MANUAL_SUBSCRIPTION_PLANS)
+  ) {
+    errors.subscriptionPlan = invalidSubscriptionPlanError;
+  }
+
+  if (
+    hasValue(dto.subscriptionStatus) &&
+    !isAllowedValue(status, MANUAL_SUBSCRIPTION_STATUSES)
+  ) {
+    errors.subscriptionStatus = invalidSubscriptionStatusError;
+  }
+
+  if (startDate && endDate && endDate <= startDate) {
+    errors.subscriptionDates = invalidSubscriptionDatesError;
+  }
+
+  return {
+    billingNotes: hasValue(dto.billingNotes)
+      ? (dto.billingNotes ?? '').trim()
+      : undefined,
+    endDate,
+    errors,
+    nextRenewalDate,
+    plan,
+    startDate,
+    status,
+  };
+}
+
+function getUpdateCenterValidation(dto: UpdateCenterDto) {
+  const errors: Record<string, unknown> = {};
+  const centerName = hasValue(dto.centerName)
+    ? optionalTrimmed(dto.centerName)
+    : hasValue(dto.name)
+      ? optionalTrimmed(dto.name)
+      : undefined;
+  const adminEmail = optionalLowerTrimmed(dto.admin?.email);
+  const adminPhone = optionalTrimmed(dto.admin?.phone);
+  const domainHostname = optionalLowerTrimmed(dto.domain?.hostname);
+  const primaryLanguage = hasValue(dto.primaryLanguage)
+    ? (optionalTrimmed(dto.primaryLanguage)?.toUpperCase() as SupportedLanguage)
+    : undefined;
+  const startDate = parseDateField(
+    dto.subscription?.currentPeriodStart,
+    'startDate',
+    errors,
+  );
+  const expiryDate = parseDateField(
+    dto.subscription?.currentPeriodEnd,
+    'expiryDate',
+    errors,
+  );
+
+  if ((hasValue(dto.centerName) || hasValue(dto.name)) && !centerName) {
+    errors.centerName = requiredCenterNameError;
+  }
+
+  if (adminEmail !== undefined && (!adminEmail || !isValidEmail(adminEmail))) {
+    errors.adminEmail = invalidAdminEmailError;
+  }
+
+  if (adminPhone !== undefined && (!adminPhone || !isValidPhone(adminPhone))) {
+    errors.adminPhone = invalidAdminPhoneError;
+  }
+
+  if (hasValue(dto.admin?.fullName) && !optionalTrimmed(dto.admin?.fullName)) {
+    errors.adminName = requiredAdminNameError;
+  }
+
+  if (hasValue(dto.status) && !isAllowedValue(dto.status, CENTER_STATUSES)) {
+    errors.status = 'Enter a valid center status.';
+  }
+
+  if (hasValue(dto.type) && !isAllowedValue(dto.type, CENTER_TYPES)) {
+    errors.centerType = 'Enter a valid center type.';
+  }
+
+  if (
+    hasValue(dto.primaryLanguage) &&
+    !isAllowedValue(primaryLanguage, SUPPORTED_LANGUAGES)
+  ) {
+    errors.defaultLanguage = invalidDefaultLanguageError;
+  }
+
+  if (
+    hasValue(dto.subscription?.status) &&
+    !isAllowedValue(dto.subscription?.status, SUBSCRIPTION_STATUSES)
+  ) {
+    errors.subscriptionStatus = 'Enter a valid subscription status.';
+  }
+
+  if (
+    hasValue(dto.subscription?.billingInterval) &&
+    !isAllowedValue(dto.subscription?.billingInterval, BILLING_INTERVALS)
+  ) {
+    errors.billingInterval = 'Enter a valid billing interval.';
+  }
+
+  if (
+    hasValue(dto.subscription?.planCode) &&
+    !optionalTrimmed(dto.subscription?.planCode)
+  ) {
+    errors.subscriptionPlan = 'Subscription plan is required.';
+  }
+
+  if (
+    hasValue(dto.subscription?.planName) &&
+    !optionalTrimmed(dto.subscription?.planName)
+  ) {
+    errors.subscriptionPlan = 'Subscription plan is required.';
+  }
+
+  if (startDate && expiryDate && expiryDate <= startDate) {
+    errors.expiryDate = invalidSubscriptionDatesError;
+  }
+
+  if (hasValue(dto.domain?.hostname) && !domainHostname) {
+    errors.domain = 'Domain is required.';
+  }
+
+  if (
+    hasValue(dto.domain?.status) &&
+    !isAllowedValue(dto.domain?.status, DOMAIN_STATUSES)
+  ) {
+    errors.domain = 'Enter a valid domain status.';
+  }
+
+  if (
+    hasValue(dto.domain?.type) &&
+    !isAllowedValue(dto.domain?.type, DOMAIN_TYPES)
+  ) {
+    errors.domain = 'Enter a valid domain type.';
+  }
+
+  return {
+    adminEmail,
+    adminFullName: optionalTrimmed(dto.admin?.fullName),
+    adminPhone,
+    centerName,
+    domainHostname,
+    errors,
+    expiryDate,
+    primaryLanguage,
+    startDate,
+  };
+}
+
+function throwUpdateValidationErrors(errors: Record<string, unknown>) {
+  if (Object.keys(errors).length > 0) {
+    throw new BadRequestException({
+      message: 'Center update validation failed.',
+      errors,
+    });
+  }
+}
+
+function formatCenterStaffAssignment(
+  assignment: Prisma.UserRoleGetPayload<{
+    select: typeof safeCenterStaffUserRoleSelect;
+  }>,
+) {
+  return {
+    id: assignment.user.id,
+    fullName: assignment.user.fullName,
+    email: assignment.user.email,
+    phone: assignment.user.phone,
+    role: assignment.role.key,
+    roleName: assignment.role.name,
+    status: assignment.user.status,
+    assignmentStatus: assignment.status,
+    createdAt: assignment.user.createdAt,
+    updatedAt: assignment.updatedAt,
+  };
+}
+
+function getStaffValidation(
+  dto: CreateCenterStaffDto | UpdateCenterStaffDto,
+  isCreate: boolean,
+) {
+  const errors: Record<string, unknown> = {};
+  const fullName = hasValue(dto.fullName)
+    ? optionalTrimmed(dto.fullName)
+    : undefined;
+  const email = hasValue(dto.email)
+    ? optionalLowerTrimmed(dto.email)
+    : undefined;
+  const phone = hasValue(dto.phone) ? optionalTrimmed(dto.phone) : undefined;
+  const role = hasValue(dto.role)
+    ? optionalTrimmed(dto.role)?.toUpperCase()
+    : undefined;
+  const status = hasValue(dto.status)
+    ? optionalTrimmed(dto.status)?.toUpperCase()
+    : undefined;
+
+  if ((isCreate || hasValue(dto.fullName)) && !fullName) {
+    errors.fullName = requiredStaffNameError;
+  }
+
+  if ((isCreate || hasValue(dto.email)) && (!email || !isValidEmail(email))) {
+    errors.email = invalidStaffEmailError;
+  }
+
+  if ((isCreate || hasValue(dto.phone)) && (!phone || !isValidPhone(phone))) {
+    errors.phone = invalidStaffPhoneError;
+  }
+
+  if (
+    (isCreate || hasValue(dto.role)) &&
+    !isAllowedValue(role, CENTER_STAFF_ROLES)
+  ) {
+    errors.role = invalidStaffRoleError;
+  }
+
+  if (hasValue(dto.status) && !isAllowedValue(status, CENTER_STAFF_STATUSES)) {
+    errors.status = invalidStaffStatusError;
+  }
+
+  if (Object.keys(errors).length > 0) {
+    throw new BadRequestException({
+      message: 'Staff validation failed.',
+      errors,
+    });
+  }
+
+  return {
+    email,
+    fullName,
+    phone,
+    role: role as CenterStaffRole | undefined,
+    status: status as CenterStaffStatus | undefined,
+  };
+}
+
+function getStaffRoleName(roleKey: CenterStaffRole) {
+  return roleKey
+    .split('_')
+    .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
+    .join(' ');
+}
+
 @Injectable()
 export class CentersService {
   constructor(private readonly prisma: PrismaService) {}
@@ -115,15 +776,17 @@ export class CentersService {
         skip,
         take,
         include: {
-          owner: true,
+          owner: { select: safeUserSelect },
           branding: true,
           subscriptions: {
             orderBy: { createdAt: 'desc' },
             take: 1,
+            select: safeSubscriptionSelect,
           },
           domains: {
             orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
             take: 1,
+            select: safeDomainSelect,
           },
         },
       }),
@@ -137,17 +800,27 @@ export class CentersService {
   }
 
   async getById(centerId: string) {
+    if (!UUID_REGEX.test(centerId)) {
+      throw new NotFoundException('Center not found.');
+    }
+
     const prisma = await this.prisma.getClient();
     const center = await prisma.center.findUnique({
       where: { id: centerId },
       include: {
-        owner: true,
+        owner: { select: safeUserSelect },
         branding: true,
-        subscriptions: { orderBy: { createdAt: 'desc' } },
-        domains: { orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }] },
+        subscriptions: {
+          orderBy: { createdAt: 'desc' },
+          select: safeSubscriptionSelect,
+        },
+        domains: {
+          orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+          select: safeDomainSelect,
+        },
         userRoles: {
           where: { status: ACTIVE_USER_ROLE_STATUS },
-          include: { role: true, user: true },
+          include: { role: true, user: { select: safeUserSelect } },
         },
       },
     });
@@ -159,125 +832,1220 @@ export class CentersService {
     return center;
   }
 
-  async create(dto: CreateCenterDto) {
-    validateCreateCenterDto(dto);
+  async listStaff(centerId: string) {
+    await this.ensureCenterExists(centerId);
+    const prisma = await this.prisma.getClient();
+    const assignments = await prisma.userRole.findMany({
+      where: {
+        centerId,
+        role: { scope: 'CENTER', key: { in: [...CENTER_STAFF_ROLES] } },
+        status: { not: 'REVOKED' },
+        user: { deletedAt: null },
+      },
+      orderBy: { assignedAt: 'asc' },
+      select: safeCenterStaffUserRoleSelect,
+    });
+
+    return {
+      data: assignments.map(formatCenterStaffAssignment),
+    };
+  }
+
+  async createStaff(centerId: string, dto: CreateCenterStaffDto) {
+    await this.ensureCenterExists(centerId);
+    const validation = getStaffValidation(dto, true);
+    const prisma = await this.prisma.getClient();
+
+    try {
+      return await prisma.$transaction(async (tx) => {
+        await this.throwStaffDuplicateErrors(tx, {
+          email: validation.email,
+          phone: validation.phone,
+        });
+
+        const role = await this.ensureCenterStaffRole(
+          tx,
+          centerId,
+          validation.role ?? 'STAFF',
+        );
+        const user = await tx.user.create({
+          data: {
+            email: validation.email,
+            fullName: validation.fullName ?? '',
+            phone: validation.phone,
+            status: validation.status ?? 'ACTIVE',
+          },
+          select: { id: true },
+        });
+
+        const assignment = await tx.userRole.create({
+          data: {
+            centerId,
+            roleId: role.id,
+            status: ACTIVE_USER_ROLE_STATUS,
+            userId: user.id,
+          },
+          select: safeCenterStaffUserRoleSelect,
+        });
+
+        return formatCenterStaffAssignment(assignment);
+      });
+    } catch (error) {
+      this.mapStaffUniqueError(error);
+      throw error;
+    }
+  }
+
+  async updateStaff(
+    centerId: string,
+    userId: string,
+    dto: UpdateCenterStaffDto,
+  ) {
+    await this.ensureCenterExists(centerId);
+    const validation = getStaffValidation(dto, false);
+    const prisma = await this.prisma.getClient();
+
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const existingAssignment = await this.getCenterStaffAssignment(
+          tx,
+          centerId,
+          userId,
+        );
+
+        await this.throwStaffDuplicateErrors(tx, {
+          email: validation.email,
+          phone: validation.phone,
+          userId,
+        });
+
+        let nextRoleId = existingAssignment.role.id;
+
+        if (validation.role) {
+          const role = await this.ensureCenterStaffRole(
+            tx,
+            centerId,
+            validation.role,
+          );
+          nextRoleId = role.id;
+        }
+
+        await tx.user.update({
+          where: { id: userId },
+          data: {
+            ...(validation.email !== undefined
+              ? { email: validation.email }
+              : {}),
+            ...(validation.fullName !== undefined
+              ? { fullName: validation.fullName }
+              : {}),
+            ...(validation.phone !== undefined
+              ? { phone: validation.phone }
+              : {}),
+            ...(validation.status !== undefined
+              ? { status: validation.status }
+              : {}),
+          },
+          select: { id: true },
+        });
+
+        const assignment = await tx.userRole.update({
+          where: { id: existingAssignment.id },
+          data: {
+            roleId: nextRoleId,
+            status:
+              validation.status && validation.status !== 'ACTIVE'
+                ? 'INACTIVE'
+                : ACTIVE_USER_ROLE_STATUS,
+            revokedAt: null,
+          },
+          select: safeCenterStaffUserRoleSelect,
+        });
+
+        return formatCenterStaffAssignment(assignment);
+      });
+    } catch (error) {
+      this.mapStaffUniqueError(error);
+      throw error;
+    }
+  }
+
+  async updateStaffStatus(
+    centerId: string,
+    userId: string,
+    dto: UpdateCenterStaffStatusDto,
+  ) {
+    await this.ensureCenterExists(centerId);
+    const status = optionalTrimmed(dto.status)?.toUpperCase();
+
+    if (!isAllowedValue(status, CENTER_STAFF_STATUSES)) {
+      throw new BadRequestException({
+        message: 'Staff validation failed.',
+        errors: { status: invalidStaffStatusError },
+      });
+    }
+
     const prisma = await this.prisma.getClient();
 
     return prisma.$transaction(async (tx) => {
-      const adminUser = dto.admin
-        ? await tx.user.upsert({
-            where: dto.admin.userId
-              ? { id: dto.admin.userId }
-              : dto.admin.email
-                ? { email: dto.admin.email }
-                : { phone: dto.admin.phone },
-            create: {
-              email: dto.admin.email,
-              phone: dto.admin.phone,
-              fullName: dto.admin.fullName?.trim() || dto.name,
-              status: DEFAULT_USER_STATUS,
-            },
-            update: {
-              fullName: dto.admin.fullName?.trim() || dto.name,
-              ...(dto.admin.email ? { email: dto.admin.email } : {}),
-              ...(dto.admin.phone ? { phone: dto.admin.phone } : {}),
-            },
-          })
-        : null;
+      const existingAssignment = await this.getCenterStaffAssignment(
+        tx,
+        centerId,
+        userId,
+      );
 
-      const slug = await createUniqueSlug(tx, dto.name, dto.slug);
-      const primaryLanguage =
-        dto.primaryLanguage ?? dto.branding?.defaultLanguage ?? 'EN';
+      await tx.user.update({
+        where: { id: userId },
+        data: { status },
+        select: { id: true },
+      });
 
-      const center = await tx.center.create({
+      const assignment = await tx.userRole.update({
+        where: { id: existingAssignment.id },
         data: {
-          name: dto.name,
-          slug,
-          type: dto.type,
-          status: dto.status ?? DEFAULT_CENTER_STATUS,
-          primaryLanguage,
-          timezone: dto.timezone ?? DEFAULT_TIMEZONE,
-          ownerUserId: adminUser?.id,
+          status: status === 'ACTIVE' ? ACTIVE_USER_ROLE_STATUS : 'INACTIVE',
+          revokedAt: null,
+        },
+        select: safeCenterStaffUserRoleSelect,
+      });
+
+      return formatCenterStaffAssignment(assignment);
+    });
+  }
+
+  async resetStaffPassword(
+    centerId: string,
+    userId: string,
+    dto: ResetCenterStaffPasswordDto,
+  ) {
+    await this.ensureCenterExists(centerId);
+    const temporaryPassword =
+      dto.temporaryPassword?.trim() ||
+      `RC-temp-${randomBytes(3).toString('hex')}`;
+
+    if (temporaryPassword.length < 8) {
+      throw new BadRequestException({
+        message: 'Staff validation failed.',
+        errors: {
+          temporaryPassword: shortStaffTemporaryPasswordError,
+        },
+      });
+    }
+
+    const prisma = await this.prisma.getClient();
+    const passwordHash = await hashPassword(temporaryPassword);
+
+    return prisma.$transaction(async (tx) => {
+      const existingAssignment = await this.getCenterStaffAssignment(
+        tx,
+        centerId,
+        userId,
+      );
+      await tx.user.update({
+        where: { id: userId },
+        data: { passwordHash },
+        select: { id: true },
+      });
+      const assignment = await tx.userRole.findUniqueOrThrow({
+        where: { id: existingAssignment.id },
+        select: safeCenterStaffUserRoleSelect,
+      });
+
+      return {
+        user: formatCenterStaffAssignment(assignment),
+        resetComplete: true,
+        temporaryPassword,
+      };
+    });
+  }
+
+  async listInternalNotes(centerId: string) {
+    if (!UUID_REGEX.test(centerId)) {
+      throw new NotFoundException('Center not found.');
+    }
+
+    const prisma = await this.prisma.getClient();
+    const center = await prisma.center.findUnique({
+      where: { id: centerId },
+      select: { id: true },
+    });
+
+    if (!center) {
+      throw new NotFoundException('Center not found.');
+    }
+
+    return {
+      data: await prisma.centerInternalNote.findMany({
+        where: { centerId },
+        orderBy: { createdAt: 'desc' },
+        select: safeCenterInternalNoteSelect,
+      }),
+    };
+  }
+
+  async createInternalNote(
+    centerId: string,
+    dto: CreateCenterInternalNoteDto,
+    requestedAuthorId?: string,
+  ) {
+    if (!UUID_REGEX.test(centerId)) {
+      throw new NotFoundException('Center not found.');
+    }
+
+    const note = dto.note?.trim();
+
+    if (!note) {
+      throw new BadRequestException({
+        message: 'Internal note validation failed.',
+        errors: { note: requiredInternalNoteError },
+      });
+    }
+
+    const prisma = await this.prisma.getClient();
+
+    return prisma.$transaction(async (tx) => {
+      const center = await tx.center.findUnique({
+        where: { id: centerId },
+        select: { id: true },
+      });
+
+      if (!center) {
+        throw new NotFoundException('Center not found.');
+      }
+
+      const author = await this.resolveInternalNoteAuthor(
+        tx,
+        requestedAuthorId,
+      );
+
+      return tx.centerInternalNote.create({
+        data: {
+          authorId: author.id,
+          centerId,
+          note,
+        },
+        select: safeCenterInternalNoteSelect,
+      });
+    });
+  }
+
+  async updateStatus(
+    centerId: string,
+    dto: UpdateCenterStatusDto,
+    requestedAuthorId?: string,
+  ) {
+    if (!UUID_REGEX.test(centerId)) {
+      throw new NotFoundException('Center not found.');
+    }
+
+    const status = dto.status;
+    const reason = dto.reason?.trim();
+    const errors: Record<string, unknown> = {};
+
+    if (!isAllowedValue(status, CENTER_STATUS_ACTIONS)) {
+      errors.status = invalidCenterStatusError;
+    }
+
+    if ((status === 'SUSPENDED' || status === 'CANCELLED') && !reason) {
+      errors.reason = requiredStatusReasonError;
+    }
+
+    if (Object.keys(errors).length > 0) {
+      throw new BadRequestException({
+        message: 'Center status validation failed.',
+        errors,
+      });
+    }
+
+    const prisma = await this.prisma.getClient();
+
+    return prisma.$transaction(async (tx) => {
+      const existingCenter = await tx.center.findUnique({
+        where: { id: centerId },
+        select: { id: true, status: true },
+      });
+
+      if (!existingCenter) {
+        throw new NotFoundException('Center not found.');
+      }
+
+      await tx.center.update({
+        where: { id: centerId },
+        data: {
+          status,
+          ...(status === 'ACTIVE' ? { activatedAt: new Date() } : {}),
+          ...(status === 'SUSPENDED' ? { suspendedAt: new Date() } : {}),
+          ...(status === 'CANCELLED' ? { cancelledAt: new Date() } : {}),
         },
       });
 
-      if (dto.admin && adminUser) {
-        const permissionPreset =
-          dto.admin.permissionsPreset ?? 'standardManagement';
-        const role = await tx.role.create({
-          data: {
-            centerId: center.id,
-            key: `center_admin_${permissionPreset}`,
-            name: 'Center Admin',
-            description: `Initial center admin role from ${permissionPreset} preset.`,
-            scope: 'CENTER',
-          },
-        });
+      const author = await this.resolveInternalNoteAuthor(
+        tx,
+        requestedAuthorId,
+      );
+      const noteReason = reason ? ` Reason: ${reason}` : '';
 
-        await tx.userRole.create({
-          data: {
-            centerId: center.id,
-            roleId: role.id,
-            userId: adminUser.id,
-            status: ACTIVE_USER_ROLE_STATUS,
-          },
-        });
-      }
-
-      if (dto.branding) {
-        await tx.brandingSettings.create({
-          data: {
-            centerId: center.id,
-            defaultLanguage: dto.branding.defaultLanguage,
-            enabledLanguages: dto.branding.enabledLanguages,
-            logoUrl: dto.branding.logoUrl,
-            primaryColor: dto.branding.primaryColor,
-            secondaryColor: dto.branding.secondaryColor,
-            theme: dto.branding.theme as Prisma.InputJsonValue | undefined,
-          },
-        });
-      }
-
-      if (dto.subscription) {
-        await tx.subscription.create({
-          data: {
-            centerId: center.id,
-            planCode: dto.subscription.planCode,
-            planName: dto.subscription.planName,
-            billingInterval:
-              dto.subscription.billingInterval ?? DEFAULT_BILLING_INTERVAL,
-            status: dto.subscription.status ?? DEFAULT_SUBSCRIPTION_STATUS,
-            currentPeriodStart: new Date(dto.subscription.currentPeriodStart),
-            currentPeriodEnd: new Date(dto.subscription.currentPeriodEnd),
-            trialEndsAt: optionalDate(dto.subscription.trialEndsAt),
-          },
-        });
-      }
-
-      if (dto.domain?.hostname?.trim()) {
-        await tx.domain.create({
-          data: {
-            centerId: center.id,
-            hostname: dto.domain.hostname.trim().toLowerCase(),
-            type: dto.domain.type ?? 'CUSTOM',
-            status: dto.domain.status ?? 'PENDING',
-            isPrimary: dto.domain.isPrimary ?? true,
-          },
-        });
-      }
+      await tx.centerInternalNote.create({
+        data: {
+          authorId: author.id,
+          centerId,
+          note: `Status changed from ${existingCenter.status} to ${status}.${noteReason}`,
+        },
+        select: { id: true },
+      });
 
       return tx.center.findUniqueOrThrow({
-        where: { id: center.id },
+        where: { id: centerId },
         include: {
           branding: true,
-          domains: { orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }] },
-          owner: true,
-          subscriptions: { orderBy: { createdAt: 'desc' } },
+          domains: {
+            orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+            select: safeDomainSelect,
+          },
+          owner: { select: safeUserSelect },
+          subscriptions: {
+            orderBy: { createdAt: 'desc' },
+            select: safeSubscriptionSelect,
+          },
           userRoles: {
-            include: { role: true, user: true },
+            where: { status: ACTIVE_USER_ROLE_STATUS },
+            include: { role: true, user: { select: safeUserSelect } },
           },
         },
       });
     });
+  }
+
+  async updateSubscription(
+    centerId: string,
+    dto: UpdateCenterSubscriptionDto,
+    requestedAuthorId?: string,
+  ) {
+    if (!UUID_REGEX.test(centerId)) {
+      throw new NotFoundException('Center not found.');
+    }
+
+    const validation = getManualSubscriptionValidation(dto);
+
+    if (Object.keys(validation.errors).length > 0) {
+      throw new BadRequestException({
+        message: 'Subscription validation failed.',
+        errors: validation.errors,
+      });
+    }
+
+    const prisma = await this.prisma.getClient();
+
+    return prisma.$transaction(async (tx) => {
+      const existingCenter = await tx.center.findUnique({
+        where: { id: centerId },
+        include: {
+          subscriptions: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: {
+              id: true,
+              planCode: true,
+              status: true,
+              currentPeriodStart: true,
+              currentPeriodEnd: true,
+            },
+          },
+        },
+      });
+
+      if (!existingCenter) {
+        throw new NotFoundException('Center not found.');
+      }
+
+      const latestSubscription = existingCenter.subscriptions[0];
+      const nextPlan =
+        validation.plan ?? latestSubscription?.planCode ?? 'BASIC';
+      const nextStatus =
+        validation.status &&
+        isAllowedValue(validation.status, MANUAL_SUBSCRIPTION_STATUSES)
+          ? SUBSCRIPTION_STATUS_MAP[validation.status]
+          : (latestSubscription?.status ?? DEFAULT_SUBSCRIPTION_STATUS);
+      const nextStartDate =
+        validation.startDate ??
+        latestSubscription?.currentPeriodStart ??
+        new Date();
+      const nextEndDate =
+        validation.endDate ??
+        latestSubscription?.currentPeriodEnd ??
+        new Date(nextStartDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+      const subscriptionData = {
+        ...(validation.billingNotes !== undefined
+          ? { billingNotes: validation.billingNotes }
+          : {}),
+        ...(validation.nextRenewalDate !== undefined
+          ? { nextRenewalDate: validation.nextRenewalDate }
+          : {}),
+        currentPeriodEnd: nextEndDate,
+        currentPeriodStart: nextStartDate,
+        expiresAt: nextEndDate,
+        planCode: nextPlan,
+        planName: PLAN_NAMES[nextPlan as keyof typeof PLAN_NAMES] ?? nextPlan,
+        status: nextStatus,
+      };
+
+      if (latestSubscription) {
+        await tx.subscription.update({
+          where: { id: latestSubscription.id },
+          data: subscriptionData,
+        });
+      } else {
+        await tx.subscription.create({
+          data: {
+            ...subscriptionData,
+            billingInterval: DEFAULT_BILLING_INTERVAL,
+            centerId,
+          },
+        });
+      }
+
+      const author = await this.resolveInternalNoteAuthor(
+        tx,
+        requestedAuthorId,
+      );
+      const previousSummary = latestSubscription
+        ? `${latestSubscription.planCode}/${latestSubscription.status}`
+        : 'none';
+      const nextSummary = `${nextPlan}/${nextStatus}`;
+      const billingNoteSuffix = validation.billingNotes
+        ? ` Billing note: ${validation.billingNotes}`
+        : '';
+
+      await tx.centerInternalNote.create({
+        data: {
+          authorId: author.id,
+          centerId,
+          note: `Subscription changed from ${previousSummary} to ${nextSummary}.${billingNoteSuffix}`,
+        },
+        select: { id: true },
+      });
+
+      return tx.center.findUniqueOrThrow({
+        where: { id: centerId },
+        include: {
+          branding: true,
+          domains: {
+            orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+            select: safeDomainSelect,
+          },
+          owner: { select: safeUserSelect },
+          subscriptions: {
+            orderBy: { createdAt: 'desc' },
+            select: safeSubscriptionSelect,
+          },
+          userRoles: {
+            where: { status: ACTIVE_USER_ROLE_STATUS },
+            include: { role: true, user: { select: safeUserSelect } },
+          },
+        },
+      });
+    });
+  }
+
+  private async ensureCenterExists(centerId: string) {
+    if (!UUID_REGEX.test(centerId)) {
+      throw new NotFoundException('Center not found.');
+    }
+
+    const prisma = await this.prisma.getClient();
+    const center = await prisma.center.findUnique({
+      where: { id: centerId },
+      select: { id: true },
+    });
+
+    if (!center) {
+      throw new NotFoundException('Center not found.');
+    }
+
+    return center;
+  }
+
+  private async ensureCenterStaffRole(
+    tx: Prisma.TransactionClient,
+    centerId: string,
+    roleKey: CenterStaffRole,
+  ) {
+    const existingRole = await tx.role.findFirst({
+      where: {
+        centerId,
+        key: roleKey,
+        scope: 'CENTER',
+      },
+      select: { id: true },
+    });
+
+    if (existingRole) {
+      return existingRole;
+    }
+
+    return tx.role.create({
+      data: {
+        centerId,
+        key: roleKey,
+        name: getStaffRoleName(roleKey),
+        description: `${getStaffRoleName(roleKey)} center staff role.`,
+        scope: 'CENTER',
+        status: 'ACTIVE',
+        isSystem: true,
+      },
+      select: { id: true },
+    });
+  }
+
+  private async getCenterStaffAssignment(
+    tx: Prisma.TransactionClient,
+    centerId: string,
+    userId: string,
+  ) {
+    if (!UUID_REGEX.test(userId)) {
+      throw new NotFoundException('Staff user not found.');
+    }
+
+    const assignment = await tx.userRole.findFirst({
+      where: {
+        centerId,
+        userId,
+        role: { scope: 'CENTER', key: { in: [...CENTER_STAFF_ROLES] } },
+        user: { deletedAt: null },
+      },
+      select: safeCenterStaffUserRoleSelect,
+    });
+
+    if (!assignment) {
+      throw new NotFoundException('Staff user not found.');
+    }
+
+    return assignment;
+  }
+
+  private async throwStaffDuplicateErrors(
+    tx: Prisma.TransactionClient,
+    values: { email?: string; phone?: string; userId?: string },
+  ) {
+    const errors: Record<string, unknown> = {};
+
+    if (values.email) {
+      const existingUser = await tx.user.findUnique({
+        where: { email: values.email },
+        select: { id: true },
+      });
+
+      if (existingUser && existingUser.id !== values.userId) {
+        errors.email = duplicateStaffEmailError;
+      }
+    }
+
+    if (values.phone) {
+      const existingUser = await tx.user.findUnique({
+        where: { phone: values.phone },
+        select: { id: true },
+      });
+
+      if (existingUser && existingUser.id !== values.userId) {
+        errors.phone = duplicateStaffPhoneError;
+      }
+    }
+
+    if (Object.keys(errors).length > 0) {
+      throw new ConflictException({
+        message: 'Staff validation failed.',
+        errors,
+      });
+    }
+  }
+
+  private mapStaffUniqueError(error: unknown) {
+    if (!isPrismaKnownRequestError(error) || error.code !== 'P2002') {
+      return;
+    }
+
+    const rawTarget = (error as { meta?: { target?: unknown } }).meta?.target;
+    const target: string[] = Array.isArray(rawTarget)
+      ? rawTarget.filter((item): item is string => typeof item === 'string')
+      : typeof rawTarget === 'string'
+        ? [rawTarget]
+        : [];
+
+    if (target.includes('phone')) {
+      throw new ConflictException({
+        message: 'Staff validation failed.',
+        errors: { phone: duplicateStaffPhoneError },
+      });
+    }
+
+    if (target.includes('email')) {
+      throw new ConflictException({
+        message: 'Staff validation failed.',
+        errors: { email: duplicateStaffEmailError },
+      });
+    }
+  }
+
+  private async resolveInternalNoteAuthor(
+    tx: Prisma.TransactionClient,
+    requestedAuthorId?: string,
+  ) {
+    if (requestedAuthorId && UUID_REGEX.test(requestedAuthorId)) {
+      const requestedAuthor = await tx.user.findFirst({
+        where: { id: requestedAuthorId, status: { not: 'DELETED' } },
+        select: { id: true },
+      });
+
+      if (requestedAuthor) {
+        return requestedAuthor;
+      }
+    }
+
+    const platformUserRole = await tx.userRole.findFirst({
+      where: {
+        status: ACTIVE_USER_ROLE_STATUS,
+        role: { scope: 'PLATFORM', status: 'ACTIVE' },
+        user: { status: { not: 'DELETED' } },
+      },
+      orderBy: { assignedAt: 'asc' },
+      select: { userId: true },
+    });
+
+    if (platformUserRole) {
+      return { id: platformUserRole.userId };
+    }
+
+    const fallbackUser = await tx.user.findFirst({
+      where: { status: { not: 'DELETED' } },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+
+    if (!fallbackUser) {
+      throw new BadRequestException({
+        message: 'Internal note author could not be resolved.',
+        errors: {
+          authorId:
+            'A Super Admin author is required before creating internal notes.',
+        },
+      });
+    }
+
+    return fallbackUser;
+  }
+
+  async update(centerId: string, dto: UpdateCenterDto) {
+    if (!UUID_REGEX.test(centerId)) {
+      throw new NotFoundException('Center not found.');
+    }
+
+    const validation = getUpdateCenterValidation(dto);
+    throwUpdateValidationErrors(validation.errors);
+
+    const prisma = await this.prisma.getClient();
+
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const existingCenter = await tx.center.findUnique({
+          where: { id: centerId },
+          include: {
+            domains: {
+              orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+              take: 1,
+              select: { id: true, hostname: true },
+            },
+            subscriptions: {
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              select: { id: true },
+            },
+            userRoles: {
+              where: { status: ACTIVE_USER_ROLE_STATUS },
+              orderBy: { assignedAt: 'desc' },
+              take: 1,
+              select: { userId: true },
+            },
+            branding: {
+              select: { centerId: true, enabledLanguages: true },
+            },
+          },
+        });
+
+        if (!existingCenter) {
+          throw new NotFoundException('Center not found.');
+        }
+
+        const adminUserId =
+          existingCenter.userRoles[0]?.userId ?? existingCenter.ownerUserId;
+        const duplicateErrors: Record<string, unknown> = {};
+
+        if (validation.adminEmail) {
+          const existingEmailUser = await tx.user.findUnique({
+            where: { email: validation.adminEmail },
+            select: { id: true },
+          });
+
+          if (existingEmailUser && existingEmailUser.id !== adminUserId) {
+            duplicateErrors.adminEmail = duplicateAdminEmailError;
+          }
+        }
+
+        if (validation.adminPhone) {
+          const existingPhoneUser = await tx.user.findUnique({
+            where: { phone: validation.adminPhone },
+            select: { id: true },
+          });
+
+          if (existingPhoneUser && existingPhoneUser.id !== adminUserId) {
+            duplicateErrors.adminPhone = duplicateAdminPhoneError;
+          }
+        }
+
+        if (validation.domainHostname) {
+          const existingDomain = await tx.domain.findUnique({
+            where: { hostname: validation.domainHostname },
+            select: { centerId: true, id: true },
+          });
+
+          if (existingDomain && existingDomain.centerId !== centerId) {
+            duplicateErrors.domain = duplicateDomainError;
+          }
+        }
+
+        if (Object.keys(duplicateErrors).length > 0) {
+          throwDuplicateAdminError(duplicateErrors);
+        }
+
+        let nextOwnerUserId = existingCenter.ownerUserId;
+
+        if (dto.admin) {
+          if (adminUserId) {
+            await tx.user.update({
+              where: { id: adminUserId },
+              data: {
+                ...(validation.adminEmail !== undefined
+                  ? { email: validation.adminEmail }
+                  : {}),
+                ...(validation.adminPhone !== undefined
+                  ? { phone: validation.adminPhone }
+                  : {}),
+                ...(validation.adminFullName !== undefined
+                  ? { fullName: validation.adminFullName }
+                  : {}),
+              },
+            });
+            nextOwnerUserId = existingCenter.ownerUserId ?? adminUserId;
+          } else if (
+            validation.adminFullName &&
+            validation.adminEmail &&
+            validation.adminPhone
+          ) {
+            const newAdminUser = await tx.user.create({
+              data: {
+                email: validation.adminEmail,
+                fullName: validation.adminFullName,
+                phone: validation.adminPhone,
+                status: DEFAULT_USER_STATUS,
+              },
+              select: { id: true },
+            });
+            nextOwnerUserId = newAdminUser.id;
+          }
+        }
+
+        const centerData: Prisma.CenterUncheckedUpdateInput = {
+          ...(validation.centerName !== undefined
+            ? { name: validation.centerName }
+            : {}),
+          ...(dto.status !== undefined ? { status: dto.status } : {}),
+          ...(dto.type !== undefined ? { type: dto.type } : {}),
+          ...(validation.primaryLanguage !== undefined
+            ? { primaryLanguage: validation.primaryLanguage }
+            : {}),
+          ...(nextOwnerUserId !== existingCenter.ownerUserId
+            ? { ownerUserId: nextOwnerUserId }
+            : {}),
+        };
+
+        await tx.center.update({
+          where: { id: centerId },
+          data: centerData,
+        });
+
+        if (validation.primaryLanguage !== undefined) {
+          const enabledLanguages = Array.isArray(
+            existingCenter.branding?.enabledLanguages,
+          )
+            ? existingCenter.branding.enabledLanguages.filter(
+                (language): language is string => typeof language === 'string',
+              )
+            : [];
+          const nextEnabledLanguages = enabledLanguages.includes(
+            validation.primaryLanguage,
+          )
+            ? enabledLanguages
+            : [...enabledLanguages, validation.primaryLanguage];
+
+          if (existingCenter.branding) {
+            await tx.brandingSettings.update({
+              where: { centerId },
+              data: {
+                defaultLanguage: validation.primaryLanguage,
+                enabledLanguages: nextEnabledLanguages,
+              },
+            });
+          }
+        }
+
+        if (dto.subscription) {
+          const latestSubscription = existingCenter.subscriptions[0];
+          const subscriptionData = {
+            ...(dto.subscription.billingInterval !== undefined
+              ? { billingInterval: dto.subscription.billingInterval }
+              : {}),
+            ...(validation.expiryDate !== undefined
+              ? {
+                  currentPeriodEnd: validation.expiryDate,
+                  expiresAt: validation.expiryDate,
+                }
+              : {}),
+            ...(validation.startDate !== undefined
+              ? { currentPeriodStart: validation.startDate }
+              : {}),
+            ...(dto.subscription.planCode !== undefined
+              ? { planCode: dto.subscription.planCode.trim() }
+              : {}),
+            ...(dto.subscription.planName !== undefined
+              ? { planName: dto.subscription.planName.trim() }
+              : {}),
+            ...(dto.subscription.status !== undefined
+              ? { status: dto.subscription.status }
+              : {}),
+          };
+
+          if (latestSubscription) {
+            await tx.subscription.update({
+              where: { id: latestSubscription.id },
+              data: subscriptionData,
+            });
+          } else if (
+            dto.subscription.planCode &&
+            dto.subscription.planName &&
+            validation.startDate &&
+            validation.expiryDate
+          ) {
+            await tx.subscription.create({
+              data: {
+                billingInterval:
+                  dto.subscription.billingInterval ?? DEFAULT_BILLING_INTERVAL,
+                centerId,
+                currentPeriodEnd: validation.expiryDate,
+                currentPeriodStart: validation.startDate,
+                expiresAt: validation.expiryDate,
+                planCode: dto.subscription.planCode.trim(),
+                planName: dto.subscription.planName.trim(),
+                status: dto.subscription.status ?? DEFAULT_SUBSCRIPTION_STATUS,
+              },
+            });
+          }
+        }
+
+        if (dto.domain) {
+          const primaryDomain = existingCenter.domains[0];
+          const domainData = {
+            ...(validation.domainHostname !== undefined
+              ? { hostname: validation.domainHostname }
+              : {}),
+            ...(dto.domain.isPrimary !== undefined
+              ? { isPrimary: dto.domain.isPrimary }
+              : {}),
+            ...(dto.domain.status !== undefined
+              ? { status: dto.domain.status }
+              : {}),
+            ...(dto.domain.type !== undefined ? { type: dto.domain.type } : {}),
+          };
+
+          if (primaryDomain) {
+            await tx.domain.update({
+              where: { id: primaryDomain.id },
+              data: domainData,
+            });
+          } else if (validation.domainHostname) {
+            await tx.domain.create({
+              data: {
+                centerId,
+                hostname: validation.domainHostname,
+                isPrimary: dto.domain.isPrimary ?? true,
+                status: dto.domain.status ?? 'PENDING',
+                type: dto.domain.type ?? 'CUSTOM',
+              },
+            });
+          }
+        }
+
+        return tx.center.findUniqueOrThrow({
+          where: { id: centerId },
+          include: {
+            branding: true,
+            domains: {
+              orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+              select: safeDomainSelect,
+            },
+            owner: { select: safeUserSelect },
+            subscriptions: {
+              orderBy: { createdAt: 'desc' },
+              select: safeSubscriptionSelect,
+            },
+            userRoles: {
+              where: { status: ACTIVE_USER_ROLE_STATUS },
+              include: { role: true, user: { select: safeUserSelect } },
+            },
+          },
+        });
+      });
+    } catch (error) {
+      if (isPrismaKnownRequestError(error) && error.code === 'P2002') {
+        const rawTarget = (error as { meta?: { target?: unknown } }).meta
+          ?.target;
+        const target: string[] = Array.isArray(rawTarget)
+          ? rawTarget.filter((item): item is string => typeof item === 'string')
+          : typeof rawTarget === 'string'
+            ? [rawTarget]
+            : [];
+
+        if (target.includes('phone')) {
+          throwDuplicateAdminError({ adminPhone: duplicateAdminPhoneError });
+        }
+
+        if (target.includes('email')) {
+          throwDuplicateAdminError({ adminEmail: duplicateAdminEmailError });
+        }
+
+        if (
+          target.includes('hostname') ||
+          target.some((item) => item.toLowerCase().includes('domain'))
+        ) {
+          throw new ConflictException({
+            message: 'Domain validation failed.',
+            errors: { domain: duplicateDomainError },
+          });
+        }
+      }
+
+      throw error;
+    }
+  }
+
+  async create(dto: CreateCenterDto) {
+    validateCreateCenterDto(dto);
+    const prisma = await this.prisma.getClient();
+
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const adminEmail = dto.admin?.email?.trim().toLowerCase();
+        const adminPhone = dto.admin?.phone?.trim();
+        const adminFullName = dto.admin?.fullName?.trim() || dto.name;
+        const adminPasswordHash = dto.admin?.temporaryPassword
+          ? await hashPassword(dto.admin.temporaryPassword)
+          : undefined;
+
+        if (dto.admin) {
+          const duplicateErrors: Record<string, unknown> = {};
+
+          if (adminEmail) {
+            const existingEmailUser = await tx.user.findUnique({
+              where: { email: adminEmail },
+              select: { id: true },
+            });
+
+            if (
+              existingEmailUser &&
+              (!dto.admin.userId || existingEmailUser.id !== dto.admin.userId)
+            ) {
+              duplicateErrors.adminEmail = duplicateAdminEmailError;
+            }
+          }
+
+          if (adminPhone) {
+            const existingPhoneUser = await tx.user.findUnique({
+              where: { phone: adminPhone },
+              select: { id: true },
+            });
+
+            if (
+              existingPhoneUser &&
+              (!dto.admin.userId || existingPhoneUser.id !== dto.admin.userId)
+            ) {
+              duplicateErrors.adminPhone = duplicateAdminPhoneError;
+            }
+          }
+
+          if (Object.keys(duplicateErrors).length > 0) {
+            throwDuplicateAdminError(duplicateErrors);
+          }
+        }
+
+        const adminUser = dto.admin
+          ? dto.admin.userId
+            ? await tx.user.update({
+                where: { id: dto.admin.userId },
+                data: {
+                  email: adminEmail,
+                  phone: adminPhone,
+                  ...(adminPasswordHash
+                    ? { passwordHash: adminPasswordHash }
+                    : {}),
+                  fullName: adminFullName,
+                  status: DEFAULT_USER_STATUS,
+                },
+              })
+            : await tx.user.create({
+                data: {
+                  email: adminEmail,
+                  phone: adminPhone,
+                  passwordHash: adminPasswordHash,
+                  fullName: adminFullName,
+                  status: DEFAULT_USER_STATUS,
+                },
+              })
+          : null;
+
+        const slug = await createUniqueSlug(tx, dto.name, dto.slug);
+        const primaryLanguage =
+          dto.primaryLanguage ?? dto.branding?.defaultLanguage ?? 'EN';
+
+        const center = await tx.center.create({
+          data: {
+            name: dto.name,
+            slug,
+            type: dto.type,
+            status: dto.status ?? DEFAULT_CENTER_STATUS,
+            primaryLanguage,
+            timezone: dto.timezone ?? DEFAULT_TIMEZONE,
+            ownerUserId: adminUser?.id,
+          },
+        });
+
+        if (dto.admin && adminUser) {
+          const permissionPreset =
+            dto.admin.permissionsPreset ?? 'standardManagement';
+          const role = await tx.role.create({
+            data: {
+              centerId: center.id,
+              key: `center_admin_${permissionPreset}`,
+              name: 'Center Admin',
+              description: `Initial center admin role from ${permissionPreset} preset.`,
+              scope: 'CENTER',
+            },
+          });
+
+          await tx.userRole.create({
+            data: {
+              centerId: center.id,
+              roleId: role.id,
+              userId: adminUser.id,
+              status: ACTIVE_USER_ROLE_STATUS,
+            },
+          });
+        }
+
+        if (dto.branding) {
+          await tx.brandingSettings.create({
+            data: {
+              centerId: center.id,
+              defaultLanguage: dto.branding.defaultLanguage,
+              enabledLanguages: dto.branding.enabledLanguages,
+              logoUrl: dto.branding.logoUrl,
+              primaryColor: dto.branding.primaryColor,
+              secondaryColor: dto.branding.secondaryColor,
+              theme: dto.branding.theme as Prisma.InputJsonValue | undefined,
+            },
+          });
+        }
+
+        if (dto.subscription) {
+          await tx.subscription.create({
+            data: {
+              centerId: center.id,
+              planCode: dto.subscription.planCode,
+              planName: dto.subscription.planName,
+              billingInterval:
+                dto.subscription.billingInterval ?? DEFAULT_BILLING_INTERVAL,
+              status: dto.subscription.status ?? DEFAULT_SUBSCRIPTION_STATUS,
+              currentPeriodStart: new Date(dto.subscription.currentPeriodStart),
+              currentPeriodEnd: new Date(dto.subscription.currentPeriodEnd),
+              trialEndsAt: optionalDate(dto.subscription.trialEndsAt),
+            },
+          });
+        }
+
+        if (dto.domain?.hostname?.trim()) {
+          await tx.domain.create({
+            data: {
+              centerId: center.id,
+              hostname: dto.domain.hostname.trim().toLowerCase(),
+              type: dto.domain.type ?? 'CUSTOM',
+              status: dto.domain.status ?? 'PENDING',
+              isPrimary: dto.domain.isPrimary ?? true,
+            },
+          });
+        }
+
+        return tx.center.findUniqueOrThrow({
+          where: { id: center.id },
+          include: {
+            branding: true,
+            domains: {
+              orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+              select: safeDomainSelect,
+            },
+            owner: { select: safeUserSelect },
+            subscriptions: {
+              orderBy: { createdAt: 'desc' },
+              select: safeSubscriptionSelect,
+            },
+            userRoles: {
+              include: { role: true, user: { select: safeUserSelect } },
+            },
+          },
+        });
+      });
+    } catch (error) {
+      if (isPrismaKnownRequestError(error) && error.code === 'P2002') {
+        const rawTarget = (error as { meta?: { target?: unknown } }).meta
+          ?.target;
+        const target: string[] = Array.isArray(rawTarget)
+          ? rawTarget.filter((item): item is string => typeof item === 'string')
+          : typeof rawTarget === 'string'
+            ? [rawTarget]
+            : [];
+
+        if (target.includes('phone')) {
+          throwDuplicateAdminError({ adminPhone: duplicateAdminPhoneError });
+        }
+
+        if (target.includes('email')) {
+          throwDuplicateAdminError({ adminEmail: duplicateAdminEmailError });
+        }
+
+        if (
+          target.includes('hostname') ||
+          target.some((item) => item.toLowerCase().includes('domain')) ||
+          dto.domain?.hostname?.trim()
+        ) {
+          throw new ConflictException({
+            message: 'Domain validation failed.',
+            errors: { domain: duplicateDomainError },
+          });
+        }
+
+        throw new ConflictException({
+          message: 'A unique value already exists.',
+          errors: { unique: 'A unique value already exists.' },
+        });
+      }
+
+      throw error;
+    }
   }
 }

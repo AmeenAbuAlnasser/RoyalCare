@@ -1,7 +1,7 @@
 # RoyalCare - Database Schema
 
-Last updated: 2026-04-27
-Status: Phase 2 Prisma business foundation implemented; Super Admin core API database foundation connected
+Last updated: 2026-04-30
+Status: Tenant auth, patients, services, appointments, staff management, and manual billing (invoices) foundations implemented
 
 ## 1. Database Strategy
 
@@ -26,7 +26,7 @@ Current implementation status:
 - Phase 2 business foundation models are implemented.
 - Prisma Client now uses the standard `prisma-client-js` generator for API runtime compatibility.
 - Super Admin Centers, Users, and Subscriptions API modules now use the real Prisma schema foundation instead of mock-only architecture.
-- Payments, medical diagnosis details, staff scheduling, file assets, audit logs, module tables, and dedicated page-block tables are intentionally not created yet.
+- Online payments, medical diagnosis details, staff scheduling, file assets, audit logs, module tables, and dedicated page-block tables are intentionally not created yet.
 
 Multi-tenancy:
 - Shared database
@@ -75,15 +75,18 @@ Implemented models:
 - `Subscription`
 - `Domain`
 - `Customer`
+- `Patient`
 - `Service`
 - `Appointment`
 - `Session`
 - `Notification`
 - `DynamicPage`
 - `BrandingSettings`
+- `CenterInternalNote`
+- `Invoice`
 
 Not implemented yet:
-- Payments
+- Online payment gateway/provider integration
 - Medical diagnosis details
 - Staff scheduling
 - File assets
@@ -104,9 +107,19 @@ Timestamp strategy:
 
 Tenant strategy:
 - `Center` is the tenant.
+- `Center.slug` is unique and is used for dedicated branded tenant login routes such as `/c/[centerSlug]/login`.
+- `Center.primaryLanguage` is the tenant default language and drives default RTL/LTR behavior for dedicated login and tenant UI.
 - Tenant-scoped role assignments use `UserRole.centerId`.
 - Center-owned roles can use `Role.centerId`.
 - `Subscription` and `Domain` are always center-owned and require `centerId`.
+- `CenterInternalNote` is center-owned and stores private Super Admin support notes that must never be exposed to center owner/admin or customer-facing APIs.
+- Center staff users are represented by `User` records assigned to center-scoped `Role` records through `UserRole.centerId`.
+- Tenant Staff Management does not add a separate staff table; tenant staff users are represented by `User` records with center-scoped `UserRole.centerId` assignments and center role keys.
+- Tenant staff passwords are stored only as scrypt hashes in `User.passwordHash`; `passwordHash` is never returned by staff APIs.
+- `BrandingSettings.logoUrl` stores the center logo used by dedicated tenant login and the tenant sidebar; if absent, the UI falls back to center initials.
+- `Patient` is a tenant-owned clinical/customer record scoped by required `centerId`.
+- Patient phone numbers are unique per center through `@@unique([centerId, phone])`; the same phone can exist in another center.
+- Patient lookup indexes include `centerId`, `centerId/status`, `centerId/fullName`, and `centerId/createdAt`.
 
 RBAC strategy:
 - `Permission` defines atomic permission keys.
@@ -116,6 +129,8 @@ RBAC strategy:
 
 Subscription control:
 - `Subscription` includes `status`, `billingInterval`, `currentPeriodStart`, `currentPeriodEnd`, `trialEndsAt`, `expiresAt`, `cancelAt`, and `cancelledAt`.
+- Manual billing fields on `Subscription` include `nextRenewalDate` and `billingNotes`.
+- RoyalCare does not implement online payment gateway fields; subscription management is manual/direct billing only.
 - Indexes support lookup by center/status, center/current-period-end, expiry, and period end.
 
 Domain control:
@@ -131,6 +146,7 @@ Needs Confirmation:
 - Whether platform roles and center role templates should be separate tables later.
 - Whether subscriptions need a separate `SubscriptionPlan` table in Phase 2.
 - Whether domain primary uniqueness should be enforced with raw SQL partial indexes.
+- Whether future staff scheduling/bookability should become a dedicated `StaffMember` profile model linked to `User`.
 
 ### 3.0.1 Phase 2 Implementation Notes
 
@@ -140,7 +156,8 @@ Tenant strategy:
 - Customer, service, appointment, session, notification, dynamic page, and branding records are all center-owned.
 
 Multilingual strategy:
-- `Service.name` and `Service.description` use JSON to support `ar`, `he`, and `en`.
+- Tenant Services now use explicit multilingual columns: `nameEn`, `nameAr`, `nameHe`, `descriptionEn`, `descriptionAr`, and `descriptionHe`.
+- Only the center default language from `Center.primaryLanguage` is required for Tenant Services; other language fields are optional and can be filled later.
 - `DynamicPage.title`, `DynamicPage.content`, `DynamicPage.seoTitle`, and `DynamicPage.seoDescription` use JSON for multilingual website content.
 - `Notification.title` and `Notification.body` use JSON for multilingual message content.
 - `BrandingSettings.defaultLanguage` uses `SupportedLanguage`.
@@ -148,9 +165,11 @@ Multilingual strategy:
 
 Business scope:
 - Customer identity, service catalog, booking records, session records, notifications, dynamic pages, and branding settings are now represented.
+- Patient management is now represented separately from the older conceptual Customer model for the tenant dashboard foundation.
 - Payments are not included.
 - Medical diagnosis details are not included.
-- Staff scheduling is not included yet.
+- Appointment scheduling foundation is implemented for patient, service, provider, date/time, status, cancellation, and follow-up notes.
+- Advanced staff availability/working-hours rules are not included yet.
 
 ### 3.1 Center
 
@@ -162,7 +181,7 @@ Fields:
 - `ownerUserId` nullable
 - `name`
 - `slug`
-- `centerType`
+- `type`
 - `status`
 - `primaryLanguage`
 - `timezone`
@@ -179,6 +198,9 @@ Relationships:
 - Has many appointments
 - Has branding settings
 - Has enabled modules
+- Has many internal Super Admin notes
+- Has many tenant services
+- Has many tenant patients
 
 Statuses:
 - `trial`
@@ -247,6 +269,28 @@ Needs Confirmation:
 - Currency.
 - Whether pricing differs by country or center type.
 
+### 3.3.1 CenterInternalNote
+
+Purpose:
+- Stores private RoyalCare Super Admin notes for a center.
+
+Fields:
+- `id`
+- `centerId`
+- `authorId`
+- `note`
+- `createdAt`
+- `updatedAt`
+
+Relationships:
+- Belongs to one `Center`
+- Belongs to one author `User`
+
+Rules:
+- Notes are for Super Admin support/operations only.
+- Notes must not be returned from center owner/admin, customer portal, or public APIs.
+- API responses must select the author through `safeUserSelect` and never expose passwords, password hashes, tokens, secrets, or auth-adjacent metadata.
+
 ### 3.4 Subscription
 
 Purpose:
@@ -263,17 +307,17 @@ Fields:
 - `currentPeriodEnd`
 - `trialEndsAt`
 - `expiresAt`
+- `nextRenewalDate`
+- `billingNotes`
 - `cancelAt`
 - `cancelledAt`
-- `externalProvider`
-- `externalSubscriptionId`
 - `metadata`
 - `createdAt`
 - `updatedAt`
 
 Needs Confirmation:
-- Payment provider.
-- Whether manual/offline subscriptions are supported.
+- Manual/direct payment collection workflow.
+- Manual/offline subscriptions are currently supported; online gateway fields remain out of scope.
 
 ### 3.5 ModuleDefinition
 
@@ -442,17 +486,25 @@ Purpose:
 Fields:
 - `id`
 - `centerId`
-- `name` JSON translations
-- `description` JSON translations
+- `nameEn`
+- `nameAr`
+- `nameHe`
+- `descriptionEn`
+- `descriptionAr`
+- `descriptionHe`
 - `durationMinutes`
 - `price`
 - `currency`
-- `category`
-- `status`
-- `sortOrder`
+- `isActive`
 - `createdAt`
 - `updatedAt`
 - `archivedAt`
+
+Rules:
+- Services are private tenant ERP records by default and are not public website data until a future public-services API explicitly exposes active/published records.
+- Tenant Services must always be queried through the authenticated session `centerId`.
+- Only the center default language is required for service name/description; non-default languages are optional.
+- Pricing is manual metadata only. No online payment gateway, checkout, card, Stripe, PayPal, or provider fields exist.
 
 Needs Confirmation:
 - Whether packages/bundles are needed in v1.
@@ -461,6 +513,15 @@ Needs Confirmation:
 
 Purpose:
 - Represents staff who can perform services or manage appointments.
+
+Implementation status:
+- A dedicated `StaffMember` profile table is not implemented.
+- Current tenant staff management uses `User`, `Role`, and `UserRole`.
+- Staff details exposed to tenant UI are safe user fields only: `id`, `fullName`, `email`, `role`, `roleName`, `status`, `assignmentStatus`, `createdAt`, and `updatedAt`.
+- Staff create requires `fullName`, `email`, `role`, and password.
+- Staff edit supports `fullName`, `email`, `role`, `status`, and optional password.
+- Activate/deactivate uses `User.status` plus matching active/inactive `UserRole.status`; no hard delete is implemented.
+- Provider-capable appointment roles are `DOCTOR`, `STAFF`, and `CENTER_MANAGER`.
 
 Fields:
 - `id`
@@ -479,42 +540,67 @@ Fields:
 ### 3.15 Appointment
 
 Purpose:
-- Represents booking records.
+- Represents tenant appointment booking records for Patient -> Service -> Provider/Doctor -> Time -> Status workflows.
 
 Fields:
 - `id`
 - `centerId`
-- `customerId`
-- `serviceId` nullable
-- `startsAt`
-- `endsAt`
+- `patientId`
+- `serviceId`
+- `staffUserId`
+- `createdByUserId`
+- `appointmentDate`
+- `startTime`
+- `endTime`
+- `durationMinutes`
 - `status`
-- `source`
-- `language`
 - `notes`
+- `internalNotes`
+- `isCancelled`
+- `cancellationReason`
+- `reminderSent`
 - `cancelledAt`
 - `completedAt`
 - `createdAt`
 - `updatedAt`
 
 Statuses:
-- `requested`
-- `confirmed`
-- `completed`
-- `cancelled`
-- `no_show`
+- `SCHEDULED`
+- `CONFIRMED`
+- `IN_PROGRESS`
+- `COMPLETED`
+- `CANCELLED`
+- `NO_SHOW`
 
-Sources:
-- `admin`
-- `website`
-- `customer_portal`
-- `import`
+Relations:
+- Belongs to one `Center`.
+- Belongs to one `Patient`.
+- Belongs to one tenant `Service`.
+- Belongs to one provider/staff `User`.
+- Belongs to one creator `User`.
+- May have many `Session` records later.
+
+Indexes:
+- `centerId, status`
+- `centerId, appointmentDate`
+- `centerId, staffUserId, appointmentDate`
+- `centerId, patientId, appointmentDate`
+- `serviceId`
+- `createdByUserId`
+
+Rules:
+- Appointments are tenant-owned and must always be scoped by authenticated session `centerId`.
+- Appointments cannot exist without patient, service, provider, and creator references.
+- Cancelled appointments remain visible historically through `status = CANCELLED`, `isCancelled = true`, `cancelledAt`, and `cancellationReason`.
+- No hard delete is implemented for tenant appointments.
+- The database stores manual scheduling data only. No online payment fields exist.
 
 Needs Confirmation:
-- Whether appointments require approval or can be auto-confirmed.
-- Cancellation rules.
-- Reminder schedule.
-- Staff assignment/scheduling model.
+- Working hours rules.
+- Staff availability rules.
+- Booking lead time.
+- Cancellation window.
+- Reminder delivery schedule.
 
 ### 3.16 Session
 
@@ -611,6 +697,8 @@ Fields:
 Rules:
 - One branding settings record per center.
 - `enabledLanguages` should contain supported language codes: `ar`, `he`, `en`.
+- `logoUrl` is the source for center-branded tenant login and tenant shell identity.
+- If `logoUrl` is null, tenant UI should use center initials rather than platform branding.
 
 ### 3.20 Notification
 
@@ -708,11 +796,14 @@ Recommended indexes:
 - Unique `Domain.hostname`
 - Unique `Center.slug`
 - Center lookup by `slug/status`
-- Appointment by `centerId`, `startsAt`
+- Appointment by `centerId, appointmentDate`
+- Appointment by `centerId, staffUserId, appointmentDate`
+- Appointment by `centerId, patientId, appointmentDate`
 - Customer by `centerId`, `phone`
 - Customer by `centerId`, `email`
 - DynamicPage unique by `centerId`, `slug`
 - Service by `centerId`, `status`
+- Tenant Service by `centerId`, `isActive`, and localized service names
 - Session by `centerId`, `performedAt`
 - Notification by `centerId`, `status`
 - Subscription by `centerId/status`, `centerId/currentPeriodEnd`, and `status/expiresAt`
@@ -729,6 +820,8 @@ Mandatory:
 - Customer users can only access their own customer record within a center.
 - Super Admin can access global records and tenant records for support/admin purposes.
 - Every API must apply tenant isolation before returning data.
+- Dedicated tenant login at `/c/[centerSlug]/login` must resolve the center by slug and then authenticate only active users assigned to that same center.
+- Suspended, cancelled, and archived centers are blocked from tenant login.
 
 ## 7. Migration Policy
 
@@ -737,3 +830,97 @@ Recommended:
 - Never manually edit production database schema.
 - Review tenant isolation impact for every new model.
 - Add indexes during migration design, not after performance issues appear.
+
+## 8. Implemented Tenant Services Model
+
+Status: Implemented for Tenant Services Management.
+
+Fields:
+- `id`
+- `centerId`
+- `nameEn`
+- `nameAr`
+- `nameHe`
+- `descriptionEn`
+- `descriptionAr`
+- `descriptionHe`
+- `durationMinutes`
+- `price`
+- `currency`
+- `isActive`
+- `createdAt`
+- `updatedAt`
+- `archivedAt`
+
+Relations:
+- `Service` belongs to one `Center`.
+- `Center` has many services.
+- Existing appointment/session relations can reference a service.
+
+Indexes:
+- `centerId`
+- `centerId, isActive`
+- `centerId, nameEn`
+- `centerId, nameAr`
+- `centerId, nameHe`
+
+Rules:
+- Services are tenant-owned and must always be scoped by authenticated session `centerId`.
+- Services use manual pricing metadata only. No online payment gateway, checkout, card, Stripe, PayPal, or provider fields exist.
+
+## 9. Implemented Invoice Model
+
+Status: Implemented for Tenant Billing Management (manual payments only).
+
+Prisma enum:
+- `InvoiceStatus`: `PENDING`, `PAID`, `CANCELLED`
+
+Fields:
+- `id` UUID primary key
+- `centerId` UUID, tenant isolation key
+- `patientId` UUID, links to `Patient`
+- `serviceId` UUID, links to `Service`
+- `staffUserId` UUID nullable, links to staff `User`
+- `amount` `Decimal @db.Decimal(12, 2)`
+- `currency` `VarChar(10)`, default `ILS`
+- `status` `InvoiceStatus`, default `PENDING`
+- `notes` nullable text
+- `createdAt` auto timestamp
+- `updatedAt` auto-updated timestamp
+
+Relations:
+- `center` belongs to one `Center` with cascade delete
+- `patient` belongs to one `Patient` with restrict delete
+- `service` belongs to one `Service` with restrict delete
+- `staff` belongs to one `User` (named relation `InvoiceStaff`) with set-null on delete, nullable
+
+Back-relations added:
+- `User.staffInvoices Invoice[] @relation("InvoiceStaff")`
+- `Center.invoices Invoice[]`
+- `Patient.invoices Invoice[]`
+- `Service.invoices Invoice[]`
+
+Indexes:
+- `centerId`
+- `centerId, status`
+- `centerId, patientId`
+- `centerId, createdAt`
+- `serviceId`
+- `staffUserId`
+
+Status machine:
+- `PENDING` → `PAID` (requires `billing.mark_paid` permission)
+- `PENDING` → `CANCELLED` (requires `billing.update` permission)
+- `PAID` → `CANCELLED` only (requires `billing.update` permission)
+- `CANCELLED` → no transitions allowed
+
+Amount serialization:
+- Prisma returns `Decimal` objects; `formatInvoice()` calls `.toString()` on both `invoice.amount` and `service.price` before returning API JSON responses.
+- Frontend receives `amount` and `service.price` as strings.
+
+Rules:
+- Invoices are tenant-owned and must always be scoped by authenticated session `centerId`.
+- No online payment gateway, checkout, card, Stripe, PayPal, or provider fields exist.
+- Manual payments only; status transitions are recorded manually by authorized staff.
+- A cancelled invoice cannot be updated further.
+- A paid invoice can only be cancelled.

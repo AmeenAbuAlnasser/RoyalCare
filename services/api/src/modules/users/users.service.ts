@@ -1,5 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
+import { safeUserSelect } from '../../common/database/safe-user-select';
+import { hashPassword } from '../../common/security/password-hashing';
 import { parsePagination } from '../../common/utils/pagination';
 import type { Prisma } from '../../../../../packages/database/node_modules/@prisma/client';
 import { AssignCenterRoleDto } from './dto/assign-center-role.dto';
@@ -35,7 +37,8 @@ export class UsersService {
         orderBy: { createdAt: 'desc' },
         skip,
         take,
-        include: {
+        select: {
+          ...safeUserSelect,
           roles: {
             where: { status: ACTIVE_USER_ROLE_STATUS },
             include: { center: true, role: true },
@@ -55,7 +58,8 @@ export class UsersService {
     const prisma = await this.prisma.getClient();
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      include: {
+      select: {
+        ...safeUserSelect,
         ownedCenters: true,
         roles: {
           include: { center: true, role: true },
@@ -73,15 +77,19 @@ export class UsersService {
 
   async create(dto: CreateUserDto) {
     const prisma = await this.prisma.getClient();
+    const passwordHash = dto.password
+      ? await hashPassword(dto.password)
+      : undefined;
 
     return prisma.user.create({
       data: {
         email: dto.email,
         phone: dto.phone,
-        passwordHash: dto.passwordHash,
+        passwordHash,
         fullName: dto.fullName,
         status: dto.status ?? DEFAULT_USER_STATUS,
       },
+      select: safeUserSelect,
     });
   }
 
@@ -110,7 +118,7 @@ export class UsersService {
       include: {
         center: true,
         role: true,
-        user: true,
+        user: { select: safeUserSelect },
       },
     });
   }

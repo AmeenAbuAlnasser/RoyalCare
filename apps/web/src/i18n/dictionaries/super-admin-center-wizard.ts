@@ -112,8 +112,10 @@ export type CenterWizardDictionary = {
   };
   validation: {
     invalidEmail: string;
+    invalidPhone: string;
     passwordMismatch: string;
     requiredField: string;
+    shortPassword: string;
   };
   dateParts: {
     day: string;
@@ -303,8 +305,10 @@ export const superAdminCenterWizardDictionaries: Record<
     },
     validation: {
       invalidEmail: "Enter a valid email address.",
+      invalidPhone: "Enter a valid phone number.",
       passwordMismatch: "Passwords do not match.",
       requiredField: "Required",
+      shortPassword: "Password must be at least 8 characters.",
     },
     dateParts: {
       day: "Day",
@@ -493,8 +497,10 @@ export const superAdminCenterWizardDictionaries: Record<
     },
     validation: {
       invalidEmail: "أدخل بريدًا إلكترونيًا صالحًا.",
+      invalidPhone: "أدخل رقم هاتف صالحًا.",
       passwordMismatch: "كلمتا المرور غير متطابقتين.",
       requiredField: "مطلوب",
+      shortPassword: "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل.",
     },
     dateParts: {
       day: "اليوم",
@@ -683,8 +689,10 @@ export const superAdminCenterWizardDictionaries: Record<
     },
     validation: {
       invalidEmail: "יש להזין כתובת אימייל תקינה.",
+      invalidPhone: "יש להזין מספר טלפון תקין.",
       passwordMismatch: "הסיסמאות אינן תואמות.",
       requiredField: "שדה חובה",
+      shortPassword: "הסיסמה חייבת להכיל לפחות 8 תווים.",
     },
     dateParts: {
       day: "יום",

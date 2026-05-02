@@ -23,6 +23,7 @@ export type SuperAdminActionMenuItem = {
   href?: string;
   icon: SuperAdminActionIcon;
   label: string;
+  onSelect?: () => void;
   tone?: "default" | "danger" | "warning" | "success";
 };
 
@@ -210,7 +211,10 @@ function MenuItem({
   return (
     <button
       className={className}
-      onClick={onClose}
+      onClick={() => {
+        item.onSelect?.();
+        onClose?.();
+      }}
       role="menuitem"
       type="button"
     >

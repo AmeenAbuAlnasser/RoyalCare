@@ -88,6 +88,7 @@ Current folder status:
 
 Web app baseline:
 - Location: `apps/web`
+- Local development script runs Next.js on port `3002` so the NestJS API can consistently own port `3001`.
 - Initialized with `create-next-app@16.2.4`
 - Uses Next.js `16.2.4`
 - Uses React `19.2.4`

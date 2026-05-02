@@ -57,6 +57,8 @@ type UsersDictionary = {
     edit: string;
     suspend: string;
     resetPassword: string;
+    forcePasswordChange: string;
+    sendWelcomeEmail: string;
     delete: string;
   };
   roles: {
@@ -92,7 +94,10 @@ type UsersDictionary = {
   };
 };
 
-export const superAdminUsersDictionaries: Record<SupportedLocale, UsersDictionary> = {
+export const superAdminUsersDictionaries: Record<
+  SupportedLocale,
+  UsersDictionary
+> = {
   en: {
     brand: { name: "RoyalCare", console: "Super Admin" },
     languages: { en: "English", ar: "Arabic", he: "Hebrew" },
@@ -110,7 +115,8 @@ export const superAdminUsersDictionaries: Record<SupportedLocale, UsersDictionar
     header: {
       eyebrow: "Platform access",
       title: "Users Management",
-      subtitle: "Manage RoyalCare platform users, roles, status, departments, and access actions.",
+      subtitle:
+        "Manage RoyalCare platform users, roles, status, departments, and access actions.",
       language: "Language",
       account: "Platform Admin",
     },
@@ -150,6 +156,8 @@ export const superAdminUsersDictionaries: Record<SupportedLocale, UsersDictionar
       edit: "Edit",
       suspend: "Suspend",
       resetPassword: "Reset Password",
+      forcePasswordChange: "Force Password Change",
+      sendWelcomeEmail: "Send Welcome Email",
       delete: "Delete",
     },
     roles: {
@@ -181,7 +189,8 @@ export const superAdminUsersDictionaries: Record<SupportedLocale, UsersDictionar
     values: {
       mobileHint: "Mobile uses user cards with one Actions menu per user.",
       neverLoggedIn: "Never logged in",
-      rolePreviewHint: "Platform roles control RoyalCare staff access only, not center customer access.",
+      rolePreviewHint:
+        "Platform roles control RoyalCare staff access only, not center customer access.",
     },
   },
   ar: {
@@ -201,7 +210,8 @@ export const superAdminUsersDictionaries: Record<SupportedLocale, UsersDictionar
     header: {
       eyebrow: "وصول المنصة",
       title: "إدارة المستخدمين",
-      subtitle: "إدارة مستخدمي منصة رويال كير والأدوار والحالات والأقسام وإجراءات الوصول.",
+      subtitle:
+        "إدارة مستخدمي منصة رويال كير والأدوار والحالات والأقسام وإجراءات الوصول.",
       language: "اللغة",
       account: "مدير المنصة",
     },
@@ -241,6 +251,8 @@ export const superAdminUsersDictionaries: Record<SupportedLocale, UsersDictionar
       edit: "تعديل",
       suspend: "إيقاف",
       resetPassword: "إعادة تعيين كلمة المرور",
+      forcePasswordChange: "فرض تغيير كلمة المرور",
+      sendWelcomeEmail: "إرسال بريد الترحيب",
       delete: "حذف",
     },
     roles: {
@@ -270,9 +282,11 @@ export const superAdminUsersDictionaries: Record<SupportedLocale, UsersDictionar
       saraLevi: "سارة ليفي",
     },
     values: {
-      mobileHint: "في الجوال يظهر المستخدمون كبطاقات مع قائمة إجراءات واحدة لكل مستخدم.",
+      mobileHint:
+        "في الجوال يظهر المستخدمون كبطاقات مع قائمة إجراءات واحدة لكل مستخدم.",
       neverLoggedIn: "لم يسجل الدخول",
-      rolePreviewHint: "أدوار المنصة تتحكم بوصول فريق رويال كير فقط، وليس وصول عملاء المراكز.",
+      rolePreviewHint:
+        "أدوار المنصة تتحكم بوصول فريق رويال كير فقط، وليس وصول عملاء المراكز.",
     },
   },
   he: {
@@ -292,7 +306,8 @@ export const superAdminUsersDictionaries: Record<SupportedLocale, UsersDictionar
     header: {
       eyebrow: "גישת מערכת",
       title: "ניהול משתמשים",
-      subtitle: "ניהול משתמשי פלטפורמת RoyalCare, תפקידים, סטטוסים, מחלקות ופעולות גישה.",
+      subtitle:
+        "ניהול משתמשי פלטפורמת RoyalCare, תפקידים, סטטוסים, מחלקות ופעולות גישה.",
       language: "שפה",
       account: "מנהל מערכת",
     },
@@ -332,6 +347,8 @@ export const superAdminUsersDictionaries: Record<SupportedLocale, UsersDictionar
       edit: "עריכה",
       suspend: "השעיה",
       resetPassword: "איפוס סיסמה",
+      forcePasswordChange: "חובת שינוי סיסמה",
+      sendWelcomeEmail: "שליחת אימייל ברוכים הבאים",
       delete: "מחיקה",
     },
     roles: {
@@ -361,9 +378,11 @@ export const superAdminUsersDictionaries: Record<SupportedLocale, UsersDictionar
       saraLevi: "שרה לוי",
     },
     values: {
-      mobileHint: "במובייל המשתמשים מוצגים ככרטיסים עם תפריט פעולות אחד לכל משתמש.",
+      mobileHint:
+        "במובייל המשתמשים מוצגים ככרטיסים עם תפריט פעולות אחד לכל משתמש.",
       neverLoggedIn: "לא התחבר",
-      rolePreviewHint: "תפקידי המערכת שולטים בגישת צוות RoyalCare בלבד, לא בגישת לקוחות המרכזים.",
+      rolePreviewHint:
+        "תפקידי המערכת שולטים בגישת צוות RoyalCare בלבד, לא בגישת לקוחות המרכזים.",
     },
   },
 };

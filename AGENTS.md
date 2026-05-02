@@ -77,6 +77,11 @@ Planned stack:
 - Colors must follow RoyalCare branding with strong contrast, no random colors, and a premium SaaS feel.
 - Typography must have clear hierarchy, readable sizes, and no weak tiny text.
 - Hover, active, and navigation states must be professional, visible, and enterprise-grade.
+- No generic user-facing errors are allowed. Never show users messages such as `Internal server error`, `Something went wrong`, or `API error`.
+- All user-facing form errors must be clear, non-technical, translated, and tied to the exact field key, such as `centerName`, `adminEmail`, `adminPhone`, `subscriptionPlan`, `startDate`, `expiryDate`, or `domain`.
+- Backend validation errors must return structured field errors in the shape `{ message: "Validation failed", errors: { fieldName: "Readable message" } }` or a localized equivalent, and Prisma errors such as `P2002` must be mapped to field-specific duplicate messages.
+- Frontend forms must show field-level errors under the relevant input and use top alert summaries only when useful; technical details may be logged for debugging but must never be exposed to normal users.
+- Arabic, Hebrew, and English error messages must be supported for Add New Center Wizard, Users forms, Subscriptions forms, Domains forms, Plans forms, and all future forms.
 - Final UI quality question: would this be acceptable for a paid enterprise SaaS platform? If no, redesign is required.
 
 ## 5. Memory Maintenance Rules

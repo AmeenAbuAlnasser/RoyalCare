@@ -3,6 +3,16 @@ export const API_BASE_URL =
   process.env.NEXT_PUBLIC_ROYALCARE_API_URL ??
   "http://localhost:3001/api/v1";
 
+function getSuperAdminUserHeader(): Record<string, string> {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  const userId = window.localStorage.getItem("royalcare.superAdminUserId");
+
+  return userId ? { "x-royalcare-super-admin-user-id": userId } : {};
+}
+
 export type ApiCenterStatus =
   | "TRIAL"
   | "ACTIVE"
@@ -29,10 +39,14 @@ export type ApiCenter = {
   status: ApiCenterStatus;
   primaryLanguage: ApiLanguage;
   createdAt: string;
+  updatedAt: string;
   owner?: {
+    createdAt?: string;
     email?: string | null;
     fullName: string;
+    id?: string;
     phone?: string | null;
+    status?: string;
   } | null;
   branding?: {
     defaultLanguage: ApiLanguage;
@@ -42,16 +56,28 @@ export type ApiCenter = {
   } | null;
   subscriptions?: Array<{
     billingInterval: "MONTHLY" | "YEARLY" | "CUSTOM";
+    createdAt?: string;
     currentPeriodEnd: string;
     currentPeriodStart: string;
     planCode: string;
     planName: string;
-    status: string;
+    status:
+      | "TRIALING"
+      | "ACTIVE"
+      | "PAST_DUE"
+      | "SUSPENDED"
+      | "CANCELLED"
+      | "EXPIRED";
+    updatedAt?: string;
+    nextRenewalDate?: string | null;
+    billingNotes?: string | null;
   }>;
   domains?: Array<{
+    createdAt?: string;
     hostname: string;
-    status: string;
-    type: string;
+    status: "PENDING" | "VERIFIED" | "ACTIVE" | "FAILED" | "DISABLED";
+    type: "CUSTOM" | "SUBDOMAIN";
+    updatedAt?: string;
   }>;
   userRoles?: Array<{
     role?: {
@@ -59,9 +85,12 @@ export type ApiCenter = {
       name: string;
     };
     user?: {
+      createdAt?: string;
       email?: string | null;
       fullName: string;
+      id?: string;
       phone?: string | null;
+      status?: string;
     };
   }>;
 };
@@ -102,12 +131,159 @@ export type CreateCenterPayload = {
   type: ApiCenterType;
 };
 
+export type UpdateCenterPayload = {
+  admin?: {
+    email?: string;
+    fullName?: string;
+    phone?: string;
+  };
+  centerName?: string;
+  domain?: {
+    hostname?: string;
+    isPrimary?: boolean;
+    status?: "PENDING" | "VERIFIED" | "ACTIVE" | "FAILED" | "DISABLED";
+    type?: "CUSTOM" | "SUBDOMAIN";
+  };
+  primaryLanguage?: ApiLanguage;
+  status?: ApiCenterStatus;
+  subscription?: {
+    billingInterval?: "MONTHLY" | "YEARLY" | "CUSTOM";
+    currentPeriodEnd?: string;
+    currentPeriodStart?: string;
+    planCode?: string;
+    planName?: string;
+    status?: "TRIALING" | "ACTIVE" | "PAST_DUE" | "SUSPENDED" | "CANCELLED" | "EXPIRED";
+  };
+  type?: ApiCenterType;
+};
+
+export type ApiCenterInternalNote = {
+  id: string;
+  centerId: string;
+  note: string;
+  createdAt: string;
+  updatedAt: string;
+  author: {
+    createdAt?: string;
+    email?: string | null;
+    fullName: string;
+    id: string;
+    phone?: string | null;
+    status?: string;
+  };
+};
+
+export type ApiCenterStaffRole =
+  | "CENTER_OWNER"
+  | "CENTER_MANAGER"
+  | "DOCTOR"
+  | "RECEPTIONIST"
+  | "ACCOUNTANT"
+  | "STAFF";
+
+export type ApiCenterStaffStatus =
+  | "INVITED"
+  | "ACTIVE"
+  | "INACTIVE"
+  | "SUSPENDED";
+
+export type ApiCenterStaffUser = {
+  id: string;
+  fullName: string;
+  email?: string | null;
+  phone?: string | null;
+  role: ApiCenterStaffRole;
+  roleName?: string;
+  status: ApiCenterStaffStatus;
+  assignmentStatus?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CenterStaffPayload = {
+  email: string;
+  fullName: string;
+  phone: string;
+  role: ApiCenterStaffRole;
+  status?: ApiCenterStaffStatus;
+};
+
+export type UpdateCenterStatusPayload = {
+  reason?: string;
+  status: "ACTIVE" | "SUSPENDED" | "CANCELLED" | "INACTIVE";
+};
+
+export type UpdateCenterSubscriptionPayload = {
+  billingNotes?: string;
+  nextRenewalDate?: string;
+  subscriptionEndDate?: string;
+  subscriptionPlan?: "BASIC" | "STANDARD" | "PREMIUM" | "ENTERPRISE" | string;
+  subscriptionStartDate?: string;
+  subscriptionStatus?:
+    | "TRIAL"
+    | "ACTIVE"
+    | "EXPIRED"
+    | "OVERDUE"
+    | "CANCELLED"
+    | string;
+};
+
+export class ApiRequestError extends Error {
+  details: unknown;
+  rawResponseBody: string;
+  status: number;
+
+  constructor({
+    details,
+    message,
+    rawResponseBody,
+    status,
+  }: {
+    details: unknown;
+    message: string;
+    rawResponseBody: string;
+    status: number;
+  }) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.details = details;
+    this.rawResponseBody = rawResponseBody;
+    this.status = status;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function stringifyErrorValue(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(stringifyErrorValue).filter(Boolean).join(", ");
+  }
+
+  if (isRecord(value)) {
+    const localizedMessage =
+      value.en ?? value.ar ?? value.he ?? value.message ?? value.error;
+
+    if (typeof localizedMessage === "string") {
+      return localizedMessage;
+    }
+
+    return Object.values(value)
+      .map(stringifyErrorValue)
+      .filter(Boolean)
+      .join(", ");
+  }
+
+  return "";
+}
+
 function getErrorMessage(details: unknown) {
-  if (
-    details &&
-    typeof details === "object" &&
-    "message" in details
-  ) {
+  if (details && typeof details === "object" && "message" in details) {
     const message = (details as { message?: unknown }).message;
 
     if (typeof message === "string") {
@@ -123,10 +299,20 @@ function getErrorMessage(details: unknown) {
       const errors = (message as { errors?: unknown }).errors;
 
       if (typeof nestedMessage === "string") {
-        return typeof errors === "object" && errors
-          ? `${nestedMessage} ${Object.values(errors).join(", ")}`
+        const errorMessage = stringifyErrorValue(errors);
+
+        return errorMessage
+          ? `${nestedMessage} ${errorMessage}`
           : nestedMessage;
       }
+    }
+  }
+
+  if (isRecord(details) && "errors" in details) {
+    const errorMessage = stringifyErrorValue(details.errors);
+
+    if (errorMessage) {
+      return errorMessage;
     }
   }
 
@@ -157,9 +343,12 @@ function safelyParseJson(rawBody: string) {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${API_BASE_URL}${path}`;
+  const headers = new Headers(init?.headers);
+  headers.set("Content-Type", "application/json");
 
-  // TODO(debug): Remove after Create Center submit flow is verified in browser Network tab.
-  console.log("[RoyalCare submit debug] API URL", url);
+  for (const [key, value] of Object.entries(getSuperAdminUserHeader())) {
+    headers.set(key, value);
+  }
 
   let response: Response;
 
@@ -167,34 +356,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     response = await fetch(url, {
       ...init,
       credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        ...init?.headers,
-      },
+      headers,
     });
   } catch (error) {
-    // TODO(debug): Remove after Create Center submit flow is verified in browser Network tab.
-    console.error("[RoyalCare submit debug] fetch failed", {
-      error,
-      message: error instanceof Error ? error.message : String(error),
-      name: error instanceof Error ? error.name : "UnknownFetchError",
-      stack: error instanceof Error ? error.stack : undefined,
-      url,
-    });
-
     throw error;
   }
 
   if (!response.ok) {
     const rawBody = await response.text().catch((error: unknown) => {
-      // TODO(debug): Remove after Create Center submit flow is verified in browser Network tab.
-      console.error("[RoyalCare submit debug] failed to read API error body", {
-        error,
-        message: error instanceof Error ? error.message : String(error),
-        status: response.status,
-        url,
-      });
-
+      void error;
       return "";
     });
     const parsedJsonBody = safelyParseJson(rawBody);
@@ -203,41 +373,132 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       rawBody ||
       `RoyalCare API request failed with status ${response.status}.`;
 
-    // TODO(debug): Remove after Create Center submit flow is verified in browser Network tab.
-    console.error("[RoyalCare submit debug] API error", {
+    throw new ApiRequestError({
       details: parsedJsonBody,
       message,
-      parsedJsonBody,
       rawResponseBody: rawBody,
-      statusText: response.statusText,
       status: response.status,
-      url,
     });
-
-    throw new Error(message);
   }
 
-  const data = (await response.json()) as T;
-
-  // TODO(debug): Remove after Create Center submit flow is verified in browser Network tab.
-  console.log("[RoyalCare submit debug] API response", data);
-
-  return data;
+  return (await response.json()) as T;
 }
 
 export function listSuperAdminCenters() {
   return request<{ data: ApiCenter[]; pagination: { total: number } }>(
-    "/super-admin/centers?pageSize=100",
+    "/centers?pageSize=100",
   );
 }
 
 export function getSuperAdminCenter(centerId: string) {
-  return request<ApiCenter>(`/super-admin/centers/${centerId}`);
+  return request<ApiCenter>(`/centers/${centerId}`);
 }
 
 export function createSuperAdminCenter(payload: CreateCenterPayload) {
   return request<ApiCenter>("/centers", {
     body: JSON.stringify(payload),
     method: "POST",
+  });
+}
+
+export function updateSuperAdminCenter(
+  centerId: string,
+  payload: UpdateCenterPayload,
+) {
+  return request<ApiCenter>(`/centers/${centerId}`, {
+    body: JSON.stringify(payload),
+    method: "PATCH",
+  });
+}
+
+export function listCenterInternalNotes(centerId: string) {
+  return request<{ data: ApiCenterInternalNote[] }>(
+    `/centers/${centerId}/internal-notes`,
+  );
+}
+
+export function createCenterInternalNote(centerId: string, note: string) {
+  return request<ApiCenterInternalNote>(`/centers/${centerId}/internal-notes`, {
+    body: JSON.stringify({ note }),
+    method: "POST",
+  });
+}
+
+export function listCenterStaff(centerId: string) {
+  return request<{ data: ApiCenterStaffUser[] }>(`/centers/${centerId}/staff`);
+}
+
+export function createCenterStaff(
+  centerId: string,
+  payload: CenterStaffPayload,
+) {
+  return request<ApiCenterStaffUser>(`/centers/${centerId}/staff`, {
+    body: JSON.stringify(payload),
+    method: "POST",
+  });
+}
+
+export function updateCenterStaff(
+  centerId: string,
+  userId: string,
+  payload: Partial<CenterStaffPayload>,
+) {
+  return request<ApiCenterStaffUser>(`/centers/${centerId}/staff/${userId}`, {
+    body: JSON.stringify(payload),
+    method: "PATCH",
+  });
+}
+
+export function updateCenterStaffStatus(
+  centerId: string,
+  userId: string,
+  status: ApiCenterStaffStatus,
+) {
+  return request<ApiCenterStaffUser>(
+    `/centers/${centerId}/staff/${userId}/status`,
+    {
+      body: JSON.stringify({ status }),
+      method: "PATCH",
+    },
+  );
+}
+
+export function resetCenterStaffPassword(
+  centerId: string,
+  userId: string,
+  temporaryPassword?: string,
+) {
+  return request<{
+    resetComplete: boolean;
+    temporaryPassword: string;
+    user: ApiCenterStaffUser;
+  }>(
+    `/centers/${centerId}/staff/${userId}/reset-password`,
+    {
+      body: JSON.stringify(
+        temporaryPassword ? { temporaryPassword } : {},
+      ),
+      method: "POST",
+    },
+  );
+}
+
+export function updateSuperAdminCenterStatus(
+  centerId: string,
+  payload: UpdateCenterStatusPayload,
+) {
+  return request<ApiCenter>(`/centers/${centerId}/status`, {
+    body: JSON.stringify(payload),
+    method: "PATCH",
+  });
+}
+
+export function updateSuperAdminCenterSubscription(
+  centerId: string,
+  payload: UpdateCenterSubscriptionPayload,
+) {
+  return request<ApiCenter>(`/centers/${centerId}/subscription`, {
+    body: JSON.stringify(payload),
+    method: "PATCH",
   });
 }
