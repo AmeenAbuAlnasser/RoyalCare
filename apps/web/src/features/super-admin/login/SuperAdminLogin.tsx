@@ -1,9 +1,12 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { RoyalCareLogo } from "@/components/brand/RoyalCareLogo";
 import { buttonClassName } from "@/components/ui/button-styles";
 import { useLanguage } from "@/i18n/LanguageProvider";
 import type { SupportedLocale } from "@/i18n/locales";
+import { loginSuperAdmin } from "@/lib/api/super-admin-auth";
 
 const loginDictionaries: Record<
   SupportedLocale,
@@ -21,8 +24,9 @@ const loginDictionaries: Record<
     password: string;
     passwordPlaceholder: string;
     forgotPassword: string;
-    rememberMe: string;
     login: string;
+    invalidCredentials: string;
+    unexpectedError: string;
     accessNote: string;
   }
 > = {
@@ -42,10 +46,11 @@ const loginDictionaries: Record<
     password: "Password",
     passwordPlaceholder: "Enter your password",
     forgotPassword: "Forgot password?",
-    rememberMe: "Remember me",
-    login: "Login",
+    login: "Sign in",
+    invalidCredentials: "Email or password is incorrect.",
+    unexpectedError: "An error occurred. Please try again.",
     accessNote:
-      "Access is restricted to authorized RoyalCare platform administrators. Authentication integration will be connected in a later backend phase.",
+      "Access is restricted to authorized RoyalCare platform administrators.",
   },
   ar: {
     brand: "رويال كير",
@@ -63,10 +68,11 @@ const loginDictionaries: Record<
     password: "كلمة المرور",
     passwordPlaceholder: "أدخل كلمة المرور",
     forgotPassword: "نسيت كلمة المرور؟",
-    rememberMe: "تذكرني",
     login: "تسجيل الدخول",
+    invalidCredentials: "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
+    unexpectedError: "حدث خطأ. يرجى المحاولة مرة أخرى.",
     accessNote:
-      "الدخول مخصص فقط لمديري منصة رويال كير المصرح لهم. سيتم ربط المصادقة في مرحلة لاحقة من الخلفية.",
+      "الدخول مخصص فقط لمديري منصة رويال كير المصرح لهم.",
   },
   he: {
     brand: "RoyalCare",
@@ -84,16 +90,46 @@ const loginDictionaries: Record<
     password: "סיסמה",
     passwordPlaceholder: "הזינו סיסמה",
     forgotPassword: "שכחת סיסמה?",
-    rememberMe: "זכור אותי",
     login: "כניסה",
+    invalidCredentials: "כתובת האימייל או הסיסמה שגויים.",
+    unexpectedError: "אירעה שגיאה. נסו שוב.",
     accessNote:
-      "הגישה מוגבלת למנהלי מערכת מורשים של RoyalCare. חיבור האימות יתווסף בשלב Backend מאוחר יותר.",
+      "הגישה מוגבלת למנהלי מערכת מורשים של RoyalCare.",
   },
 };
 
 export function SuperAdminLogin() {
   const { direction, locale } = useLanguage();
   const dictionary = loginDictionaries[locale];
+  const router = useRouter();
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setIsLoading(true);
+    try {
+      await loginSuperAdmin(email.trim(), password);
+      router.replace("/super-admin/dashboard");
+    } catch (err: unknown) {
+      console.error("[super-admin-login:error]", err);
+      const status =
+        err && typeof err === "object" && "status" in err
+          ? (err as { status: number }).status
+          : 0;
+      if (status === 401 || status === 403) {
+        setError(dictionary.invalidCredentials);
+      } else {
+        setError(dictionary.unexpectedError);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   return (
     <main
@@ -158,7 +194,13 @@ export function SuperAdminLogin() {
                 {dictionary.subtitle}
               </p>
 
-              <form className="mt-8 space-y-5" action="#">
+              <form className="mt-8 space-y-5" onSubmit={(e) => { void handleSubmit(e); }}>
+                {error && (
+                  <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {error}
+                  </div>
+                )}
+
                 <div>
                   <label
                     className="block text-sm font-medium text-[#24364f]"
@@ -171,6 +213,9 @@ export function SuperAdminLogin() {
                     name="email"
                     type="email"
                     autoComplete="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     placeholder={dictionary.emailPlaceholder}
                     className="mt-2 block h-12 w-full rounded-md border border-[#E5E7EB] bg-white px-3 text-sm text-[#132238] outline-none transition focus:border-[#0B2D5C] focus:ring-3 focus:ring-[#0B2D5C]/12"
                   />
@@ -184,37 +229,26 @@ export function SuperAdminLogin() {
                     >
                       {dictionary.password}
                     </label>
-                    <a
-                      href="#"
-                      className="text-sm font-medium text-[#0B2D5C] hover:text-[#C8A45D]"
-                    >
-                      {dictionary.forgotPassword}
-                    </a>
                   </div>
                   <input
                     id="password"
                     name="password"
                     type="password"
                     autoComplete="current-password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                     placeholder={dictionary.passwordPlaceholder}
                     className="mt-2 block h-12 w-full rounded-md border border-[#E5E7EB] bg-white px-3 text-sm text-[#132238] outline-none transition focus:border-[#0B2D5C] focus:ring-3 focus:ring-[#0B2D5C]/12"
                   />
                 </div>
 
-                <label className="flex items-center gap-2 text-sm text-[#40516a]">
-                  <input
-                    type="checkbox"
-                    name="remember"
-                    className="h-4 w-4 rounded border-[#E5E7EB] text-[#0B2D5C] focus:ring-[#0B2D5C]"
-                  />
-                  {dictionary.rememberMe}
-                </label>
-
                 <button
                   type="submit"
+                  disabled={isLoading}
                   className={buttonClassName("primary", "lg", "w-full")}
                 >
-                  {dictionary.login}
+                  {isLoading ? "…" : dictionary.login}
                 </button>
               </form>
 

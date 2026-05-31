@@ -19,6 +19,7 @@ import { CreateTenantAppointmentDto } from '../dto/create-tenant-appointment.dto
 import { UpdateTenantAppointmentStatusDto } from '../dto/update-tenant-appointment-status.dto';
 import { UpdateTenantAppointmentDto } from '../dto/update-tenant-appointment.dto';
 import { TenantAppointmentsService } from '../services/tenant-appointments.service';
+import { AppointmentReminderService } from '../services/appointment-reminder.service';
 
 function getCookie(request: Request, name: string) {
   const cookieHeader = request.headers.cookie;
@@ -39,6 +40,7 @@ export class TenantAppointmentsController {
   constructor(
     private readonly centerAuthService: CenterAuthService,
     private readonly tenantAppointmentsService: TenantAppointmentsService,
+    private readonly appointmentReminderService: AppointmentReminderService,
   ) {}
 
   @Get()
@@ -53,7 +55,7 @@ export class TenantAppointmentsController {
 
     return this.tenantAppointmentsService.list(
       session.center.id,
-      session.role.key,
+      session.permissions,
       { date, provider, search, status },
     );
   }
@@ -64,7 +66,7 @@ export class TenantAppointmentsController {
 
     return this.tenantAppointmentsService.options(
       session.center.id,
-      session.role.key,
+      session.permissions,
     );
   }
 
@@ -77,9 +79,29 @@ export class TenantAppointmentsController {
 
     return this.tenantAppointmentsService.create(
       session.center.id,
-      session.role.key,
+      session.permissions,
       session.user.id,
       dto,
+    );
+  }
+
+  @Get('availability')
+  async getAvailability(
+    @Req() request: Request,
+    @Query('serviceId') serviceId?: string,
+    @Query('date') date?: string,
+    @Query('providerId') providerId?: string,
+    @Query('excludeAppointmentId') excludeAppointmentId?: string,
+  ) {
+    const session = await this.getSession(request);
+
+    return this.tenantAppointmentsService.getAvailability(
+      session.center.id,
+      session.permissions,
+      serviceId,
+      date,
+      providerId,
+      excludeAppointmentId,
     );
   }
 
@@ -92,7 +114,7 @@ export class TenantAppointmentsController {
 
     return this.tenantAppointmentsService.getById(
       session.center.id,
-      session.role.key,
+      session.permissions,
       appointmentId,
     );
   }
@@ -107,7 +129,8 @@ export class TenantAppointmentsController {
 
     return this.tenantAppointmentsService.update(
       session.center.id,
-      session.role.key,
+      session.permissions,
+      session.user.id,
       appointmentId,
       dto,
     );
@@ -123,7 +146,8 @@ export class TenantAppointmentsController {
 
     return this.tenantAppointmentsService.updateStatus(
       session.center.id,
-      session.role.key,
+      session.permissions,
+      session.user.id,
       appointmentId,
       dto,
     );
@@ -139,9 +163,26 @@ export class TenantAppointmentsController {
 
     return this.tenantAppointmentsService.cancel(
       session.center.id,
-      session.role.key,
+      session.permissions,
+      session.user.id,
       appointmentId,
       dto,
+    );
+  }
+
+  @Post(':appointmentId/reminder')
+  async sendReminder(
+    @Req() request: Request,
+    @Param('appointmentId') appointmentId: string,
+    @Query('locale') locale?: string,
+  ) {
+    const session = await this.getSession(request);
+    const safeLocale = locale === 'ar' || locale === 'he' ? locale : 'en';
+    return this.appointmentReminderService.sendManualReminder(
+      session.center.id,
+      appointmentId,
+      session.permissions,
+      safeLocale,
     );
   }
 

@@ -64,6 +64,9 @@ export class CreateCenterDto {
   branding?: CreateCenterBrandingDto;
   domain?: CreateCenterDomainDto;
   name!: string;
+  nameAr?: string | null;
+  nameEn?: string | null;
+  nameHe?: string | null;
   primaryLanguage?: SupportedLanguage;
   slug?: string;
   status?: CenterStatus;

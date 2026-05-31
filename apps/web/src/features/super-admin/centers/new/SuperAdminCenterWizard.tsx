@@ -64,6 +64,9 @@ type BrandingState = {
 };
 type CenterProfileState = {
   centerName: string;
+  centerNameAr: string;
+  centerNameEn: string;
+  centerNameHe: string;
   customServiceName: string;
   email: string;
   ownerName: string;
@@ -181,6 +184,9 @@ function buildCreateCenterPayload(
         }
       : undefined,
     name: centerProfile.centerName.trim(),
+    nameAr: centerProfile.centerNameAr.trim() || null,
+    nameEn: centerProfile.centerNameEn.trim() || null,
+    nameHe: centerProfile.centerNameHe.trim() || null,
     primaryLanguage: languageApiMap[branding.defaultLanguage],
     slug: slugify(centerProfile.centerName),
     subscription: {
@@ -691,6 +697,30 @@ function renderStepContent(
               placeholder={dictionary.placeholders.centerName}
               value={centerProfile.centerName}
             />
+            <TextInput
+              label={dictionary.fields.centerNameAr}
+              onChange={(centerNameAr) =>
+                onCenterProfileChange({ centerNameAr })
+              }
+              placeholder={dictionary.placeholders.centerNameAr}
+              value={centerProfile.centerNameAr}
+            />
+            <TextInput
+              label={dictionary.fields.centerNameHe}
+              onChange={(centerNameHe) =>
+                onCenterProfileChange({ centerNameHe })
+              }
+              placeholder={dictionary.placeholders.centerNameHe}
+              value={centerProfile.centerNameHe}
+            />
+            <TextInput
+              label={dictionary.fields.centerNameEn}
+              onChange={(centerNameEn) =>
+                onCenterProfileChange({ centerNameEn })
+              }
+              placeholder={dictionary.placeholders.centerNameEn}
+              value={centerProfile.centerNameEn}
+            />
             <SelectInput
               label={dictionary.fields.primaryCategory}
               onChange={(primaryCategory) =>
@@ -1193,6 +1223,9 @@ export function SuperAdminCenterWizard() {
   const [activeStepIndex, setActiveStepIndex] = useState(0);
   const [centerProfile, setCenterProfile] = useState<CenterProfileState>({
     centerName: "",
+    centerNameAr: "",
+    centerNameEn: "",
+    centerNameHe: "",
     customServiceName: "",
     email: "",
     ownerName: "",

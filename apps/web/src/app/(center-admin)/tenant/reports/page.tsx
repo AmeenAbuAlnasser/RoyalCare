@@ -1,5 +1,5 @@
-import { TenantPlaceholderPage } from "@/features/center-admin/placeholders/TenantPlaceholderPage";
+import { TenantReportsPage } from "@/features/center-admin/reports/TenantReportsPage";
 
-export default function TenantReportsPage() {
-  return <TenantPlaceholderPage pageKey="reports" />;
+export default function TenantReportsRoutePage() {
+  return <TenantReportsPage />;
 }

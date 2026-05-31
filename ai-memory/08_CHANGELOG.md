@@ -1,5 +1,841 @@
 # RoyalCare - Changelog
 
+# 2026-05-26 - Center Website Builder v1
+
+Implemented center-controlled homepage section visibility and ordering without changing the public website architecture.
+
+Changed:
+- Added `websiteSectionOrder` and `websiteSectionVisibility` JSON fields to `BrandingSettings` with migration `20260526090000_add_website_builder_settings`.
+- Extended tenant public profile save/load to persist builder settings through the existing `GET/PATCH /api/v1/tenant/public-profile` flow.
+- Extended public center profile payloads so `/c/[slug]` can render from center-owned builder settings.
+- Added a Section Builder card to `/tenant/settings/website` with EN/AR/HE labels, visibility toggles, and drag/drop ordering for Hero, About, Services, Reviews, Before/After, Team, Offers, Gallery, Contact, Working hours, and Social links.
+- Updated `/c/[slug]` homepage rendering to use saved section order and visibility. Hidden sections and empty sections do not render placeholders.
+- Updated center website nav/footer visibility to respect builder settings and available public data.
+
+Verified:
+- Prisma format, validate, generate passed.
+- Local `prisma db push` applied the schema change.
+- API build passed.
+- Web `tsc --noEmit` and production build passed.
+- Focused ESLint on touched web files passed with existing `<img>` warnings only.
+
+# 2026-05-26 - Center Website Builder Stabilization QA Pass
+
+Full integration QA pass across all routes. Two production bugs found and fixed.
+
+Changed:
+- Fixed `apps/web/src/lib/api/tenant-analytics.ts` — replaced inline `const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api/v1"` (missing `NEXT_PUBLIC_ROYALCARE_API_URL` fallback) with `import { API_BASE_URL } from "./super-admin-centers"`. Production environments that set only `NEXT_PUBLIC_ROYALCARE_API_URL` would have sent analytics calls to `localhost:3001` and silently failed.
+- Fixed `apps/web/src/lib/api/tenant-domains.ts` — replaced local three-way `API_BASE` constant with `import { API_BASE_URL as API_BASE } from "./super-admin-centers"` for consistency with all other tenant API files.
+
+Verified (no bugs found):
+- `npx tsc --noEmit` in `apps/web`: CLEAN.
+- All 19 tenant API routes return `401` (auth-gated, route exists): `tenant/appointments`, `tenant/appointments/stats`, `tenant/billing/invoices`, `tenant/services`, `tenant/staff`, `tenant/staff/roles`, `patients`, `tenant/booking-requests`, `tenant/schedule`, `tenant/public-profile`, `tenant/center-gallery`, `tenant/reviews`, `tenant/before-after`, `tenant/settings/marketing`, `tenant/team`, `tenant/offers`, `tenant/seo`, `tenant/domains`, `tenant/marketing/analytics`.
+- Data isolation confirmed: `qa-recovery-1779095621868` and `jenin-care` return different gallery counts, review counts, and branding data. No cross-center leakage.
+- No RoyalCare platform navbar on public center pages (`/c/[slug]/*`).
+- No RoyalCare branding flash on tenant dashboard SPA navigation (fixed in previous session via `(center-admin)/layout.tsx` + `useLayoutEffect`).
+
+# 2026-05-26 - QA Demo Data Seed v1
+
+Added a repeatable QA seed script for the `qa-recovery-1779095621868` center to make all Center Website Builder sections visible.
+
+Changed:
+- NEW `packages/database/prisma/seeds/qa-center.seed.ts` — idempotent seed script for QA center with `deleteMany`+`createMany` for gallery/reviews/before-after/team/offers and `upsert` for BrandingSettings and Services. Uses `PrismaPg` adapter pattern (required by this project's Prisma v7.8.0 setup). Reads `DATABASE_URL` from environment; exits with a clear error if not set.
+- Fixed seed script to use `new PrismaClient({ adapter: new PrismaPg({ connectionString: DB_URL }) })` — matches the project's `PrismaService` pattern; bare `new PrismaClient()` and `datasourceUrl` constructor option are both rejected by this build.
+- Added `seed:qa` npm script to `packages/database/package.json` for convenient re-running.
+- Seed creates: 1 BrandingSettings (purple `#6D4AFF`), 5 services, 6 gallery images, 5 reviews, 4 before/after cases, 4 team members, 3 offers — all published, all with EN/AR/HE content.
+- Seed output confirmed: center found, all 7 sections written, `✅ QA Recovery center seeded successfully!`.
+
+# 2026-05-26 - Smart Contact Widget v1
+
+Added a floating Smart Contact Widget on all public center pages and the booking page.
+
+Changed:
+- Added `CLICK_MAP` and `CLICK_MESSENGER` to `CenterWebsiteEventType` Prisma enum; DB pushed and Prisma client regenerated.
+- Added `CLICK_MAP` and `CLICK_MESSENGER` to `CenterEventType` union in `apps/web/src/lib/marketing/track-center-event.ts`.
+- Added `CLICK_MAP` and `CLICK_MESSENGER` to `VALID_EVENT_TYPES` in `services/api/src/modules/center-analytics/center-analytics.service.ts`.
+- NEW `apps/web/src/components/center/SmartContactWidget.tsx` — shared floating widget component with:
+  - 5 actions: WhatsApp, Phone, Book Now, Google Maps, Messenger (each auto-hidden when center data is missing).
+  - Messenger URL derived from `branding.facebookUrl` via `m.me/` handle extraction; skipped when handle cannot be parsed.
+  - Book Now action omitted on the booking page via `showBook={false}`.
+  - Fixed bottom-right positioning, `z-50`; respects iPhone safe area via `env(safe-area-inset-bottom)`.
+  - Expand/collapse toggle with opacity+translateY CSS transition animation; closes on outside click / Escape.
+  - EN/AR/HE labels; per-item `dir="rtl"` for RTL text rendering.
+  - Center primaryColor used for Book Now button and the toggle button.
+  - All analytics calls fire `trackCenterEvent` with page context; platform tracking not used.
+- Modified `apps/web/src/features/public/centers/CenterProfilePage.tsx` — imports and renders `SmartContactWidget` after footer for all `/c/[slug]` pages.
+- Modified `apps/web/src/features/public/booking/BookingPage.tsx` — imports and renders `SmartContactWidget` with `showBook={false}` for `/c/[slug]/book`.
+
+Verified:
+- `npx tsc --noEmit` passed with no output.
+- DB push accepted enum additions in 217ms; Prisma client regenerated v7.8.0.
+
+# 2026-05-26 - Center Website Analytics Dashboard v1 + Booking Page Navbar Fix
+
+Fixed booking page rendering wrong platform navbar, and added the Center Website Analytics Dashboard.
+
+### Booking Page Navbar Fix
+
+Changed:
+- Removed `PublicHeader` (RoyalCare platform navbar) from `apps/web/src/features/public/booking/BookingPage.tsx`.
+- Added inline `BookingNavbar` component showing center logo/initials, truncated center name, Home/Services/Contact links, and a Back to center CTA.
+- `BookingNavbar` uses already-fetched `PublicCenterDetail`; no additional API call is made.
+- Supports EN/AR/HE + RTL via `dir` attribute; shows a loading skeleton while center data loads.
+
+### Center Website Analytics Dashboard v1
+
+Added center-scoped website analytics with event tracking on public center pages and a Center Admin analytics dashboard.
+
+Changed (schema):
+- Added `CenterWebsiteEventType` enum (14 values: `VIEW_CENTER_WEBSITE`, `VIEW_BOOKING_PAGE`, `CLICK_BOOK_NOW`, `CLICK_WHATSAPP`, `CLICK_PHONE`, `VIEW_GALLERY`, `VIEW_REVIEWS`, `VIEW_BEFORE_AFTER`, `VIEW_OFFERS`, `SELECT_OFFER`, `COMPLETE_BOOKING`, `VIEW_CONTACT`, `VIEW_SERVICES`, `SELECT_SERVICE`).
+- Added `CenterTrafficSource` enum (6 values: `FACEBOOK`, `INSTAGRAM`, `TIKTOK`, `GOOGLE`, `DIRECT`, `UNKNOWN`).
+- Added `CenterWebsiteEvent` model with `centerId`, `eventType`, `source`, `sessionId`, `page`, `extraData` (Json?), `occurredAt`, and 5 indexes.
+- Added `websiteEvents CenterWebsiteEvent[]` relation to the `Center` model.
+- DB pushed successfully; Prisma client regenerated v7.8.0.
+
+Changed (backend):
+- NEW `services/api/src/modules/center-analytics/center-analytics.service.ts` — validates event types/sources, resolves center by slug, inserts events, and computes 30-day dashboard metrics using Prisma `groupBy()` plus in-memory Map aggregation.
+- NEW `services/api/src/modules/center-analytics/center-analytics.controller.ts` — two controllers: `PublicCenterTrackController` (`POST /public/centers/:slug/track`, no auth) and `TenantCenterAnalyticsController` (`GET /tenant/marketing/analytics`, session auth).
+- NEW `services/api/src/modules/center-analytics/center-analytics.module.ts` — imports `DatabaseModule` and `AuthModule`, registers both controllers and `CenterAnalyticsService`.
+- Modified `services/api/src/app.module.ts` — registered `CenterAnalyticsModule`.
+
+Changed (frontend tracking):
+- NEW `apps/web/src/lib/marketing/track-center-event.ts` — `trackCenterEvent(slug, eventType, options)`: fire-and-forget with `keepalive: true`, `markHomeViewed(slug)` sessionStorage deduplication for `VIEW_CENTER_WEBSITE`, `getSessionId(slug)` for anonymous 24-char hex session id, UTM-then-referrer traffic source detection.
+- Modified `apps/web/src/features/public/centers/CenterProfilePage.tsx` — added `VIEW_CENTER_WEBSITE`, page-kind events (gallery/reviews/before-after/offers/contact/services), `CLICK_BOOK_NOW`, `CLICK_WHATSAPP`, `CLICK_PHONE` tracking.
+- Modified `apps/web/src/features/public/booking/BookingPage.tsx` — added `VIEW_BOOKING_PAGE`, `SELECT_SERVICE` (with extraData), and `COMPLETE_BOOKING` tracking.
+
+Changed (frontend dashboard):
+- NEW `apps/web/src/lib/api/tenant-analytics.ts` — `getTenantAnalyticsDashboard()` calling `GET /tenant/marketing/analytics` with session credentials.
+- NEW `apps/web/src/features/center-admin/analytics/TenantMarketingAnalyticsPage.tsx` — 11 metric cards, 6-source traffic breakdown, 4 charts (daily visitors sparkline, booking attempts sparkline, top pages bar, top services bar), loading skeleton, empty state, error state, refresh button, EN/AR/HE + RTL.
+- NEW `apps/web/src/app/(center-admin)/tenant/marketing/page.tsx` — route wrapper.
+- Modified `apps/web/src/features/center-admin/layout/CenterAdminShell.tsx` — added `"websiteAnalytics"` `NavKey` and nav item linking to `/tenant/marketing` gated by `reports:view`.
+- Modified `apps/web/src/i18n/dictionaries/center-admin.ts` — added `websiteAnalytics` label in EN/AR/HE.
+
+Verified:
+- `npx tsc --noEmit` passed with no errors after fixing `tone="neutral"` (was `"info"`) and replacing `as const` literal Copy type with a structural interface.
+
+# 2026-05-25 - Center Before / After Gallery v1
+
+Added center-scoped before/after transformation cases for public center websites.
+
+Changed:
+- Added `CenterBeforeAfter` and `CenterBeforeAfterCategory` to Prisma with migration `20260525200000_add_center_before_after`.
+- Added tenant CRUD endpoints and image upload endpoint under `/api/v1/tenant/before-after`.
+- Added public-safe endpoint `GET /api/v1/public/centers/:slug/before-after`.
+- Added Center Admin page `/tenant/settings/before-after` with before/after image uploads, localized fields, category selector, publish toggle, sort order, drag/drop reordering, and live preview.
+- Added public `/c/[slug]/before-after` route plus homepage section, category filters, comparison slider, and conditional center-nav/footer link.
+
+Verified:
+- Prisma format, validate, generate, and local `db push` passed.
+- API build passed.
+- Web `tsc --noEmit` and production build passed.
+- Focused lint on new API files passed; focused lint on touched web files had only existing `<img>` warnings.
+- Full API lint is still blocked by unrelated `featured-services.controller.ts` no-base-to-string errors.
+- Full web lint is still blocked by unrelated existing lint errors in center profile, centers directory, Super Admin center details, leads, and platform tracking files.
+- Tenant before/after image upload endpoint accepted a local WebP upload and returned `/uploads/before-after/...webp`.
+- Live API QA seeded 3 QA Recovery before/after cases, confirmed QA Recovery returns 3 published cases, Jenin Care returns empty, and the empty QA center returns empty.
+
+# 2026-05-25 - Center Reviews / Testimonials v1
+
+Added center-scoped Reviews / Testimonials v1 for Center Website Builder.
+
+Changed:
+- Added Prisma `CenterReview` with center id, customer name, rating, localized comments, publish flag, sort order, and timestamps.
+- Added tenant review CRUD endpoints under `GET/POST/PATCH/DELETE /api/v1/tenant/reviews`.
+- Added public-safe `GET /api/v1/public/centers/:slug/reviews`, returning only published reviews for the resolved center.
+- Added `/tenant/settings/reviews` for Center Admins to list, add, edit, delete, publish/unpublish, rate, localize, and sort reviews.
+- Added `/c/[slug]/reviews` and homepage reviews rendering when published reviews exist.
+- Center website nav/footer include Reviews only when published reviews exist.
+
+Verified:
+- Prisma format, validate, generate, and local `db push` completed.
+- API build passed.
+- Focused API ESLint for the new review module passed.
+- Web `tsc --noEmit` passed.
+- Focused web ESLint passed with existing `<img>` warnings only.
+- Web production build passed and includes `/tenant/settings/reviews` and `/c/[centerSlug]/reviews`.
+- QA Recovery tenant API created 3 reviews, then one was unpublished.
+- Public QA Recovery reviews endpoint returned only the 2 published reviews.
+- Jenin Care and the empty QA center returned empty public review arrays.
+- Route smoke returned `200` for `/tenant/settings/reviews`, `/c/qa-recovery-1779095621868/reviews`, `/c/jenin-care/reviews`, and `/c/qa-empty-generic-center/reviews`.
+
+# 2026-05-25 - Center Website Generic Gallery/Favicon Verification
+
+Verified that the center website gallery and favicon behavior is generic and center-scoped.
+
+Verified:
+- No hardcoded `qa-recovery-1779095621868` or `jenin-care` slugs were found in app/API source code.
+- `CenterGalleryService.getPublicGallery(slug)` resolves the public active center by slug, selects the center id, and then reads `CenterGalleryImage` rows by `centerId`.
+- `/c/[slug]` and center subpages dispatch the favicon from `center.branding.logoUrl`; `GlobalFavicon` applies it only on `/c/*` and restores the platform favicon when leaving center routes.
+- QA Recovery returned 4 gallery images and its own center logo.
+- Jenin Care returned 1 gallery image and its own distinct center logo.
+- A third QA center `qa-empty-generic-center` was created locally with an active subscription, no branding logo, and no gallery images; its public profile returned `branding: null`, gallery returned an empty array, and public pages returned `200`.
+
+# 2026-05-25 - Center Website Gallery and Favicon Fix
+
+Fixed public center website gallery display and center favicon persistence.
+
+Changed:
+- `/c/[slug]` now loads the existing public-safe `GET /api/v1/public/centers/:slug/gallery` payload and shows a Gallery section when that center has images.
+- Added `/c/[slug]/gallery` with center-specific metadata, navbar/footer, gallery grid, and Book Now CTA.
+- Center website navbar/footer include Gallery only when public gallery images exist for the current center.
+- Center favicon cleanup no longer clears the favicon on center subpage unmounts; `GlobalFavicon` remains responsible for restoring the platform favicon only when leaving `/c/*`.
+- Booking page center favicon cleanup was aligned with the same route-leave behavior.
+
+Verified:
+- `GET /api/v1/public/centers/qa-recovery-1779095621868` returns `branding.logoUrl`.
+- `GET /api/v1/public/centers/qa-recovery-1779095621868/gallery` returned 4 QA Recovery gallery images.
+- `GET /api/v1/public/centers/jenin-care/gallery` returned only Jenin Care gallery data, confirming center scoping.
+- QA Recovery logo and first gallery image URLs both returned `200` from the web app.
+- Route smokes returned `200` for `/c/qa-recovery-1779095621868`, `/about`, `/services`, `/contact`, `/book`, and `/gallery`.
+- API build passed.
+- Web `tsc --noEmit` passed.
+- Focused web ESLint passed with existing `<img>` warnings only.
+- Web production build passed.
+
+# 2026-05-25 - Tenant Gallery Load Error Handling
+
+Fixed tenant gallery load failure handling without changing public website behavior.
+
+Changed:
+- `listTenantGallery()` now preserves HTTP status and response details through `TenantGalleryRequestError` instead of throwing only a generic message.
+- `/tenant/settings/gallery` now shows localized inline messages for expired sessions, permission errors, and general load failures.
+- Added a Retry action so gallery loading failures do not push users into the Next error overlay.
+- Confirmed the backend endpoint is `GET /api/v1/tenant/center-gallery` and returns `{ success: true, items: [] }` on an empty/missing-table read path; authenticated QA returned existing items for the test center.
+
+Verified:
+- Unauthenticated API request returned `401` with structured session error.
+- Super Admin login-as tenant session then `GET /api/v1/tenant/center-gallery` returned `200` with center-scoped items.
+- API build passed.
+- Web `tsc --noEmit` passed.
+- Focused web ESLint passed with one existing `<img>` warning only.
+- Web production build passed.
+- `/tenant/settings/gallery` route smoke returned `200`.
+
+# 2026-05-25 - Center Website Cross-Promotion Removal
+
+Removed RoyalCare network and cross-center promotion from independent center website pages.
+
+Changed:
+- Removed All centers / Back to directory links from `/c/[slug]` center website pages.
+- Center website navbar now promotes only the current center: logo, name, Home, Services, About, Contact, and Book Now.
+- Replaced the homepage hero RoyalCare network badge with a neutral center-owned official website badge.
+- Removed RoyalCare/network wording from center website route metadata and center contact helper text.
+- Kept `/centers` and the platform navbar unchanged.
+- Kept `/c/[slug]/book` working and did not change tracking events.
+
+Verified:
+- Web `tsc --noEmit` passed.
+- Focused web ESLint passed with existing `<img>` warnings only.
+- Web production build passed.
+- Smoke checks returned `200` for `/c/jenin-care`, `/c/jenin-care/about`, `/c/jenin-care/services`, `/c/jenin-care/contact`, `/c/jenin-care/book`, and `/centers`.
+
+# 2026-05-25 - Tenant Website Public Link
+
+Added the center public website link to Center Admin website settings.
+
+Changed:
+- `/tenant/settings/website` now shows the current center website URL near the top of the page using `/c/[centerSlug]` and the current browser origin when available.
+- Added Open website and Copy link actions with EN/AR/HE labels and RTL-safe layout.
+- The link uses the authenticated tenant session center slug and does not expose admin/private fields.
+- Custom domain support was not added.
+
+Verified:
+- Web `tsc --noEmit` passed.
+- Focused web ESLint passed for `TenantWebsiteSettingsPage.tsx` with existing `<img>` warnings only.
+- Web production build passed.
+- Route smoke returned `200` for `/tenant/settings/website` and `/c/jenin-care`.
+
+# 2026-05-25 - Center Website Builder Routing Foundation
+
+Established the first route foundation separating RoyalCare platform marketing pages from independent center websites.
+
+Changed:
+- Added public center website routes `/c/[slug]/about`, `/c/[slug]/services`, and `/c/[slug]/contact`.
+- Center website nav now links to real center routes instead of in-page anchors.
+- `/c/[slug]`, `/c/[slug]/about`, `/c/[slug]/services`, and `/c/[slug]/contact` all load public-safe center data by slug and use the center-specific navbar, center logo/name/colors, Book Now CTA, and WhatsApp CTA when configured.
+- `/c/[slug]/services` shows all active public services returned by the public center profile API.
+- `/c/[slug]/about` shows full center description, working hours, and center info.
+- `/c/[slug]/contact` shows phone, WhatsApp, email, address, social links, and Google Maps link when configured.
+- `/centers` remains the RoyalCare platform directory using the platform navbar.
+- Custom domains/subdomains are documented as future work and were not implemented.
+
+Verified:
+- Web TypeScript, lint, build, and route smoke checks are recorded with the implementation report.
+
+# 2026-05-25 - Center Website Navbar
+
+Separated center websites from the RoyalCare platform navigation.
+
+Changed:
+- `/c/[slug]` now uses a center-specific navbar with center logo/name, Home, Services, About, Contact, and Book Now.
+- Platform navigation items such as Centers, How it works, Features, FAQ, Login, and Open Center are no longer shown on center website pages.
+- Added a small All centers link outside the main center nav.
+- Navbar uses the center primary color for Book Now and falls back to initials when no logo exists.
+- Mobile menu works with the same center-specific links.
+- Existing tracking remains intact: `ViewCenter`, `StartBooking`, and `WhatsAppClick`.
+
+Verified:
+- Web `tsc --noEmit` passed.
+- Web production build passed.
+- Focused web ESLint passed with existing `<img>` warnings only.
+- Runtime route checks returned `200` for `/c/jenin-care`, `/centers`, `/c/jenin-care/book`, and `/tenant/dashboard`.
+
+# 2026-05-25 - Center Public Website Homepage v1
+
+Built the first public homepage for each center at `/c/[slug]` using the center website settings layer.
+
+Changed:
+- `/c/[slug]` now renders a center website homepage with hero, logo, cover image, center name, slogan, short description, Book Now / WhatsApp / Call CTAs, about text, featured services, working hours, contact details, social links, and Google Maps link when configured.
+- The homepage uses public-safe fields from `GET /api/v1/public/centers/:slug`; no tenant-private settings or Meta CAPI token are exposed.
+- Public center API payload now includes the website settings fields added to `BrandingSettings`, including localized full descriptions, slogans, working hours, contact fields, maps URL, secondary color, and social links.
+- Existing marketing events are preserved: `ViewCenter`, `StartBooking`, and `WhatsAppClick`.
+- `/c/[slug]/book` remains unchanged and still works.
+
+Verified:
+- API build passed.
+- Web `tsc --noEmit` passed.
+- Web production build passed.
+- Focused API ESLint passed for `public-centers.service.ts`.
+- Focused web ESLint passed for touched public center files with two existing `<img>` preview warnings only.
+- Runtime checks returned `200` for `/api/v1/health`, `/c/jenin-care`, and `/c/jenin-care/book`.
+- Runtime public center API response includes `sloganEn`, `fullDescriptionEn`, `workingHoursEn`, `googleMapsUrl`, `secondaryColor`, `phone`, and social links for the QA center.
+
+# 2026-05-25 - Center Website Settings v1
+
+Added the first CMS/settings layer for future full website-per-center pages.
+
+Changed:
+- Added `/tenant/settings/website` under the existing Center Admin settings area and `settings:view` permission.
+- Added a responsive EN/AR/HE website settings form for center logo, cover/hero image, primary/secondary colors, localized short descriptions, localized full descriptions, localized slogans, contact details, localized addresses, Google Maps URL, localized working-hours text, and social links.
+- Added a live preview card for the center website draft settings.
+- Extended the existing tenant public-profile API and upload flow instead of introducing a new architecture.
+- Added migration `20260525110000_add_center_website_settings` for the missing website CMS fields in `BrandingSettings`.
+- Tenant `GET/PATCH /api/v1/tenant/public-profile` and image upload now enforce the existing `settings:view` permission.
+
+Verified:
+- Prisma format, validate, generate, and migrate deploy passed locally.
+- API build passed.
+- Web `tsc --noEmit` and production build passed.
+- Focused API ESLint passed for the public-profile controller/service.
+- Focused web ESLint passed for touched files with two existing preview `<img>` warnings only.
+- Live API save/reload QA persisted and reloaded AR/EN/HE descriptions, slogans, addresses, working hours, colors, contact fields, maps URL, and social links for the QA center.
+- Unauthenticated tenant public-profile access returned `401`.
+
+# 2026-05-25 - Public Booking Pre-Deployment UX QA
+
+Completed a focused local hardening pass for `/c/[slug]/book` before deployment.
+
+Changed:
+- Public booking submit errors now announce through an alert region so validation/API failures are clearer for assistive tech and mobile users.
+- Confirmed the booking form keeps localized required-field validation for patient name, phone, service, date, and time slot.
+- Confirmed double-submit prevention, disabled form controls during submit, slot-loading disabled submit state, and slot-unavailable refresh behavior remain in place.
+- Confirmed existing marketing tracking events remain wired without adding new tracking features.
+
+Local QA checklist:
+- Required name/phone/service/date/slot validation shows localized EN/AR/HE messages.
+- Services, slots, and submit states show loading/disabled behavior.
+- Double clicking submit does not create a second request while submit is in progress.
+- `BookingFailed` fires for validation/API failures and `CompleteBooking` remains tied to successful booking responses.
+- Mobile slot grid remains touch-friendly with no horizontal overflow.
+
+# 2026-05-24 - Public Booking UX Hardening
+
+Hardened the public center booking flow after marketing tracking production readiness.
+
+Changed:
+- `/c/[slug]/book` now prevents double submit with an early submit guard and disabled form controls during submission.
+- Submit is disabled while availability slots are loading so stale slot state cannot be submitted.
+- API field errors are mapped back to localized booking field messages instead of showing raw backend English strings.
+- Slot-unavailable conflicts still clear the selected time, refresh availability, show a localized message, and fire `BookingFailed`.
+- Availability load errors now render as a clear alert, and mobile slot buttons use larger touch targets with a two-column base grid.
+- Existing tracking events were preserved: `ViewBookingPage`, `SelectService`, `SelectDateTime`, `SubmitBookingAttempt`, `BookingFailed`, and `CompleteBooking`.
+
+Verified:
+- Web `tsc --noEmit` passed.
+- Web production build passed.
+- API build passed to confirm public booking/CAPI path still compiles.
+- Focused web ESLint on touched booking files passed with one existing `<img>` warning only.
+- `/c/jenin-care/book` returned `200` from the local web server.
+
+# 2026-05-24 - Marketing Tracking Logs Runtime Readiness
+
+Finalized runtime readiness for tenant marketing tracking debug logs.
+
+Changed:
+- Applied migration `20260524120000_add_marketing_tracking_logs`.
+- Resolved the earlier local `20260523170000_add_tenant_marketing_settings` migration as applied after verifying the table already existed with the expected columns.
+- Added a safe marketing log writer so missing-table or transient log-write failures warn instead of breaking public booking or Meta CAPI test flows.
+- `GET /api/v1/tenant/settings/marketing/logs` now falls back to `{ logs: [], unavailable: true }` if the log table is unavailable.
+- Documented that marketing logs are safe, contain no raw PII/token, and require the migration before rows appear.
+
+Verified:
+- `prisma migrate deploy` applied the tracking log migration and `prisma migrate status` reports the database schema is up to date.
+- `GET /api/v1/tenant/settings/marketing/logs?limit=20` returned `{"logs":[]}` before runtime tests.
+- Backend-only Meta CAPI test with invalid credentials returned `400` and created a safe `META_CAPI / TestMarketingEvent / FAILED` log.
+- Public booking for Jenin Care returned `201` with `bookingRequestId=bacd6742-201f-4c86-b842-5fd28019b57a` and created a safe `META_CAPI / CompleteBooking / FAILED` log because Meta returned HTTP 400.
+- The failed Meta CAPI provider attempt did not block booking creation.
+- Prisma validate, API build, and web `tsc --noEmit` passed.
+
+# 2026-05-24 - Marketing Event Debug Logs
+
+Added tenant marketing tracking debug logs for server-side Meta CAPI activity.
+
+Changed:
+- Added `MarketingTrackingLog` with center-scoped provider/event/status/message/event id/booking request/timestamp fields.
+- Server-side Meta CAPI `CompleteBooking` now logs `SUCCESS`, `FAILED`, or `SKIPPED` without exposing tokens or raw personal data.
+- Backend-only Meta CAPI `TestMarketingEvent` now logs `SUCCESS`, `FAILED`, or `SKIPPED` without exposing tokens or raw personal data.
+- Added `GET /api/v1/tenant/settings/marketing/logs?limit=20`, scoped by authenticated tenant `centerId` and protected by `settings:view`.
+- `/tenant/settings/marketing` now shows a responsive Recent Tracking Logs section with refresh, provider, event name, status badge, message, optional event id, and created date.
+- Added EN/AR/HE labels for providers, statuses, empty/error/loading states, and refresh controls.
+
+Verified:
+- Prisma validate and generate passed.
+- API build passed.
+- Web `tsc --noEmit` and web production build passed.
+- API/web lint remain blocked by unrelated existing lint issues outside this marketing debug-log slice.
+
+# 2026-05-24 - Marketing Tracking Test Mode
+
+Added tracking test mode to the tenant marketing settings page.
+
+Changed:
+- `/tenant/settings/marketing` now includes a Test Tracking section.
+- Added client-side test buttons for Meta Pixel, TikTok Pixel, GA4, and Snap Pixel using `TestMarketingEvent`.
+- Added backend-only `POST /api/v1/tenant/settings/marketing/test-meta-capi` for Meta CAPI test events.
+- Meta CAPI test uses the saved center-scoped Meta pixel id and token without exposing the token to the frontend.
+- Added per-button loading state and localized EN/AR/HE success/error messages.
+- Extended `trackMarketingEvent` with optional provider targeting while preserving provider failure isolation.
+
+Verified:
+- API build passed.
+- Web `tsc --noEmit` and web production build passed.
+- API/web lint remain blocked by unrelated existing lint issues outside this work.
+
+# 2026-05-24 - Tenant Marketing Settings UI Hardening
+
+Improved the authenticated tenant marketing settings management experience now that public injection and Meta CAPI are active.
+
+Changed:
+- `/tenant/settings/marketing` remains the authenticated Center Admin settings page for Meta Pixel, Meta CAPI token, TikTok Pixel, Snapchat Pixel, GA4, GTM, custom head script, and custom body script.
+- The page requires the existing `settings:view` permission through `CenterAdminShell`.
+- Meta CAPI token responses are now masked: the API returns `hasMetaConversionApiToken` and `metaConversionApiToken: null` instead of echoing the raw token back to the browser.
+- Saving without editing the token preserves the existing token; entering a new token replaces it; clearing it sends `null`.
+- Added EN/AR/HE helper text for the hidden saved token state and warnings that custom scripts run only on public center pages.
+- Updated old “not injected yet” copy to match the current active public tracking behavior.
+
+Verified:
+- API build passed.
+- Web `tsc --noEmit` and web production build passed.
+- API lint remains blocked by unrelated existing public-profile/featured-services lint errors.
+
+# 2026-05-24 - Meta Pixel and CAPI Deduplication
+
+Added shared Meta deduplication ids for public booking conversions.
+
+Changed:
+- Public booking success responses now include `trackingEventId` in the format `booking_<bookingRequestId>`.
+- Server-side Meta CAPI `CompleteBooking` now sends that value as `event_id`.
+- Browser `CompleteBooking` now passes the same value as `event_id`; the marketing event helper forwards it to Meta Pixel as `{ eventID }`.
+- TikTok, GA4, and Snap continue to receive the event payload and remain isolated from provider failures.
+- The Meta Conversion API token remains backend-only and is still absent from public marketing responses and web clients.
+
+Verified:
+- API build passed.
+- Web `tsc --noEmit` passed.
+
+# 2026-05-24 - Meta Conversion API v1
+
+Added backend-only Meta Conversion API tracking for successful public booking creation.
+
+Changed:
+- Added `MetaConversionsService` for best-effort server-side Meta CAPI sends.
+- Public booking creation now triggers a server-side `CompleteBooking` event after the booking request is created.
+- CAPI reads `metaPixelId` and `metaConversionApiToken` only from the center-scoped tenant marketing settings row inside the API.
+- Public marketing endpoints and web clients still never expose `metaConversionApiToken`.
+- Available phone and requester name values are SHA-256 hashed before sending to Meta.
+- Source URL, user agent, IP address, booking id, center id/slug, service id, price/value, and currency are included when available.
+- Meta provider failures are logged without tokens or raw personal data and never block booking creation.
+- Added `META_GRAPH_API_VERSION` to `services/api/.env.example`.
+
+Verified:
+- API build passed.
+- Web `tsc --noEmit` and web production build passed.
+- API lint remains blocked by unrelated existing lint errors in `center-public-profile` and `featured-services` files.
+
+## 2026-05-20 - Real-Time Booking Request Notifications
+
+Added:
+- Public booking creation now persists a `BOOKING_REQUEST_CREATED` in-app notification for the center admin audience.
+- Booking notifications include EN/AR/HE title/body text and navigate to `/tenant/booking-requests`.
+- Tenant shell now refreshes notification and pending-booking badges on a lightweight polling loop and same-browser public booking events.
+- Tenant notifications now expose `GET /api/v1/tenant/notifications/stream` as a small SSE push channel backed by the existing notification service.
+- Tenant shell shows a localized new-booking toast with a direct link to Booking Requests.
+- Tenant notifications page maps booking notifications to a friendly label and clicking the notification opens Booking Requests.
+
+Verified:
+- Prisma schema validation, generate, and `prisma db push` passed after adding the notification enum value.
+- Live public booking API call created booking request `3601301e-c45a-4c2a-8449-f2e2b37fb258` and notification `b024a445-3e08-4b32-a2f9-5878a41ecc5a`.
+- Tenant notifications API returned the new notification unread with `actionUrl: "/tenant/booking-requests"`.
+- Tenant pending booking request API returned total `1` for the QA center.
+- API lint/build and web lint/tsc/build passed.
+
+## 2026-05-17 - Super Admin Audit Action Label Localization
+
+Fixed:
+- Super Admin Audit Logs now displays localized EN/AR/HE labels for tenant billing and subscription invoice audit actions instead of raw action codes.
+- The action filter still submits raw audit action codes, preserving backend filtering behavior.
+- Replaced corrupted Arabic/Hebrew audit-log dictionary text with clean Unicode labels.
+- Audit log cards now use localized unknown actor, unknown target, unknown center, clear-selection, payment amount, credit amount, subscription, and technical details labels.
+- Audit label lookup now falls back from the current language to English and then to the raw action code.
+- Billing audit metadata labels are localized for invoice, patient, amount, currency, status, payment method, center, subscription invoice, plan, due date, paid date, and cancelled date fields.
+- Billing audit cards prefer business values such as invoice numbers, patient names, and center names as primary text; UUID identifiers stay in smaller secondary lines when a friendly value exists.
+- Audit timeline actor, target, center, patient, invoice, and subscription-invoice cards now skip UUID-like values when selecting the primary display value and use them only as muted secondary technical context when a friendly value is available.
+- Tenant billing audit actions now render with a custom business summary instead of the generic target/center grid, preventing duplicated target/patient and center rows. UUIDs for patient, invoice, and center are shown only under Technical details unless no friendly value exists.
+- Tenant invoices now have nullable unique `invoiceNumber` values generated from a yearly `TenantInvoiceNumberCounter` in `INV-YYYY-000001` format.
+- Existing tenant invoices were backfilled with invoice numbers and the local 2026 counter was synced.
+- Tenant billing audit metadata for invoice creation, payment addition, credit creation, credit usage, and invoice cancellation now includes invoice number plus patient and center names under EN/AR/HE metadata keys.
+- Added and ran a one-time tenant billing audit metadata backfill script. It scanned 59 audit rows, updated 59 on the first pass, then updated 2 remaining rows after filling one late null invoice number. Final verification found 0 billing audit rows with an invoice id but missing invoice number.
+
+Added labels:
+- `TENANT_INVOICE_CREATED`
+- `TENANT_PAYMENT_ADDED`
+- `TENANT_CREDIT_CREATED`
+- `TENANT_CREDIT_USED`
+- `TENANT_INVOICE_CANCELLED`
+- `SUBSCRIPTION_INVOICE_CREATED`
+- `SUBSCRIPTION_INVOICE_PAID`
+- `SUBSCRIPTION_INVOICE_CANCELLED`
+- `SUBSCRIPTION_INVOICE_DOWNLOADED`
+
+Verified:
+- Web dictionary/type coverage verified for English, Arabic, and Hebrew labels.
+- API lint and build passed.
+- Web lint, `tsc --noEmit`, and production build passed.
+
+## 2026-05-17 - Tenant Credit Audit Hardening
+
+Fixed:
+- Overpayments that create patient credit now write an explicit `TENANT_CREDIT_CREATED` audit action.
+- Credit creation audit metadata includes `patientId`, `patientName`, `invoiceId`, `creditAmount`, `centerId`, `createdBy`, and the related credit transaction id.
+- Super Admin Audit Logs now maps `TENANT_CREDIT_CREATED` target fields to the patient (`targetName=patientName`, `targetId=patientId`) and displays patient, invoice, credit amount, and center details.
+- Tenant billing audit target mapping now covers invoice creation, payment addition, credit creation, credit usage, and invoice cancellation so the Super Admin target column/card no longer falls back to unspecified when billing metadata exists.
+- Credit usage remains audited separately through `TENANT_CREDIT_USED`.
+
+Verified:
+- Focused live API/database check confirmed an overpayment created one `TENANT_CREDIT_CREATED` audit row.
+- API lint and build passed.
+- Web lint, `tsc --noEmit`, and production build passed.
+
+## 2026-05-17 - Appointment to Invoice to Payment Hardening
+
+Fixed:
+- Appointment-linked duplicate invoice creation is now blocked server-side instead of returning the existing invoice.
+- Tenant invoice creation, invoice cancellation, payment addition, and credit usage now write Super Admin-visible audit rows.
+- Use Credit sections hide while a new payment is being submitted to avoid overlapping payment/credit actions.
+
+Verified:
+- API lint and build passed.
+- Web lint, `tsc --noEmit`, and production build passed.
+
+## 2026-05-17 - Tenant Financial Reports Custom Filter Badge Fix
+
+Fixed:
+- Switching to Custom on `/tenant/reports` now activates a concrete custom date range immediately, so the filter badge and displayed range no longer remain stuck on the previous period such as This Month.
+- Applying new custom dates updates the active filter badge and range together.
+
+Verified:
+- Web lint, `tsc --noEmit`, and production build passed.
+
+## 2026-05-17 - Tenant Financial Reports Aggregation Fix
+
+Fixed:
+- Tenant financial report revenue no longer uses standalone today/month payment aggregates that can disagree with invoice cards.
+- Revenue, average invoice value, payment-status chart, service chart, and top-patient spending now derive from the same non-cancelled invoice dataset for the selected report filter.
+- Credit usage is included only when tied to the same filtered non-cancelled invoice set.
+
+Verified:
+- API build and lint passed.
+- Web `tsc --noEmit`, lint, and production build passed.
+
+## 2026-05-17 - Tenant Financial Reports
+
+Added:
+- Center Admin `/tenant/reports` financial report module using the existing tenant reports route and shell.
+- `GET /api/v1/tenant/reports/financial` for report cards and charts scoped to the authenticated center.
+- Financial cards for revenue today, revenue this month, paid invoices, pending invoices, overdue invoices, total patient credit, and average invoice value.
+- Charts for revenue by day, revenue by payment status, revenue by service, and top patients by spending.
+
+Changed:
+- Tenant report revenue now counts both payments and `CREDIT_USE` patient credit usage while excluding cancelled invoices.
+- Tenant report filters support Today, Last 7 days, This month, and Custom date range.
+- Existing tenant report summary/top-patient endpoints now reuse the consolidated report calculation for compatibility.
+
+Verified:
+- API build and lint passed.
+- Web lint, `tsc --noEmit`, and production build passed.
+
+## 2026-05-17 - Subscription Billing Final QA
+
+Verified:
+- Subscription Billing Phase 1 + 2 completed and final QA passed.
+- Super Admin subscription invoice create, auto invoice number, mark paid, cancel, overdue sync, PDF download, and audit logging passed runtime QA.
+- Tenant read-only subscription invoice visibility passed; tenant edit/cancel/pay invoice actions remain unavailable.
+- Expired and suspended tenant access rules still block tenant business writes.
+- Super Admin `subscriptionBilling` dashboard KPIs matched direct database counts and aggregates for total revenue, paid invoices, pending invoices, overdue invoices, MRR, and revenue by plan.
+- AR, EN, and HE PDF invoices generated as valid one-page PDFs with readable invoice numbers, totals, and currency text.
+- Runtime/database checks passed after `prisma db push`, Prisma generate, API lint/build, web `tsc`, web lint, and web build.
+
+Known production risk:
+- Subscription invoice PDF generation requires Chrome/Chromium to be available to the API process through `CHROME_PATH` or a standard executable path.
+
+Next recommended module:
+- Tenant Financial Reports, or Appointment → Invoice → Payment final hardening.
+
+## 2026-05-16 - Subscription Billing Phase 2
+
+Added:
+- Yearly `SubscriptionInvoiceNumberCounter` model for race-safe invoice numbers such as `SUB-2026-000001`.
+- Super Admin subscription invoice PDF download endpoint and `/super-admin/subscriptions` Download PDF button with EN/AR/HE labels.
+- `SUBSCRIPTION_INVOICE_DOWNLOADED` audit action for PDF downloads.
+- Overdue synchronization for unpaid subscription invoices whose due date has passed.
+- Super Admin dashboard subscription financial KPIs: total subscription revenue, paid invoices, pending invoices, overdue invoices, MRR, and revenue by plan.
+
+Verified:
+- Prisma format, validate, generate, and typecheck passed.
+- API lint and build passed.
+- Web lint, `tsc --noEmit`, and build passed.
+
+## 2026-05-16 - Subscription Billing Phase 1
+
+Added:
+- `SubscriptionInvoice` Prisma model and `SubscriptionInvoiceStatus` enum for manual subscription invoices.
+- Super Admin subscription invoice APIs for list, create, mark paid, and cancel.
+- Tenant read-only subscription invoice API under the existing tenant subscription surface.
+- Super Admin `/super-admin/subscriptions` Subscription Billing panel with invoice create form, search/filter, mark paid, and cancel actions.
+- Tenant dashboard read-only subscription invoices panel.
+
+Verified:
+- Prisma format, validate, and generate passed.
+- API lint and build passed.
+- Web lint, `tsc --noEmit`, and build passed.
+
+## 2026-05-16 - Tenant Subscription Restriction QA
+
+Fixed:
+- Direct tenant appointment create/edit forms now respect blocked subscription access before submit and show the existing localized restriction message.
+- Direct tenant invoice create form now respects blocked subscription access before submit and disables the submit button with the existing restriction tooltip.
+- Tenant invoice details now disables invoice status changes, Add Payment, and Use Credit controls for expired/suspended subscriptions while preserving read-only invoice and payment history access.
+
+Verified:
+- Live API gate checks confirmed `ACTIVE` and `EXPIRING_SOON` tenant sessions reach normal validation for patient, appointment, invoice, and payment writes instead of subscription blocks.
+- Live API gate checks confirmed `EXPIRED` tenant sessions return `403 SUBSCRIPTION_EXPIRED` for patient, appointment, invoice, and payment writes.
+- Live API gate checks confirmed `SUSPENDED` tenant sessions return `403 SUBSCRIPTION_SUSPENDED` for patient, appointment, invoice, and payment writes.
+- Dashboard, auth refresh, and tenant notifications remained readable for active, expiring-soon, expired, and suspended sessions.
+- Renewal requests succeeded for expired and suspended tenant sessions.
+- Super Admin renewal check confirmed the same tenant session immediately changed from blocked to active access without relogin, then the QA subscription was restored.
+- API lint, API build, API unit tests, web lint, web `tsc --noEmit`, and web build passed.
+
+## 2026-05-16 - Subscription Automation Card UX
+
+Changed:
+- Improved the Super Admin `/super-admin/subscriptions` Subscription Automation card to show business-friendly lifecycle job summaries instead of technical monitoring details.
+- Kept the existing backend lifecycle job status response and Run Now behavior unchanged.
+- Renamed the manual run button in EN/AR/HE to "Check subscriptions now" / "فحص الاشتراكات الآن" / "בדוק מינויים עכשיו".
+- The card now shows last run status, last run time, next run time, total subscriptions checked, expired updated, notifications created, suspended skipped, and duplicate notifications skipped.
+- Added readable EN/AR/HE summary lines for checked subscriptions, expired updates, suspended skips, and no-action-needed runs.
+
+Verified:
+- Web `npx.cmd tsc --noEmit` passed.
+- Web `npm.cmd run lint` passed.
+- Web `npm.cmd run build` passed.
+
+## 2026-05-15 - Subscription Lifecycle Job Monitoring UI
+
+Added:
+- Persisted `SubscriptionLifecycleJobRun` records for subscription lifecycle automation runs.
+- `GET /api/v1/super-admin/subscriptions/lifecycle-job/status`.
+- Super Admin subscriptions page card for Subscription Automation with next run, last run, last result, status, and Run Now button.
+
+Changed:
+- Manual lifecycle job runs now persist started/finished timestamps, trigger source, result counters, success, and error details.
+- `POST /api/v1/super-admin/subscriptions/run-lifecycle-job` returns the persisted result counter shape used by the UI.
+
+Verified:
+- Prisma format, validate, generate, and db push passed.
+- API build, lint, and unit tests passed.
+- Web lint, `tsc --noEmit`, and production build passed.
+- Live service status/run/status QA persisted a run with `triggeredBy=qa-ui-check`, scanned 21 subscriptions, and returned the updated latest status.
+
+## 2026-05-15 - Subscription Lifecycle Cron Job
+
+Added:
+- Backend subscription lifecycle job in the subscriptions module.
+- Daily scheduler runs at 02:00 server time using Nest module lifecycle hooks.
+- Protected QA endpoint `POST /api/v1/super-admin/subscriptions/run-lifecycle-job` for Super Admin users with `manage:subscriptions`.
+
+Changed:
+- The job uses the shared backend `normalizeSubscriptionLifecycle()` helper.
+- `ACTIVE`/`TRIALING` subscriptions past their period end are updated to `EXPIRED`.
+- Expiring notifications are created for 7-day, 3-day, and 1-day milestones for both `SUPER_ADMIN` and `CENTER_ADMIN`.
+- Expired notifications are created for both `SUPER_ADMIN` and `CENTER_ADMIN`.
+- Automatic status changes write `SUBSCRIPTION_STATUS_CHANGED` audit logs with `actorType: SYSTEM` and `reason: cron_lifecycle_update`.
+- Tenant subscription write access now uses the shared lifecycle helper.
+
+Verified:
+- Manual job run scanned 21 subscriptions, expired 1 subscription, created 2 expired notifications, and wrote 1 cron audit log.
+- Second and third job runs created 0 duplicate notifications, made 0 duplicate status updates, and wrote no duplicate audit rows.
+- Suspended subscriptions remained `SUSPENDED`.
+- Live data had no 1/3/7-day expiring subscriptions, so expiring milestone notification creation was code-verified but not live-data-triggered.
+- API lint passed.
+- API build passed.
+- API unit tests passed.
+- Web lint passed.
+- Web `tsc --noEmit` passed.
+- Web production build passed.
+
+## 2026-05-15 - Super Admin Subscription Lifecycle Filters
+
+Fixed:
+- Super Admin dashboard lifecycle cards no longer open mixed raw-status subscription results.
+- Active, Trialing, Expiring Soon, Expired, Suspended, and Cancelled filters now use `?lifecycle=` and match the backend-normalized lifecycle exactly.
+
+Changed:
+- `GET /api/v1/super-admin/subscriptions` accepts `lifecycle=ACTIVE|TRIALING|EXPIRING_SOON|EXPIRED|SUSPENDED|CANCELLED|UNKNOWN`.
+- The frontend subscription API wrapper no longer emits old lifecycle-card params such as `status=`, `filter=`, `expiringSoon=true`, or `expired=true`.
+- Missing WhatsApp phone remains a separate non-lifecycle filter.
+
+Verified:
+- Live count comparison: ACTIVE 3, TRIALING 10, EXPIRING_SOON 0, EXPIRED 1, SUSPENDED 6, CANCELLED 1, UNKNOWN 0, total 21.
+- Active lifecycle filter contained zero suspended/cancelled rows.
+- Suspended lifecycle filter contained zero fully active rows.
+- API lint passed.
+- API build passed.
+- API unit tests passed.
+- Web lint passed.
+- Web `tsc --noEmit` passed.
+- Web production build passed.
+
+## 2026-05-15 - Subscription Lifecycle Badge Consistency
+
+Fixed:
+- Super Admin subscription rows no longer render contradictory lifecycle and days badges, such as `EXPIRED` with `expires in X days`.
+
+Changed:
+- Backend and web `normalizeSubscriptionLifecycle()` now return one lifecycle presentation object with `lifecycle`, `daysRemaining`, `label`, and `color`.
+- Super Admin subscription table rows, mobile cards, expiring-soon cards, and subscription details status badge now render from the shared lifecycle object.
+- The shared helper defensively prevents an `EXPIRED` lifecycle from carrying a non-negative `daysRemaining` presentation value.
+
+Verified:
+- Live contradiction scan found zero invalid lifecycle/day combinations.
+- Live lifecycle distribution remained total 21, lifecycle sum 21.
+- API lint passed.
+- API build passed.
+- API unit tests passed.
+- Web lint passed.
+- Web `tsc --noEmit` passed.
+- Web production build passed.
+
+## 2026-05-15 - Super Admin Subscription KPI Total Alignment
+
+Fixed:
+- Super Admin dashboard subscription KPI cards now classify every subscription exactly once with the shared lifecycle helper.
+- Trialing and cancelled subscriptions are no longer lost from dashboard lifecycle totals.
+- Suspended and cancelled dashboard cards now navigate to separate lifecycle-matching filters.
+
+Changed:
+- Added explicit dashboard KPI cards for Total, Trialing, and Cancelled; Unknown remains hidden unless non-zero.
+- Super Admin subscriptions filters now distinguish `SUSPENDED` from `CANCELLED` instead of grouping cancelled records under suspended.
+- Archived centers classify as blocked/suspended for lifecycle counting.
+
+Verified:
+- Live shared-helper distribution check: total 21, lifecycle bucket sum 21.
+- API lint passed.
+- API build passed.
+- API unit tests passed.
+- Web lint passed.
+- Web `tsc --noEmit` passed.
+- Web production build passed.
+
+## 2026-05-14 - Super Admin Expiring Soon Lifecycle Alignment
+
+Fixed:
+- Aligned Super Admin dashboard expiring-soon KPI counts with `/super-admin/subscriptions?filter=EXPIRING_SOON`.
+
+Changed:
+- Added one backend subscription lifecycle helper for expiring-soon date windows, blocked statuses, and normalized lifecycle values.
+- Super Admin analytics and subscription list filters now use the same `ACTIVE`/`TRIALING`, 0-7 days remaining, non-blocked expiring-soon definition.
+- The subscription API response now exposes normalized lifecycle values from the shared backend helper.
+- The web subscription filter now uses the shared web lifecycle helper for `EXPIRING_SOON` instead of local shortcut logic.
+
+Verified:
+- API lint passed.
+- API build passed.
+- API unit tests passed.
+- Web lint passed.
+- Web `tsc --noEmit` passed.
+- Web production build passed.
+
+## 2026-05-14 - Super Admin Dashboard Card Navigation
+
+Changed:
+- Super Admin dashboard overview cards now navigate to the matching management pages: Centers, Users, and the dashboard analytics section for revenue.
+- Super Admin dashboard subscription KPI cards now navigate to `/super-admin/subscriptions` with pre-applied filters for active, expiring soon, expired, and suspended subscriptions.
+- `/super-admin/subscriptions` now recognizes dashboard query params including `filter=EXPIRING_SOON` and `status=ACTIVE|EXPIRED|SUSPENDED`.
+
+Verified:
+- Web lint passed.
+- Web `tsc --noEmit` passed.
+- Web production build passed.
+
+## 2026-05-14 - Subscription and Notifications QA Regression Fixes
+
+Fixed QA issues found in the subscription + notifications regression pass.
+
+Changed:
+- Protected `GET/POST /api/v1/super-admin/subscriptions`, subscription details, and subscription timeline routes with the platform permission guard.
+- Added `POST /api/v1/super-admin/subscriptions/:id/manual-whatsapp-log` so WhatsApp opens/copies from the subscription page are logged.
+- Subscription timelines now include WhatsApp logs attached to all subscription notification types, including suspended, renewed, trial-ending, and missing-phone notifications.
+- `/super-admin/subscriptions` now passes WhatsApp modal open/copy actions into the manual logging API.
+
+Verified:
+- API lint passed.
+- API build passed.
+- API unit tests passed.
+- Web lint passed.
+- Web `tsc --noEmit` passed.
+- Web production build passed.
+
+## 2026-05-06 - Global Numeric Date Display
+
+Changed:
+- Frontend shared formatter `formatDate()` now displays all parsed dates as `DD/MM/YYYY`.
+- Date-time values with an included time now display as `DD/MM/YYYY HH:mm`.
+- Removed localized month-name tables from the shared formatter.
+- Replaced appointment conflict and tenant reports short-month formatting with the shared numeric formatter.
+- Updated the reusable `DateField` display to use the same numeric date helper while keeping stored/input values as `YYYY-MM-DD`.
+- Completed missing Super Admin Center Details subscription/login-as dictionary keys that were blocking web TypeScript checks.
+
+Verified:
+- Source audit found no remaining `toLocaleDateString` or `Intl.DateTimeFormat` usages in `apps/web/src`, `services/api/src`, or `packages`.
+- `npm.cmd run lint` passed in `apps/web`.
+- `npx.cmd tsc --noEmit` passed in `apps/web`.
+- `npm.cmd run build` passed in `apps/web`.
+
+## 2026-05-06 - Super Admin Users Management Completion
+
+Changed:
+- Backend Super Admin Users API now supports real list/search/status/role filtering, counters, create, update, status changes, password reset, and center role assignment.
+- Added endpoints: `PATCH /api/v1/super-admin/users/:userId`, `PATCH /api/v1/super-admin/users/:userId/status`, and `POST /api/v1/super-admin/users/:userId/reset-password`.
+- Existing create and center-role assignment flows were extended to support temporary passwords, optional platform roles, and optional center roles.
+- Frontend `/super-admin/users` now uses real API data instead of `users-data` mocks.
+- Users filters, counters, Add User modal, edit action, activate/deactivate action, reset password action, desktop/mobile action menus, and success/error notices are connected.
+- `/super-admin/users/[id]` now loads the real user, platform roles, center roles, and supports status change, password reset, and assigning a center role.
+- User API responses continue to use safe user selections and do not return `passwordHash`.
+
+Verified:
+- `npm.cmd run lint` and `npm.cmd run build` passed in `services/api`.
+- `npm.cmd run lint`, `npx.cmd tsc --noEmit`, and `npm.cmd run build` passed in `apps/web`.
+
 ## 2026-05-02 — Tenant Payments Module + Reopen Invoice
 
 Added full manual payment recording capability to the tenant billing module.
@@ -2008,3 +2844,850 @@ Notes:
 - No Prisma/database schema change was required; tenant staff uses the existing `User`, `Role`, and `UserRole` models.
 - No hard delete endpoint was added.
 - No online payment functionality was added.
+
+## 2026-05-05 - Tenant RBAC Permission Key Standardization
+
+Fixed tenant RBAC permission key mismatches that caused roles with assigned permissions, such as `appointments:view`, to receive `403` from tenant APIs.
+
+Changed:
+- Added a shared tenant permission key normalizer with canonical colon keys and legacy dot-key compatibility.
+- Standardized tenant role permission storage and defaults to colon keys.
+- Updated center session permission resolution so `/auth/center/me` returns normalized effective permissions for the logged-in center user.
+- Updated tenant appointments, services, staff, billing, payments, and patient-credit controllers/services to check `session.permissions` instead of role-name strings.
+- Updated frontend tenant permission helpers and action gates to read the session permission array.
+- Updated the tenant role permissions page to save canonical keys.
+- Extended `GET /api/v1/permissions/me` so tenant-cookie sessions return tenant session permissions while Super Admin header usage still returns platform permissions.
+
+Mismatches fixed:
+- `appointments.view` -> `appointments:view`
+- `appointments.status.update` -> `appointments:status`
+- `services.archive` -> `services:archive`
+- `services.activate` -> `services:status`
+- `billing.mark_paid` -> `billing:update`
+- `payments.view/create` -> `payments:view/create`
+- `staff.view/create/update/activate` -> `staff:view/create/update/status`
+
+Follow-up audit:
+- Canonical tenant keys were aligned to the final module/action list: patients status, services archive/status, staff status, billing cancel, reports view, settings view, and role permissions view/update.
+- Patients, reports, role-permission APIs, and tenant sidebar visibility now enforce canonical keys.
+- Dev-only RBAC denial logging prints the required permission and effective permission array when a tenant permission check fails outside production.
+- Tenant frontend now uses `GET /api/v1/permissions/me` as the tenant permission/session source for the Center Admin shell.
+- Center Admin sidebar items are hidden when the current user lacks the module `:view` permission.
+- Direct URL access without the page permission now shows a translated Access Denied panel instead of a generic loading/error state.
+- Create/edit/status/cancel/payment/staff/role-permission actions are hidden according to the canonical permission keys.
+
+Verified:
+- `npm.cmd run build` passed in `services/api`.
+- `npm.cmd run lint` passed in `services/api`.
+- `npm.cmd run lint` passed in `apps/web`.
+- `npx.cmd tsc --noEmit` passed in `apps/web`.
+- `npm.cmd run build` passed in `apps/web`.
+
+## 2026-05-05 - Tenant Regression QA Pass
+
+Ran a tenant regression QA pass focused on current sidebar pages, tenant RBAC gates, route registration, and build stability.
+
+Changed:
+- Fixed the tenant profile page access gate so every authenticated center user can open their own profile even when they do not have `settings:view`; module pages still inherit their canonical `:view` permissions.
+
+Verified:
+- API lint, API build, and API unit tests passed.
+- Web lint, web `tsc --noEmit`, and web production build passed.
+- Tenant sidebar routes returned `200` from the running Next.js server: dashboard, patients, services, staff, appointments, billing, reports, settings, role permissions, and profile.
+- Tenant API routes returned auth-gated responses instead of `500`: appointments, services, staff, billing, billing summary, top patients, appointment invoice lookup, invoice payments, use-credit, roles, and `/permissions/me`.
+- EN/AR/HE SSR locale checks passed on `/tenant/login`: English LTR, Arabic RTL, Hebrew RTL.
+
+Notes:
+- No new features were added.
+- No online payment functionality was added.
+- Full destructive/manual CRUD matrix was not run without confirmed seeded role credentials for owner, manager, doctor, receptionist, and accountant.
+
+## 2026-05-05 - Tenant Dashboard Counters Fix
+
+Fixed tenant dashboard counters that always displayed zero despite real tenant data.
+
+Changed:
+- Added `GET /api/v1/tenant/dashboard/stats`.
+- Dashboard stats now count real center-scoped patients, appointments, services, and staff assignments from the authenticated tenant session center.
+- Updated the tenant dashboard UI to fetch stats, show a loading placeholder, and show a translated error instead of silently defaulting to zero.
+
+Verified:
+- API build and lint passed.
+- Web lint, `tsc --noEmit`, and production build passed.
+- Live API check returned non-zero counts for Royal Clinic.
+- Creating one same-center patient, service, staff user, and appointment increased each matching dashboard count by exactly `+1`.
+- A different center returned a separate count set, confirming center isolation.
+
+## 2026-05-05 - Tenant Dashboard UX Enhancement
+
+Extended the existing tenant dashboard without redesigning the architecture.
+
+Changed:
+- Added Today Activity cards for today's appointments, appointments upcoming in the next 2 hours, and missed/no-show appointments.
+- Added Recent Activity sections for the last 5 appointments and last 5 invoices.
+- Added permission-aware Quick Actions for Add Patient, Add Appointment, and Create Invoice.
+- Added Revenue Snapshot using the existing tenant billing summary endpoint.
+- Added Alerts for upcoming appointments soon, patients with credit, and pending invoices.
+- Extended `GET /api/v1/tenant/dashboard/stats` with dashboard activity, alerts, and recent activity data.
+
+Verified:
+- API build and lint passed.
+- Web lint, `tsc --noEmit`, and production build passed.
+- Live dashboard stats returned activity, alerts, recent appointments, and recent invoices.
+- Creating a same-center appointment dated today increased total appointments and today's appointment count by `+1`, and the new appointment appeared first in recent appointments.
+- Quick action target routes returned `200`: `/tenant/patients`, `/tenant/appointments/new`, `/tenant/billing/new`.
+
+## 2026-05-05 - Super Admin Centers Management
+
+Built the requested Super Admin Centers Management surface without changing the older Super Admin architecture.
+
+Changed:
+- Added strict Super Admin-only endpoints: `GET /api/v1/admin/centers`, `GET /api/v1/admin/centers/:centerId`, and `PATCH /api/v1/admin/centers/:centerId/status`.
+- Added center summaries with `usersCount` calculated from same-center non-revoked user role assignments.
+- Added center details with a safe same-center users list and no password hash exposure.
+- Added `/admin/centers` and `/admin/centers/[centerId]` pages using the existing Super Admin layout.
+- Added EN/AR/HE translations and RTL-ready responsive tables/cards for the new pages.
+
+Verified:
+- API lint and API build passed.
+- Web lint, web `tsc --noEmit`, and web production build passed.
+- Live API smoke checks confirmed no-header access returns `403`, a tenant center user header returns `403`, and a Super Admin header returns center list data.
+- Center details returned safe users for Royal Clinic with no password hash fields.
+- Status QA toggled a QA center from `ACTIVE` to `SUSPENDED` and restored it to `ACTIVE`.
+- Local Next.js route checks returned `200` for `/admin/centers` and `/admin/centers/:centerId`.
+
+## 2026-05-05 - Super Admin Login as Center Admin
+
+Implemented Super Admin center impersonation using the existing tenant center session architecture.
+
+Changed:
+- Added `POST /api/v1/admin/centers/:centerId/login-as`.
+- The endpoint requires explicit platform `super_admin`, selects the center owner or first active center manager, refuses platform Super Admin targets, creates the normal tenant center session cookie, and returns `token` plus `redirectUrl`.
+- Added internal-note audit logging for each impersonation with Super Admin actor and target user details.
+- Connected `Login as Center Admin` / `الدخول كمدير المركز` / Hebrew equivalent buttons on `/admin/centers` and `/admin/centers/:centerId`.
+
+Verified:
+- API build and lint passed.
+- Web lint, web `tsc --noEmit`, and web production build passed.
+- Live `POST /api/v1/admin/centers/:centerId/login-as` returned a token and `/tenant/dashboard` redirect URL.
+- The returned cookie resolved through `GET /api/v1/auth/center/me` as the selected same-center center manager.
+- Missing Super Admin header and tenant user header both returned `403`.
+- Internal note audit entry was created with actor, target user, and center details.
+
+## 2026-05-05 - Login as Center Admin Button Fix
+
+Fixed the Super Admin UI click path for "Login as Center Admin".
+
+Changed:
+- The `/admin/centers` API client now resolves and caches the current Super Admin user id from `/permissions/me` when `royalcare.superAdminUserId` is missing.
+- Added safe development-only logs for click, API request start, API response, and redirect URL.
+- The list and details buttons now surface visible translated errors when the login-as API fails.
+
+Verified:
+- Web lint, web `tsc --noEmit`, and web production build passed.
+
+## 2026-05-05 - Super Admin Action Visibility Fix
+
+Restored Super Admin action visibility after tenant RBAC work made platform actions depend too heavily on frontend permission arrays.
+
+Changed:
+- Super Admin center list/details actions are no longer hidden by frontend permission fetch results.
+- Restored Add Center, View, Activate/Suspend, Login as Center Admin, Add User to Center, and reset-password visibility.
+- Backend endpoints remain the real Super Admin protection layer.
+
+Verified:
+- Web lint, web `tsc --noEmit`, and web production build passed.
+
+## 2026-05-05 - Super Admin Login-as No-manager Handling
+
+Fixed Super Admin login-as behavior for centers without an active center owner or manager.
+
+Changed:
+- `POST /api/v1/admin/centers/:centerId/login-as` now returns `409 Conflict` with `errorCode: NO_ACTIVE_CENTER_MANAGER` when no active `CENTER_OWNER` or `CENTER_MANAGER` exists.
+- `/admin/centers`, `/admin/centers/:centerId`, and `/super-admin/centers/:id` handle that error with localized EN/AR/HE warnings and an Add Center Manager action.
+- The older Super Admin center details page opens the existing staff form preselected as `CENTER_MANAGER`.
+
+Verified:
+- API build and lint passed.
+- Web lint, web `tsc --noEmit`, and web production build passed.
+- Live success login-as returned token and `/tenant/dashboard`.
+- Live no-manager login-as returned `409` with `NO_ACTIVE_CENTER_MANAGER`.
+
+## 2026-05-05 - Super Admin Add Center Manager Flow
+
+Made the "Add Center Manager" recovery action functional inside the Super Admin center details page.
+
+Changed:
+- Added `POST /api/v1/admin/centers/:centerId/manager`.
+- The endpoint requires Super Admin, creates or assigns a same-center `CENTER_MANAGER`, requires a temporary password, hashes it, blocks platform Super Admin assignment, and returns a safe user summary.
+- Added a modal in `/admin/centers/:centerId` for manager name, email, optional phone, and temporary password.
+- After successful manager creation, the center details refresh, the no-manager warning is hidden, and login-as becomes available.
+
+Verified:
+- API build and lint passed.
+- Web lint, web `tsc --noEmit`, and web production build passed.
+- Live API smoke created an active `CENTER_MANAGER` for a previously no-manager center, then login-as returned a token and `/tenant/dashboard`.
+
+## 2026-05-06 - Super Admin Audit Log Write Fix
+
+Fixed Audit Logs returning an empty list after Super Admin actions.
+
+Changed:
+- Made `AuditLog.actorUserId` nullable so expected audit records can still persist when a Super Admin actor header is missing or cannot be resolved.
+- `AuditService.log()` now resolves actor, target user, and center links safely; unresolved supplied IDs are retained in metadata instead of dropping the log.
+- Super Admin user create, update, status change, reset password, center-role assignment, and center login-as now await audit writes after successful actions.
+- Center login-as audit rows now include the impersonated tenant admin as `targetUserId`.
+- Super Admin Add Center Manager flow writes a center-role assignment audit row.
+
+Verified:
+- Prisma `db:format`, `db:validate`, `db:generate`, and `db push` passed.
+- API build and lint passed.
+- Live API smoke created audit rows for `user.created`, `user.updated`, `user.status_changed`, `user.password_reset`, `user.center_role_assigned`, and `center.login_as`.
+
+## 2026-05-06 - Super Admin Audit Actor/Target Filters
+
+Improved Audit Logs filtering so actors and affected users are not confused.
+
+Changed:
+- `GET /api/v1/super-admin/audit-logs` now supports `targetUserId` and `targetSearch` in addition to `actorUserId` and `actorSearch`.
+- The Audit Logs UI now has separate autocomplete filters for actor and target.
+- Actor label is clarified as "Search actor"; target label is "Search target" with EN/AR/HE translations.
+
+Verified:
+- API build and lint passed.
+- Web lint and `tsc --noEmit` passed.
+- Live API smoke confirmed actor filtering, target filtering, target-as-actor filtering, and clear/latest behavior.
+
+## 2026-05-06 - Center Status Audit Logging
+
+Added Super Admin audit logging for center activate/suspend status changes.
+
+Changed:
+- `PATCH /api/v1/admin/centers/:centerId/status` now writes `CENTER_STATUS_CHANGED` after a successful status update.
+- The audit metadata includes `oldStatus`, `newStatus`, `centerName`, `actorName`, and `actorEmail`.
+- Audit Logs UI labels `CENTER_STATUS_CHANGED` in EN/AR/HE and colors the badge from `metadata.newStatus` (`ACTIVE` green, `SUSPENDED` red).
+
+Verified:
+- API build and lint passed.
+- Web lint and `tsc --noEmit` passed.
+- Live API smoke changed a center from `ACTIVE` to `SUSPENDED` and confirmed the audit row.
+
+## 2026-05-06 - Super Admin User Status Audit Logging
+
+Added detailed audit logging for Super Admin user status changes.
+
+Changed:
+- `PATCH /api/v1/super-admin/users/:userId/status` now writes `USER_STATUS_CHANGED` from `UsersService.updateStatus()` after a successful status update.
+- The audit metadata includes `oldStatus`, `newStatus`, `targetName`, `targetEmail`, `actorName`, and `actorEmail`.
+- Audit Logs UI labels `USER_STATUS_CHANGED` in EN/AR/HE and colors the badge from `metadata.newStatus` (`ACTIVE` green, `SUSPENDED` red, other statuses amber).
+
+Verified:
+- API build and lint passed.
+- Web lint and `tsc --noEmit` passed.
+- Live API smoke changed a user from `ACTIVE` to `SUSPENDED` and confirmed the audit row.
+
+## 2026-05-06 - Tenant Staff Status Audit Logging
+
+Added Super Admin-visible audit logging for tenant staff activate/deactivate actions.
+
+Changed:
+- `PATCH /api/v1/tenant/staff/:staffId/status` now writes `TENANT_STAFF_STATUS_CHANGED` from `TenantStaffService.updateStatus()` after a successful tenant staff status update.
+- The audit row includes tenant `actorUserId`, `targetUserId`, `centerId`, and metadata with `oldStatus`, `newStatus`, `targetName`, `targetEmail`, and `centerName`.
+- Audit Logs UI labels `TENANT_STAFF_STATUS_CHANGED` in EN/AR/HE and colors the badge from `metadata.newStatus`.
+
+Verified:
+- API build and lint passed.
+- Web lint and `tsc --noEmit` passed.
+- Live tenant smoke changed Ahmad Taleb from `ACTIVE` to `INACTIVE` in Jenin Care and confirmed the Super Admin audit row.
+
+## 2026-05-06 - Tenant Staff Audit Impersonation Metadata
+
+Fixed tenant staff status audit logging when the action is performed through Super Admin login-as.
+
+Changed:
+- Center session tokens now carry optional `impersonatorUserId` when created by `POST /api/v1/admin/centers/:centerId/login-as`.
+- Center session resolution exposes impersonation metadata to tenant endpoints.
+- Tenant staff status audit rows use the Super Admin as `actorUserId` when impersonation exists, while preserving the tenant session user in `metadata.tenantActorUserId`.
+- `TENANT_STAFF_STATUS_CHANGED` metadata now includes `source: "TENANT_STAFF"`, `impersonatedBySuperAdmin`, and optional `impersonatorUserId`.
+
+Verified:
+- API build and lint passed.
+- Web lint and `tsc --noEmit` passed.
+- Live impersonation smoke changed Ahmad Taleb in Jenin Care and confirmed the audit row actor was the Super Admin, target was the staff user, and impersonation metadata was present.
+
+## 2026-05-06 - Critical Update Audit Logging Pass
+
+Moved remaining critical Super Admin user audit writes into service-level update paths.
+
+Changed:
+- `UsersService.update()` now writes `USER_UPDATED` after successful user edits, with actor and target snapshots plus updated field names.
+- `UsersService.resetPassword()` now writes `PASSWORD_RESET` after successful password resets, with actor and target snapshots.
+- Controller-level thin `user.updated` and `user.password_reset` logs were removed to avoid duplicate/weak audit entries.
+- Existing service-level logs remain active for `USER_STATUS_CHANGED`, `CENTER_STATUS_CHANGED`, and `TENANT_STAFF_STATUS_CHANGED`.
+
+Verified:
+- API build and lint passed.
+- Web lint and `tsc --noEmit` passed.
+- Live API smoke confirmed newest-first audit rows for `USER_UPDATED`, `PASSWORD_RESET`, and `USER_STATUS_CHANGED`.
+
+## 2026-05-06 - Staff Status Audit Detail Upgrade
+
+Fixed staff status audit rows from both tenant staff and Super Admin center-details staff actions.
+
+Changed:
+- Staff status changes now write canonical `STAFF_STATUS_CHANGED` audit rows instead of adding more source-specific action names.
+- `TenantStaffService.updateStatus()` and `CentersService.updateStaffStatus()` include `oldStatus`, `newStatus`, `targetName`, `targetEmail`, `centerName`, and `actorName` in metadata.
+- Center-details staff status updates pass the Super Admin actor id into the service and log with `source: "CENTER_DETAILS_PAGE"`.
+- Audit log list responses now include display helpers: `readableActionAr`, `actorDisplayName`, `targetDisplayName`, `targetDisplayEmail`, and `centerDisplayName`.
+- Audit Logs UI uses the enriched display fields and falls back to `غير محدد` instead of a dash when actor, target, or center names are missing.
+
+Verified:
+- API build and lint passed.
+- Web lint, `tsc --noEmit`, and build passed.
+- Live center-details smoke changed Ahmad Taleb in Jenin Care to `INACTIVE`, confirmed a `STAFF_STATUS_CHANGED` audit row with Arabic readable text, then restored the staff user to `ACTIVE`.
+
+## 2026-05-06 - Staff Password Reset Audit Logging
+
+Added readable audit logging for Super Admin center-details staff password resets.
+
+Changed:
+- `POST /api/v1/centers/:centerId/staff/:userId/reset-password` now passes the Super Admin actor id into `CentersService.resetStaffPassword()`.
+- `CentersService.resetStaffPassword()` writes `STAFF_PASSWORD_RESET` after a successful password hash update.
+- Staff password reset metadata includes `actorName`, `targetName`, `targetEmail`, `centerName`, and `source: "PASSWORD_RESET"`.
+- No temporary password or password hash is stored in audit metadata.
+- Audit log response mapping returns Arabic readable text for `STAFF_PASSWORD_RESET`.
+- Audit Logs UI and dictionaries include EN/AR/HE labels for `STAFF_PASSWORD_RESET`.
+
+Verified:
+- API build and lint passed.
+- Web lint, `tsc --noEmit`, and build passed.
+- Live center-details smoke reset Ahmad Taleb's password in Jenin Care and confirmed a `STAFF_PASSWORD_RESET` audit row with full readable details and no password in metadata.
+
+## 2026-05-06 - Audit Logs Timeline UI
+
+Upgraded Super Admin Audit Logs from a plain table to a SaaS-style activity timeline.
+
+Changed:
+- `GET /api/v1/super-admin/audit-logs` keeps the same filters and pagination but now returns enriched timeline fields: `actionLabel`, `actorName`, `actorEmail`, `targetName`, `targetEmail`, and `centerName`.
+- Backend action labels now include status transitions for user, staff, and center status changes.
+- Backend readable Arabic action text covers staff password reset, password reset, staff status changes, center status changes, user status changes, and login-as center actions.
+- `/super-admin/audit-logs` now renders responsive timeline cards instead of a wide table.
+- Timeline cards show action label, actor, target, center, date/time, and optional IP/device values when present in metadata.
+- Empty filtered results now show localized EN/AR/HE messages, including Arabic `لا توجد نتائج مطابقة للفلاتر الحالية`.
+
+Verified:
+- API build and lint passed.
+- Web lint, `tsc --noEmit`, and build passed.
+- Live API smoke confirmed newest-first audit rows return timeline-ready fields.
+
+## 2026-05-06 - Super Admin Analytics Dashboard API
+
+Added backend-only Super Admin analytics dashboard endpoint.
+
+Changed:
+- Added `SuperAdminAnalyticsModule`, `SuperAdminAnalyticsController`, and `SuperAdminAnalyticsService`.
+- Registered `GET /api/v1/super-admin/analytics/dashboard`.
+- The endpoint returns center, user, appointment, billing, and audit KPI groups.
+- Billing revenue totals aggregate payments only when the linked invoice is not `CANCELLED`.
+- Audit slices reuse enriched audit rows with `actionLabel`, actor/target names and emails, center name, and readable Arabic action text.
+- Hardened `PermissionGuard` so protected Super Admin endpoints require an explicit platform user header instead of silently using the default seed admin.
+
+Verified:
+- API build, `tsc --noEmit`, and lint passed.
+- Live API smoke confirmed Super Admin header access returns analytics data.
+- Live no-header smoke returned `403`, confirming tenant/no-platform-header access is blocked by the platform guard.
+
+## 2026-05-06 - Center Status Audit Logging Fix
+
+Fixed missing audit rows for Super Admin center status changes.
+
+Changed:
+- Moved `CENTER_STATUS_CHANGED` audit logging into `CentersService.updateStatus()` so all center status endpoints log consistently.
+- `PATCH /api/v1/admin/centers/:centerId/status`, `PATCH /api/v1/centers/:centerId/status`, and `PATCH /api/v1/super-admin/centers/:centerId/status` now share the same audit behavior.
+- Center status audit metadata now includes `oldStatus`, `newStatus`, `oldIsActive`, `newIsActive`, `centerName`, `centerSlug`, `targetType: "CENTER"`, `targetId`, `targetName`, `targetEmail: null`, `changedBy`, optional `ip`, and optional `userAgent/device`.
+- Audit enrichment now maps `CENTER_ACTIVATED` and `CENTER_DEACTIVATED` in addition to `CENTER_STATUS_CHANGED`.
+
+Verified:
+- API build and lint passed.
+- Web lint, `tsc --noEmit`, and build passed.
+- Live smoke changed a QA center from `ACTIVE` to `SUSPENDED`, confirmed a `CENTER_STATUS_CHANGED` row with readable Arabic text and center target fields, then changed it back to `ACTIVE` and confirmed a second row.
+- No-header audit logs access returned `403`.
+
+## 2026-05-06 - Super Admin Dashboard API Integration
+
+Converted the existing Super Admin dashboard UI from mock/static data to the real analytics endpoint.
+
+Changed:
+- Added `apps/web/src/lib/api/super-admin-analytics.ts` with a typed `getSuperAdminAnalyticsDashboard()` client for `GET /api/v1/super-admin/analytics/dashboard`.
+- `/super-admin/dashboard` now loads KPI cards, quick stats, recent centers, billing overview, revenue by center, and latest audit activity from the analytics response.
+- Added loading, empty, and translated error states while preserving the existing dashboard layout.
+- Dashboard date display uses the shared numeric `formatDate()` helper and currency display uses the existing compact currency formatter.
+- Extended the analytics backend response with `centers.latestCenters` so the existing recent-centers panel can stay API-backed without adding a second request.
+- Updated EN/AR/HE dashboard dictionary keys for the new API-backed sections and statuses.
+
+Verified:
+- API build passed.
+- Web lint, `tsc --noEmit`, and production build passed.
+- Live API smoke confirmed the analytics endpoint returns center counts, latest centers, revenue totals, and newest-first enriched audit logs for a Super Admin header.
+
+## 2026-05-06 - Super Admin Dashboard Smart Insights
+
+Added rule-based Smart Insights to the Super Admin analytics dashboard.
+
+Changed:
+- `GET /api/v1/super-admin/analytics/dashboard` now returns `insights.alerts`, `insights.highlights`, and `insights.recommendations`.
+- Insight items include `type`, `severity`, translated EN/AR/HE messages, and optional `relatedCenterId`.
+- Alerts cover no active centers, centers with no appointments in the last 7 days, revenue drop, cancelled invoices exceeding paid invoices, and high same-day sensitive action volume.
+- Highlights cover top center by revenue, top center by appointments, most active admin, and revenue growth.
+- Recommendations cover inactive centers, invoice cancellation review, inactive users, and no recent appointment activity.
+- `/super-admin/dashboard` now renders a compact Smart Insights section above the KPI cards without changing the dashboard layout.
+
+Verified:
+- API lint and build passed.
+- Web lint, `tsc --noEmit`, and production build passed.
+- Live API smoke confirmed populated `alerts`, `highlights`, and `recommendations` are returned with translated messages.
+
+## 2026-05-07 - Subscription Lifecycle Display and Smart Insight Name Safety
+
+Fixed two production UI/data safety issues.
+
+Changed:
+- Super Admin subscription list now safely formats lifecycle text from `daysRemaining` when present, with fallbacks for `daysUntilExpiry`, `remainingDays`, or a valid `currentPeriodEnd`.
+- Missing or invalid subscription end dates render `—` instead of leaking `undefined`.
+- Subscription API list/detail responses return `notificationPhone: null` and `notificationLanguage: null` placeholders without selecting missing database columns, keeping the current page load path stable until the database column rollout is applied.
+- Smart Insights center-name handling now detects repeated question marks/corrupted names and avoids embedding bad center names in Arabic alert text.
+- Insight rows now use safe `relatedCenterName` values for center-related insights.
+
+Verified:
+- API build and lint passed.
+- Web `tsc --noEmit`, lint, and production build passed.
+- Live API smoke confirmed subscriptions return `daysRemaining`, `isExpired`, and `isExpiringSoon`.
+- Live API smoke confirmed Arabic no-recent-appointments insight uses `هذا المركز` instead of `????`.
+## 2026-05-12 - Tenant Subscription Access Control
+
+Implemented backend-enforced tenant subscription write restrictions.
+
+Changed:
+- Added `TenantSubscriptionAccessService` and `TenantSubscriptionAccessMiddleware`.
+- Applied subscription write checks to tenant patients, appointments, services, staff, billing/payments/credit, and tenant role-permission controllers.
+- Tenant sessions now include `subscriptionAccess` from `/auth/center/me` and tenant-mode `/permissions/me`.
+- Tenant shell shows subscription warning/restriction banners from the shared session state.
+- Tenant list action buttons now disable with localized messages when subscription writes are blocked.
+- Arabic restriction text now matches the required production copy for expired and suspended centers.
+
+Verified:
+- API lint and build passed.
+- Web lint, `tsc --noEmit`, and production build passed.
+- Middleware allows dashboard/notification reads and renewal request/logout while blocking tenant business write methods for expired/suspended subscriptions.
+
+## 2026-05-12 - Super Admin Subscription Overview Actions
+
+Improved the Super Admin subscriptions overview in place.
+
+Changed:
+- Added quick filter cards for All, Expiring Soon, Expired, Suspended, and Missing WhatsApp Phone.
+- Added lifecycle badges for days remaining and visible missing WhatsApp phone indicators in desktop rows and mobile cards.
+- Row actions now use the existing subscription PATCH endpoint for 30-day renewal and suspension.
+- WhatsApp action opens only when a phone is available; missing-phone rows route the action to the edit subscription modal.
+
+Verified:
+- Web lint, `tsc --noEmit`, and production build passed.
+
+## 2026-05-12 - Super Admin Subscription Filter Fix
+
+Fixed subscription overview quick filters returning empty results.
+
+Changed:
+- `GET /api/v1/super-admin/subscriptions` now returns real safe subscription notification phone/language fields plus `ownerPhone` and `centerPhone: null`.
+- Added backend support for `missingPhone=true` and made expired/expiring filters lifecycle-aware.
+- `/super-admin/subscriptions` now applies the final quick-filter check against actual response fields so Expiring Soon, Expired, Suspended/Canceled, and Missing WhatsApp Phone behave consistently.
+
+Verified:
+- API lint and build passed.
+- Web lint, `tsc --noEmit`, and production build passed.
+
+## 2026-05-12 - Suspended Subscription Status Normalization
+
+Fixed suspended subscription counts across the Super Admin dashboard and subscriptions page.
+
+Changed:
+- Added a shared web `normalizeSubscriptionStatus()` helper for subscription list lifecycle/status filtering.
+- Suspended list filtering now treats subscription `SUSPENDED`/`CANCELLED` and center `SUSPENDED`/`CANCELLED` as blocked/suspended states.
+- `GET /api/v1/super-admin/subscriptions?status=SUSPENDED` now uses the same blocked-state logic.
+- Super Admin analytics subscription KPIs now count suspended subscriptions using the same subscription-or-center blocked-state logic.
+
+Verified:
+- API lint and build passed.
+- Web lint, `tsc --noEmit`, and production build passed.
+
+## 2026-05-13 - Super Admin Subscription Timeline
+
+Added subscription activity timeline/history to Super Admin subscription details.
+
+Changed:
+- Added `GET /api/v1/super-admin/subscriptions/:id/timeline` with subscription-id and center-id fallback.
+- Timeline builder combines subscription creation, subscription audit rows, subscription notifications, renewal requests, and manual WhatsApp notification logs into normalized newest-first items.
+- `/super-admin/subscriptions/[id]` now renders a responsive Subscription Timeline section with localized labels, tones, relative time, and exact numeric date/time.
+
+Verified:
+- API lint and build passed.
+- Web lint, `tsc --noEmit`, and production build passed.
+
+## 2026-05-13 - Super Admin Subscription Action Availability
+
+Unified subscription overview action menu rules across lifecycle states.
+
+Changed:
+- Added shared web `getSubscriptionActionAvailability()` helper beside the normalized subscription lifecycle helper.
+- `/super-admin/subscriptions` desktop and mobile action menus now use the same lifecycle/action availability table.
+- Trialing subscriptions now expose Renew and Suspend consistently; expired, suspended, and cancelled subscriptions expose Renew and WhatsApp but not Suspend.
+
+Verified:
+- Web lint, `tsc --noEmit`, and production build passed.
+
+## 2026-05-13 - Super Admin In-App Notification Center
+
+Implemented Super Admin subscription lifecycle notification center.
+
+Changed:
+- Added notification targeting with `SUPER_ADMIN` and `CENTER_ADMIN` audiences.
+- Extended subscription notification types for suspended, renewed, trial ending soon, and missing WhatsApp phone events.
+- Added Super Admin read APIs: `PATCH /api/v1/super-admin/notifications/:id/read` and `PATCH /api/v1/super-admin/notifications/read-all`.
+- Super Admin notifications now return unread counts, action URLs, center names, and safe payload metadata.
+- Subscription list/update and renewal request flows create Super Admin-targeted lifecycle notifications.
+- Super Admin shell now includes an unread notification bell with dropdown preview, view-all, mark-read, and mark-all-read behavior.
+- `/super-admin/notifications` now supports all, unread, subscriptions, renewal request, and system alert filters.
+
+Verified:
+- Prisma generate and `db push` passed.
+- API lint and build passed.
+- Web lint, `tsc --noEmit`, and production build passed.
+
+## 2026-05-13 - Super Admin Notification Bell Refresh Fix
+
+Fixed Super Admin notification bell updates without requiring a browser refresh.
+
+Changed:
+- Super Admin bell unread fetch now uses a stable callback.
+- Bell polling interval changed to 30 seconds.
+- Bell listens for `super-admin-notifications-updated` window events.
+- Read, read-all, and Super Admin subscription update actions dispatch the refresh event so the badge updates immediately after local notification-affecting actions.
+- Opening the dropdown fetches the latest unread notifications immediately.
+
+Verified:
+- Web lint, `tsc --noEmit`, and production build passed.
+# 2026-05-18 - Tenant Isolation and RBAC Hardening
+
+Hardened tenant-owned mutation paths against IDOR-style access.
+
+Changed:
+- Tenant patient, service, appointment, invoice status, payment, credit usage, and manual credit writes now include `centerId` in the mutation filter.
+- Tenant password change now revalidates the signed session against an active center-scoped role before updating the user password.
+- Tenant renewal request lookup now avoids ID-only `findUnique` for the center lookup.
+
+Verified:
+- API lint and build passed.
+- Live HTTP QA created two QA centers with separate data and confirmed cross-center patient/service/appointment/invoice URL access returns `404`, while same-center access and reports return `200`.
+
+# 2026-05-21 - Public Branding and Appearance Settings
+
+Added Super Admin-controlled public website appearance settings without changing the public center APIs.
+
+Changed:
+- Expanded protected `GET/PATCH /api/v1/admin/settings` to store public site name, logo/favicon/hero/footer image URLs, contact details, social URLs, and AR/EN/HE landing texts.
+- Added public read-only `GET /api/v1/public/settings` for non-secret `public_*` settings.
+- Added a `/super-admin/settings` section for Public Website Appearance with Branding, Contact & WhatsApp, Social Links, and Landing Texts cards.
+- `/centers` now reads public settings and safely falls back to existing defaults when values are missing.
+- Public social icons are hidden when their URL is empty.
+
+Verified:
+- API lint/build passed.
+- Web lint, `tsc --noEmit`, and production build passed.
+
+# 2026-05-21 - Public Appearance Uploads
+
+Implemented real image upload for Super Admin Public Website Appearance settings.
+
+Changed:
+- Added Super Admin protected `POST /api/v1/admin/uploads/public-image`.
+- Validates PNG, JPG, WebP, and SVG images up to 2MB.
+- Stores public branding assets under `apps/web/public/uploads/branding/`.
+- Public Appearance image controls now upload files, preview immediately, support clearing, and keep optional URL entry collapsed.
+- Public Appearance layout now uses a tighter desktop 70/30 form/preview grid with a sticky preview only on desktop and a single-column tablet/mobile layout.
+
+Verified:
+- API lint and build passed.
+- Web lint, `tsc --noEmit`, and production build passed.
+
+# 2026-05-21 - Public Brand Logo Rendering
+
+Fixed uploaded public logo rendering in the landing navbar and footer.
+
+Changed:
+- Added shared `BrandLogo` component for public branding.
+- Public navbar and footer now use a fixed-height, max-width, `object-contain` logo treatment with loading skeleton and initials fallback.
+- Uploaded square, wide, tall, transparent PNG, and SVG logos no longer stretch or push the brand name onto a new line.
+
+Verified:
+- Web lint, `tsc --noEmit`, and production build passed.
+
+# 2026-05-21 - Public Appearance Save Bar UX
+
+Improved Super Admin Public Appearance save feedback.
+
+Changed:
+- The Public Appearance section now has a grouped sticky bottom save bar with status and feedback together, plus Cancel and Save actions together.
+- Image upload success now shows a small inline reminder near the uploaded image field to save changes.
+- Save success clears the dirty state while preserving the uploaded preview; save errors appear in the bar and near the top of the section.
+
+Verified:
+- Web lint, `tsc --noEmit`, and production build passed.
+
+# 2026-05-23 - Tenant Marketing Tracking Events v2
+
+Added the second pass of public journey tracking events while keeping tenant scripts isolated from admin areas.
+
+Changed:
+- Booking page load now tracks `ViewBookingPage`.
+- Service selection now tracks `SelectService`.
+- Date and available time slot selection now track `SelectDateTime`.
+- Booking form submission now tracks `SubmitBookingAttempt` before the public booking API call.
+- Booking validation, slot-unavailable, and API failures now track `BookingFailed`.
+- Patient portal load now tracks `PatientPortalView`.
+- Existing `CompleteBooking` and `WhatsAppClick` tracking were preserved.
+- Tenant marketing injection now has an explicit public-center route guard and comments documenting that custom scripts come only from the public-safe endpoint.
+- Public marketing API/client comments document that `metaConversionApiToken` must never be exposed publicly.
+
+Verified:
+- Static searches confirmed `TenantMarketingInjector` is mounted only on `/c/[slug]`, `/c/[slug]/book`, and `/c/[slug]/patient/[token]`.
+- Static searches confirmed the public marketing client/service do not select or return `metaConversionApiToken`; only tenant settings screens/services reference it.
+- QA checklist added to business rules for script injection pages, Network token leakage, provider-stub events, provider failure isolation, and build/typecheck checks.
+
+# 2026-05-23 - Tenant Marketing Tracking Injection v1
+
+Enabled saved tenant marketing settings on center-specific public journey pages only.
+
+Changed:
+- Added public safe endpoint `GET /api/v1/public/centers/:slug/marketing-settings`.
+- The public endpoint returns Meta Pixel, TikTok Pixel, Snap Pixel, GA4, GTM, and custom script settings, but never returns `metaConversionApiToken`.
+- Added `TenantMarketingInjector` using `next/script` and mounted it only on `/c/[slug]`, `/c/[slug]/book`, and `/c/[slug]/patient/[token]`.
+- Added `trackMarketingEvent()` helper for Meta, TikTok, GA4, and Snap.
+- Wired `ViewCenter`, `StartBooking`, `CompleteBooking`, and `WhatsAppClick` events in the public center profile and booking request flow.
+- No scripts are mounted on `/centers`, `/tenant/*`, or `/super-admin/*`.
+
+Verified:
+- API build passed.
+- Web `tsc --noEmit` and web build passed.
+- Search confirmed `metaConversionApiToken` is not referenced in the public center marketing endpoint/client/injector path.
+- API/web lint remain blocked by unrelated existing lint errors.
+
+# 2026-05-23 - Tenant Marketing Settings Module
+
+Added the first tenant marketing settings module without enabling tracking injection.
+
+Changed:
+- Added `TenantMarketingSettings` Prisma model and migration `20260523170000_add_tenant_marketing_settings`.
+- Added tenant API endpoints for loading and saving marketing settings at `/api/v1/tenant/settings/marketing`.
+- Added Center Admin route `/tenant/settings/marketing` with EN/AR/HE labels for Meta Pixel, Meta Conversion API token, TikTok Pixel, Snap Pixel, GA4, GTM, custom head script, and custom body script.
+- Added a Settings sub-navigation item for Marketing.
+- Tenant marketing settings are center-scoped by session `centerId`, require `settings:view`, and are covered by tenant subscription write blocking.
+
+Verified:
+- Prisma format, validate, and generate passed.
+- API build passed.
+- Web `tsc --noEmit` and web build passed.
+- API/web lint still fail on unrelated existing public profile/gallery/directory issues.
+
+# 2026-05-23 - Tenant Favicon Uses Center Logo
+
+Fixed tenant app favicon behavior so Center Admin pages can show the current center logo in the browser tab.
+
+Changed:
+- `CenterAdminShell` dispatches a tenant-scoped favicon update after the authenticated center session loads.
+- `GlobalFavicon` now supports tenant-only favicon overrides on `/tenant/*` routes and restores the RoyalCare platform favicon when leaving tenant routes.
+- Tenant favicon overrides convert the center logo client-side into a contained 512x512 PNG data URL before applying `rel="icon"`, `rel="shortcut icon"`, and `rel="apple-touch-icon"`.
+- Missing or broken center logos fall back to the platform favicon.
+
+Verified:
+- Web `tsc --noEmit` and web build passed.
+- Web lint still fails on unrelated existing gallery/public-directory/Super Admin detail issues.
+
+# 2026-05-23 - Tenant Sidebar Branding Fix
+
+Fixed Center Admin sidebar branding so tenant pages no longer depend on public/platform branding.
+
+Changed:
+- Tenant sidebar now reads `session.center.branding.logoUrl` from the authenticated center session.
+- Removed the extra tenant public-profile logo fetch from `CenterAdminShell`.
+- If the center logo is missing or fails to load, the sidebar falls back to center initials inside the existing compact white logo tile.
+- Public platform pages, navbar logo behavior, and favicon behavior were not changed.
+
+Verified:
+- Web `tsc --noEmit` and web build passed.
+- Web lint still fails on unrelated existing gallery/public-directory/Super Admin detail issues; `CenterAdminShell` no longer reports lint errors after this change.
+
+# 2026-05-23 - PNG Favicon Upload Hardening
+
+Fixed the remaining browser-tab favicon conflict after DOM-level favicon links were already correct.
+
+Changed:
+- Favicon uploads are now converted through Sharp to a 512x512 transparent PNG and stored as `/uploads/branding/favicon-<timestamp>-<uuid>.png`.
+- Favicon uploads never produce WebP, while other public branding images keep the existing optimized image flow.
+- Root metadata and the root `GlobalFavicon` append managed `rel="icon"`, `rel="shortcut icon"`, and `rel="apple-touch-icon"` links with `type="image/png"` and an `updatedAt` cache-busting query.
+- Removed the conflicting `apps/web/src/app/favicon.ico` so Next/browser fallback favicon handling cannot keep preferring the old black default icon.
+- Re-uploaded the current favicon through the favicon upload path and saved `/uploads/branding/favicon-1779543890593-75a0dfcb-6845-42d7-81b9-ac93a0a6747b.png` as the public favicon setting.
+
+Verified:
+- Admin and public settings return the PNG favicon URL plus `updatedAt`.
+- The uploaded favicon is served as `Content-Type: image/png`.
+- Browser DOM checks on `/centers`, `/c/jenin-care`, `/tenant/settings`, and `/super-admin/settings` show only the uploaded PNG favicon links, with no `/favicon.ico` link.
+- Network checks requested the uploaded PNG favicon URL, and a visible Chrome screenshot confirmed the tab icon changed from the old default.
+- API build, web `tsc --noEmit`, and web build passed; lint remains blocked by unrelated existing violations in public profile/gallery/directory files.
+
+# 2026-05-23 - Global Public Favicon Fix
+
+Fixed uploaded favicon propagation across public, tenant, and Super Admin routes.
+
+Changed:
+- Public settings now return `updatedAt` for each setting.
+- Root metadata uses `public_favicon_url` plus `updatedAt` as the cache-busting query value.
+- The single root `GlobalFavicon` now fetches public settings after hydration and appends `rel="icon"`, `rel="shortcut icon"`, and `rel="apple-touch-icon"` links as the last icon links in `<head>`.
+- Removed the unused secondary `PublicFavicon` component to keep one favicon owner.
+
+Verified:
+- Admin and public settings both returned the uploaded favicon URL.
+- Headless browser checks on `/centers`, `/c/jenin-care`, `/tenant/settings`, and `/super-admin/settings` showed the uploaded favicon links in the DOM and requested the uploaded `/uploads/branding/...webp?v=...` URL.
+- API build, web `tsc --noEmit`, and web build passed.
+
+# 2026-05-18 - Localized Business Names for Billing Audit Logs
+
+Fixed audit business-name localization at the source instead of treating user-entered names as UI text.
+
+Changed:
+- Added nullable `Center.nameAr`, `Center.nameEn`, and `Center.nameHe` with `Center.name` as the fallback/default.
+- Reused existing patient localized full-name fields `fullNameAr`, `fullNameEn`, and `fullNameHe`.
+- Super Admin center create/edit forms now allow Arabic, English, and Hebrew center names.
+- Tenant billing audit metadata now stores real localized patient and center name snapshots where available.
+- Super Admin Audit Logs now resolves business names through a shared localized business-name helper and keeps UUID values in Technical details.
+- Backfill script now refreshes old tenant billing audit rows with invoice, patient, and center business metadata from the invoice source.
+
+Verified:
+- Prisma format, validate, generate, and `db push` passed.
+- API lint and build passed.
+- Web lint, `tsc --noEmit`, and production build passed.
+
+# 2026-05-18 - Tenant RBAC UI Visibility Hardening
+
+Hardened Center Admin appointment action visibility against missing role permissions.
+
+Changed:
+- Tenant appointment list now hides Edit and lifecycle/status controls unless the session includes the matching appointment permissions.
+- Tenant appointment list now hides Create Invoice unless `billing:create` exists and keeps subscription-blocked write actions disabled with the existing localized restriction tooltip.
+- Tenant appointment details now separates raw permission visibility from expired/suspended subscription write blocking for edit, status, cancel, invoice creation, payment, and credit usage actions.
+
+Verified:
+- API lint and build passed.
+- Web lint, `tsc --noEmit`, and production build passed.
+- Live RBAC API QA seeded owner/manager/staff/reception/billing/read-only users and confirmed restricted mutation/report access returns the expected `403` while allowed access succeeds.
+
+# 2026-05-18 - Production Backup and Recovery Hardening
+
+Hardened critical business records against irreversible production mistakes.
+
+Changed:
+- Critical financial/clinical relations now restrict parent hard deletes instead of cascading through subscriptions, subscription invoices, patients, appointments, tenant invoices, payments, and credit transactions.
+- Tenant invoice status changes now audit cancellation, restore/reopen, and status-change transitions.
+- Tenant patient create/update/archive/restore status paths now write audit rows.
+- Tenant appointment create/update/status/cancel/restore paths now write audit rows.
+- Restoring a cancelled appointment now clears stale cancellation flags, cancellation time, and cancellation reason.
+- Added `ai-memory/11_BACKUP_RECOVERY.md` with pg_dump, pg_restore, daily schedule, retention, and restore safety guidance.
+
+Verified:
+- Prisma validate/generate/db push, API lint/build, and targeted API recovery QA are required before production deploy.
+
+# 2026-05-18 - User-Facing UI Finalization Pass Started
+
+Started the final SaaS polish pass for Super Admin and Center Admin surfaces.
+
+Changed:
+- Added shared admin surface primitives for polished cards, loading, empty, error, and section header states.
+- Improved global focus, text rendering, tap highlight, and form-control typography behavior.
+- Super Admin shell now uses a proper notification bell icon, polished dropdown loading/empty states, and a centered enterprise content width.
+- Center Admin shell now uses a polished loading state, stronger page header treatment, centered enterprise content width, and shared access-denied state.
+- Super Admin dashboard and audit logs use shared error/loading/empty surfaces.
+- Tenant dashboard stat/error surfaces use the shared admin polish layer.
+
+Verified:
+- Web lint, TypeScript check, and production build passed.
+
+# 2026-05-28 - Smart Follow-up Treatment Plans v1
+
+Implemented treatment follow-up planning for recurring services.
+
+Changed:
+- Added service-level follow-up settings for fixed interval and session-plan recurrence.
+- Added `PatientFollowUp` schema/model, enums, and migration `20260528100000_add_patient_follow_ups`.
+- Added tenant follow-up APIs for listing, analytics, status updates, and notes.
+- Appointment status changes now create an idempotent follow-up when an appointment first transitions to `COMPLETED`.
+- Added `/tenant/follow-ups` worklist with Today/This week/Overdue/Upcoming/Contacted/Booked/Completed filters, WhatsApp prefilled messages, status actions, notes, metrics, and appointment-create prefill.
+- Patient details now show a compact follow-up timeline.
+- Tenant service create/edit form now exposes Follow-up Settings with EN/AR/HE labels and RTL-safe layout.
+
+Verified:
+- Prisma format, validate, and generate passed.
+- API lint and build passed.
+- Web lint passed with existing warnings only, `tsc --noEmit` passed, and web build passed.
+
+# 2026-05-28 - Follow-up Previous Treatment Context Fix
+
+Fixed follow-up clinical context retrieval so treatment notes are useful to staff.
+
+Changed:
+- Follow-up context now loads both `Appointment.notes` and `Appointment.internalNotes`.
+- The context lookup is scoped to the same center, patient, and service, and now prioritizes latest `COMPLETED`, then latest `CONFIRMED`, then latest non-cancelled appointment with notes/internal notes.
+- Follow-up cards show a distinct fallback when no previous completed treatment exists.
+- Internal notes now display with a visible internal-notes badge.
+- Non-completed note sources now display a warning badge and localized appointment status metadata.
+- Treatment timelines on follow-up cards and appointment-create context now include provider names when available.
+
+Verified:
+- API build, web `tsc --noEmit`, and web build were run for this fix.
+
+# 2026-05-28 - Follow-up Card Medical Workflow UX
+
+Improved appointment note terminology and follow-up card scanability for treatment staff.
+
+Changed:
+- Appointment notes are labeled as treatment notes, with helper text explaining they appear in treatment history and future follow-ups.
+- Internal notes are labeled as internal staff notes, with helper text explaining they are not shown to patients or follow-up messages.
+- Appointment details now shows those helper explanations alongside notes.
+- Follow-up cards now use a cleaner header with patient, phone, service, session, due date, overdue/upcoming, incomplete-session, and internal-note badges.
+- The follow-up clinical context section was simplified into "last treatment session" metadata plus treatment notes and internal staff notes.
+- Treatment history now presents as a vertical timeline.
+- The follow-up note textarea now has an explicit "add new follow-up note" label.
+- WhatsApp is the primary action; appointment/status actions are secondary.
+- Follow-up card v2 polish separated header hierarchy into patient, service/session, status badges, and muted due-date metadata.
+- Last treatment metadata now uses compact chips, timeline entries have clearer title/status/date hierarchy, textarea height is reduced, and the WhatsApp CTA uses a stronger green treatment-workflow action style.
+- Follow-up card v3 polish tightened vertical spacing, removed heavy nested note boxes, softened the timeline line/node styling, added contextual suggested-next-action hints, highlighted overdue cards with a subtle red tone, and renamed the main CTA to patient WhatsApp.
+- Added a dynamic remaining-time badge to follow-up card headers. It renders future, today, and overdue states from `dueDate` with localized EN/AR/HE labels and soft blue/green/red tones.
+
+Verified:
+- Web `npx tsc --noEmit` passed.
+- Web production build passed.
+
+# 2026-05-28 - Appointment Custom One-Time Services
+
+Added custom service support to tenant appointment create/edit.
+
+Changed:
+- Appointment schema now stores nullable custom service name/price and a saved-as-service flag.
+- Tenant appointment create/edit validates either a catalog service or a custom service name, keeps custom appointments editable, and can optionally create a saved `Service` record for future use.
+- Appointment list/details show a localized custom-service badge.
+- Tenant invoice schema/service now supports custom appointment invoices without forcing a catalog service row.
+- Tenant dashboard, patient portal invoices, billing details, billing list, and financial reports safely display/group custom service revenue by the custom service name.
+- Added migration `20260528130000_add_appointment_custom_service`.
+
+Verified:
+- Prisma format, validate, and generate passed.
+- API lint and build passed.
+- Web lint passed with existing warnings only, web `tsc --noEmit` passed, and web build passed.

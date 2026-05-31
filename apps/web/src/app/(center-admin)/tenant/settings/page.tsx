@@ -1,5 +1,5 @@
-import { TenantPlaceholderPage } from "@/features/center-admin/placeholders/TenantPlaceholderPage";
+import { TenantSettingsPage } from "@/features/center-admin/settings/TenantSettingsPage";
 
-export default function TenantSettingsPage() {
-  return <TenantPlaceholderPage pageKey="settings" />;
+export default function Page() {
+  return <TenantSettingsPage />;
 }

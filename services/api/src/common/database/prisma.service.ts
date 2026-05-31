@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '../../../../../packages/database/node_modules/@prisma/client';
+import { PrismaClient } from '@royalcare/db';
 import { getApiDatabaseUrl } from '../config/database-url';
 
 @Injectable()

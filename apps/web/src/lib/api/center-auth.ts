@@ -30,6 +30,26 @@ export type CenterSession = {
     status: string;
     createdAt: string;
   };
+  permissions: string[];
+  subscriptionAccess?: {
+    daysRemaining: number | null;
+    graceDaysRemaining: number | null;
+    isExpired: boolean;
+    isExpiringSoon: boolean;
+    isInGracePeriod: boolean;
+    isSuspended: boolean;
+    planName: string | null;
+    status:
+      | "TRIALING"
+      | "ACTIVE"
+      | "PAST_DUE"
+      | "SUSPENDED"
+      | "CANCELLED"
+      | "EXPIRED"
+      | "EXPIRED_GRACE_PERIOD"
+      | "EXPIRING_SOON"
+      | null;
+  };
 };
 
 export type CenterLoginContext = {
@@ -91,11 +111,21 @@ export function loginCenterUser(
 }
 
 export function getCenterSession() {
-  return request<CenterSession>("/auth/center/me");
+  return request<CenterSession>("/permissions/me");
 }
 
 export function logoutCenterUser() {
   return request<{ loggedOut: boolean }>("/auth/center/logout", {
+    method: "POST",
+  });
+}
+
+export function changeCenterPassword(
+  currentPassword: string,
+  newPassword: string,
+) {
+  return request<{ success: boolean }>("/auth/center/change-password", {
+    body: JSON.stringify({ currentPassword, newPassword }),
     method: "POST",
   });
 }

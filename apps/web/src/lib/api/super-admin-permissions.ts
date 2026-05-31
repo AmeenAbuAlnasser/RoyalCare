@@ -29,16 +29,6 @@ export type CurrentPermissionsResponse = {
   } | null;
 };
 
-export function getSuperAdminUserHeader(): Record<string, string> {
-  if (typeof window === "undefined") {
-    return {};
-  }
-
-  const userId = window.localStorage.getItem("royalcare.superAdminUserId");
-
-  return userId ? { "x-royalcare-super-admin-user-id": userId } : {};
-}
-
 function safelyParseJson(rawBody: string) {
   if (!rawBody.trim()) {
     return null;
@@ -54,10 +44,7 @@ function safelyParseJson(rawBody: string) {
 export async function getCurrentSuperAdminPermissions() {
   const response = await fetch(`${API_BASE_URL}/permissions/me`, {
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...getSuperAdminUserHeader(),
-    },
+    headers: { "Content-Type": "application/json" },
   });
 
   if (!response.ok) {

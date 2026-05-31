@@ -1,6 +1,7 @@
-import {
+﻿import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -8,8 +9,10 @@ import type {
   PatientGender,
   PatientStatus,
   Prisma,
-} from '../../../../../../packages/database/node_modules/@prisma/client';
+} from '@royalcare/db';
 import { PrismaService } from '../../../common/database/prisma.service';
+import { hasTenantPermission } from '../../../common/permissions/tenant-permissions';
+import { AuditService } from '../../audit/audit.service';
 import type { CreatePatientDto } from '../dto/create-patient.dto';
 import type { UpdatePatientStatusDto } from '../dto/update-patient-status.dto';
 import type { UpdatePatientDto } from '../dto/update-patient.dto';
@@ -17,10 +20,20 @@ import type { UpdatePatientDto } from '../dto/update-patient.dto';
 const PATIENT_GENDERS = ['MALE', 'FEMALE', 'OTHER', 'UNKNOWN'] as const;
 const PATIENT_STATUSES = ['ACTIVE', 'INACTIVE', 'ARCHIVED'] as const;
 
+type PatientPermission =
+  | 'patients:view'
+  | 'patients:create'
+  | 'patients:update'
+  | 'patients:status'
+  | 'patients:delete';
+
 const patientSelect = {
   id: true,
   centerId: true,
   fullName: true,
+  fullNameAr: true,
+  fullNameHe: true,
+  fullNameEn: true,
   phone: true,
   email: true,
   gender: true,
@@ -31,6 +44,30 @@ const patientSelect = {
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.PatientSelect;
+
+const linkedRecordCountSelect = {
+  appointments: true,
+  invoices: true,
+  payments: true,
+  followUps: true,
+  creditTransactions: true,
+} as const;
+
+function computeCanDelete(count: {
+  appointments: number;
+  invoices: number;
+  payments: number;
+  followUps: number;
+  creditTransactions: number;
+}) {
+  return (
+    count.appointments === 0 &&
+    count.invoices === 0 &&
+    count.payments === 0 &&
+    count.followUps === 0 &&
+    count.creditTransactions === 0
+  );
+}
 
 function optionalTrimmed(value?: string | null) {
   return typeof value === 'string' ? value.trim() : value;
@@ -91,11 +128,27 @@ function duplicatePhone() {
   });
 }
 
+function forbidden(permission: PatientPermission) {
+  return new ForbiddenException({
+    message: 'Permission denied',
+    errors: { permission: `Missing permission: ${permission}` },
+  });
+}
+
 @Injectable()
 export class PatientsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
-  async list(centerId: string, query?: { search?: string }) {
+  async list(
+    centerId: string,
+    permissions: string[],
+    query?: { search?: string },
+  ) {
+    this.requirePermission(permissions, 'patients:view');
+
     const prisma = await this.prisma.getClient();
     const search = optionalTrimmed(query?.search);
     const where: Prisma.PatientWhereInput = {
@@ -109,28 +162,53 @@ export class PatientsService {
           }
         : {}),
     };
-    const [items, total] = await Promise.all([
+    const [rawItems, total] = await Promise.all([
       prisma.patient.findMany({
         where,
         orderBy: { createdAt: 'desc' },
-        select: patientSelect,
+        select: {
+          ...patientSelect,
+          _count: { select: linkedRecordCountSelect },
+        },
         take: 100,
       }),
       prisma.patient.count({ where }),
     ]);
 
+    const items = rawItems.map(({ _count, ...p }) => ({
+      ...p,
+      canDelete: computeCanDelete(_count),
+      linkedRecordCounts: {
+        appointments: _count.appointments,
+        invoices: _count.invoices,
+        payments: _count.payments,
+        followUps: _count.followUps,
+        creditTransactions: _count.creditTransactions,
+      },
+    }));
+
     return { items, total };
   }
 
-  async create(centerId: string, dto: CreatePatientDto) {
+  async create(
+    centerId: string,
+    permissions: string[],
+    actorUserId: string,
+    dto: CreatePatientDto,
+  ) {
+    this.requirePermission(permissions, 'patients:create');
+
     const validated = this.validateCreate(dto);
     const prisma = await this.prisma.getClient();
 
     try {
-      return await prisma.patient.create({
+      const patient = await prisma.patient.create({
         data: {
           centerId,
           fullName: validated.fullName,
+          fullNameAr: validated.fullNameAr,
+          fullNameHe: validated.fullNameHe,
+          fullNameEn: validated.fullNameEn,
           phone: validated.phone,
           email: validated.email,
           gender: validated.gender,
@@ -141,6 +219,24 @@ export class PatientsService {
         },
         select: patientSelect,
       });
+
+      await this.auditService.log({
+        action: 'TENANT_PATIENT_CREATED',
+        actorUserId,
+        centerId,
+        metadata: {
+          centerId,
+          patientId: patient.id,
+          patientName: patient.fullName,
+          patientNameAr: patient.fullNameAr ?? undefined,
+          patientNameEn: patient.fullNameEn ?? undefined,
+          patientNameHe: patient.fullNameHe ?? undefined,
+          status: patient.status,
+          source: 'TENANT_PATIENTS',
+        },
+      });
+
+      return patient;
     } catch (error) {
       if (this.isDuplicatePhoneError(error)) {
         throw duplicatePhone();
@@ -150,35 +246,85 @@ export class PatientsService {
     }
   }
 
-  async getById(centerId: string, patientId: string) {
+  async getById(centerId: string, permissions: string[], patientId: string) {
+    this.requirePermission(permissions, 'patients:view');
+
     const prisma = await this.prisma.getClient();
-    const patient = await prisma.patient.findFirst({
+    const raw = await prisma.patient.findFirst({
       where: { centerId, id: patientId },
-      select: patientSelect,
+      select: {
+        ...patientSelect,
+        _count: { select: linkedRecordCountSelect },
+      },
     });
 
-    if (!patient) {
+    if (!raw) {
       throw new NotFoundException({
         message: 'Patient not found',
         errors: { patient: 'Patient not found.' },
       });
     }
 
-    return patient;
+    const { _count, ...patient } = raw;
+    return {
+      ...patient,
+      canDelete: computeCanDelete(_count),
+      linkedRecordCounts: {
+        appointments: _count.appointments,
+        invoices: _count.invoices,
+        payments: _count.payments,
+        followUps: _count.followUps,
+        creditTransactions: _count.creditTransactions,
+      },
+    };
   }
 
-  async update(centerId: string, patientId: string, dto: UpdatePatientDto) {
-    await this.getById(centerId, patientId);
+  async update(
+    centerId: string,
+    permissions: string[],
+    actorUserId: string,
+    patientId: string,
+    dto: UpdatePatientDto,
+  ) {
+    this.requirePermission(permissions, 'patients:update');
+    const current = await this.getById(centerId, permissions, patientId);
 
     const validated = this.validateUpdate(dto);
     const prisma = await this.prisma.getClient();
 
     try {
-      return await prisma.patient.update({
-        where: { id: patientId },
+      const result = await prisma.patient.updateMany({
+        where: { id: patientId, centerId },
         data: validated,
-        select: patientSelect,
       });
+
+      if (result.count !== 1) {
+        throw new NotFoundException({
+          message: 'Patient not found',
+          errors: { patient: 'Patient not found.' },
+        });
+      }
+
+      const patient = await this.getById(centerId, permissions, patientId);
+
+      await this.auditService.log({
+        action: 'TENANT_PATIENT_UPDATED',
+        actorUserId,
+        centerId,
+        metadata: {
+          centerId,
+          oldStatus: current.status,
+          patientId: patient.id,
+          patientName: patient.fullName,
+          patientNameAr: patient.fullNameAr ?? undefined,
+          patientNameEn: patient.fullNameEn ?? undefined,
+          patientNameHe: patient.fullNameHe ?? undefined,
+          source: 'TENANT_PATIENTS',
+          status: patient.status,
+        },
+      });
+
+      return patient;
     } catch (error) {
       if (this.isDuplicatePhoneError(error)) {
         throw duplicatePhone();
@@ -190,9 +336,13 @@ export class PatientsService {
 
   async updateStatus(
     centerId: string,
+    permissions: string[],
+    actorUserId: string,
     patientId: string,
     dto: UpdatePatientStatusDto,
   ) {
+    this.requirePermission(permissions, 'patients:status');
+
     const status = optionalTrimmed(dto.status);
 
     if (!isAllowedValue(status, PATIENT_STATUSES)) {
@@ -201,7 +351,119 @@ export class PatientsService {
       });
     }
 
-    return this.update(centerId, patientId, { status });
+    const prisma = await this.prisma.getClient();
+    const current = await prisma.patient.findFirst({
+      where: { centerId, id: patientId },
+      select: patientSelect,
+    });
+
+    if (!current) {
+      throw new NotFoundException({
+        message: 'Patient not found',
+        errors: { patient: 'Patient not found.' },
+      });
+    }
+
+    const result = await prisma.patient.updateMany({
+      where: { id: patientId, centerId },
+      data: { status },
+    });
+
+    if (result.count !== 1) {
+      throw new NotFoundException({
+        message: 'Patient not found',
+        errors: { patient: 'Patient not found.' },
+      });
+    }
+
+    const patient = await this.getById(centerId, permissions, patientId);
+    const action =
+      current.status === 'ARCHIVED' && status !== 'ARCHIVED'
+        ? 'TENANT_PATIENT_RESTORED'
+        : 'TENANT_PATIENT_STATUS_CHANGED';
+
+    await this.auditService.log({
+      action,
+      actorUserId,
+      centerId,
+      metadata: {
+        centerId,
+        newStatus: patient.status,
+        oldStatus: current.status,
+        patientId: patient.id,
+        patientName: patient.fullName,
+        patientNameAr: patient.fullNameAr ?? undefined,
+        patientNameEn: patient.fullNameEn ?? undefined,
+        patientNameHe: patient.fullNameHe ?? undefined,
+        source: 'TENANT_PATIENTS',
+      },
+    });
+
+    return patient;
+  }
+
+  async delete(
+    centerId: string,
+    permissions: string[],
+    actorUserId: string,
+    patientId: string,
+  ) {
+    this.requirePermission(permissions, 'patients:delete');
+
+    const prisma = await this.prisma.getClient();
+
+    const raw = await prisma.patient.findFirst({
+      where: { centerId, id: patientId },
+      select: {
+        id: true,
+        fullName: true,
+        _count: { select: linkedRecordCountSelect },
+      },
+    });
+
+    if (!raw) {
+      throw new NotFoundException({
+        message: 'Patient not found',
+        errors: { patient: 'Patient not found.' },
+      });
+    }
+
+    const { _count, ...patientData } = raw;
+
+    if (!computeCanDelete(_count)) {
+      throw new BadRequestException({
+        message: 'Cannot delete patient',
+        errors: {
+          patient:
+            'This patient has linked records and cannot be deleted permanently.',
+        },
+      });
+    }
+
+    await prisma.patient.delete({ where: { id: patientId } });
+
+    await this.auditService.log({
+      action: 'TENANT_PATIENT_DELETED',
+      actorUserId,
+      centerId,
+      metadata: {
+        centerId,
+        patientId,
+        patientName: patientData.fullName,
+        source: 'TENANT_PATIENTS',
+      },
+    });
+
+    return { deleted: true };
+  }
+
+  private requirePermission(
+    permissions: string[],
+    permission: PatientPermission,
+  ) {
+    if (!hasTenantPermission(permissions, permission)) {
+      throw forbidden(permission);
+    }
   }
 
   private validateCreate(dto: CreatePatientDto) {
@@ -243,6 +505,9 @@ export class PatientsService {
 
     return {
       fullName: fullName as string,
+      fullNameAr: optionalTrimmed(dto.fullNameAr) || null,
+      fullNameHe: optionalTrimmed(dto.fullNameHe) || null,
+      fullNameEn: optionalTrimmed(dto.fullNameEn) || null,
       phone: phone as string,
       email: email || null,
       gender: gender as PatientGender,
@@ -317,6 +582,18 @@ export class PatientsService {
       }
     }
 
+    if (dto.fullNameAr !== undefined) {
+      data.fullNameAr = optionalTrimmed(dto.fullNameAr) || null;
+    }
+
+    if (dto.fullNameHe !== undefined) {
+      data.fullNameHe = optionalTrimmed(dto.fullNameHe) || null;
+    }
+
+    if (dto.fullNameEn !== undefined) {
+      data.fullNameEn = optionalTrimmed(dto.fullNameEn) || null;
+    }
+
     if (dto.nationalId !== undefined) {
       data.nationalId = optionalTrimmed(dto.nationalId) || null;
     }
@@ -333,11 +610,23 @@ export class PatientsService {
   }
 
   private isDuplicatePhoneError(error: unknown) {
-    return (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      error.code === 'P2002'
-    );
+    if (
+      typeof error !== 'object' ||
+      error === null ||
+      !('code' in error) ||
+      (error as { code?: unknown }).code !== 'P2002'
+    ) {
+      return false;
+    }
+
+    const raw = (error as { meta?: { target?: unknown } }).meta?.target;
+    const fields: string[] = Array.isArray(raw)
+      ? raw.filter((f): f is string => typeof f === 'string')
+      : typeof raw === 'string'
+        ? [raw]
+        : [];
+
+    // Patient uniqueness is @@unique([centerId, phone]) — target contains 'phone'
+    return fields.includes('phone') || fields.length === 0;
   }
 }

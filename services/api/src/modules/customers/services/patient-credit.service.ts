@@ -5,15 +5,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../common/database/prisma.service';
+import { hasTenantPermission } from '../../../common/permissions/tenant-permissions';
 import type { AddCreditDto } from '../dto/add-credit.dto';
 
-type CreditManagePermission = 'billing.mark_paid';
-
-const rolePermissions: Record<string, CreditManagePermission[]> = {
-  CENTER_OWNER: ['billing.mark_paid'],
-  CENTER_MANAGER: ['billing.mark_paid'],
-  ACCOUNTANT: ['billing.mark_paid'],
-};
+type CreditManagePermission = 'billing:update';
 
 function isValidAmount(value: unknown): boolean {
   if (typeof value === 'number') return isFinite(value) && value > 0;
@@ -34,15 +29,17 @@ export class PatientCreditService {
 
   async addManualCredit(
     centerId: string,
-    roleKey: string,
+    permissions: string[],
     patientId: string,
     createdByUserId: string,
     dto: AddCreditDto,
   ) {
-    this.requirePermission(roleKey, 'billing.mark_paid');
+    this.requirePermission(permissions, 'billing:update');
 
     if (!isValidAmount(dto.amount))
-      throw validationFailed({ amount: 'Enter a valid amount greater than zero.' });
+      throw validationFailed({
+        amount: 'Enter a valid amount greater than zero.',
+      });
 
     const creditAmount = parseFloat(String(dto.amount));
     const notes =
@@ -51,7 +48,9 @@ export class PatientCreditService {
         : null;
 
     if (!notes)
-      throw validationFailed({ notes: 'A reason is required for manual credit adjustments.' });
+      throw validationFailed({
+        notes: 'A reason is required for manual credit adjustments.',
+      });
 
     const prisma = await this.prisma.getClient();
 
@@ -78,8 +77,8 @@ export class PatientCreditService {
           notes,
         },
       }),
-      prisma.patient.update({
-        where: { id: patientId },
+      prisma.patient.updateMany({
+        where: { id: patientId, centerId },
         data: { creditBalance: { increment: creditAmount } },
       }),
     ]);
@@ -99,8 +98,11 @@ export class PatientCreditService {
     };
   }
 
-  private requirePermission(roleKey: string, permission: CreditManagePermission) {
-    if (!rolePermissions[roleKey]?.includes(permission)) {
+  private requirePermission(
+    permissions: string[],
+    permission: CreditManagePermission,
+  ) {
+    if (!hasTenantPermission(permissions, permission)) {
       throw new ForbiddenException({
         message: 'Permission denied',
         errors: { permission: `Missing permission: ${permission}` },

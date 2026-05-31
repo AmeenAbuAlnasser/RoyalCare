@@ -12,6 +12,10 @@ import {
   type TenantBillingOptions,
 } from "@/lib/api/tenant-billing";
 import { CenterAdminShell } from "../layout/CenterAdminShell";
+import {
+  getTenantSubscriptionRestrictionMessage,
+  isTenantWriteBlocked,
+} from "../subscription-access";
 
 type FormState = {
   patientId: string;
@@ -111,10 +115,14 @@ export function TenantInvoiceFormPage() {
   return (
     <CenterAdminShell
       activeNav="billing"
+      requiredPermission="billing:create"
       subtitle={(d) => d.billing.subtitle}
       title={(d) => d.billing.addInvoice}
     >
-      {({ dictionary }) => {
+      {({ dictionary, session }) => {
+        const isWriteBlocked = isTenantWriteBlocked(session);
+        const restrictionMessage =
+          getTenantSubscriptionRestrictionMessage(session, dictionary);
         const locale =
           typeof document !== "undefined"
             ? (document.documentElement.lang as string) || "en"
@@ -131,6 +139,11 @@ export function TenantInvoiceFormPage() {
         };
 
         const submit = async () => {
+          if (isWriteBlocked) {
+            setErrors({ root: restrictionMessage });
+            return;
+          }
+
           const nextErrors = validateForm(form, dictionary);
           setErrors(nextErrors);
 
@@ -195,6 +208,16 @@ export function TenantInvoiceFormPage() {
             </div>
 
             <section className="mt-5 rounded-lg border border-[#E5E7EB] bg-white p-5 shadow-[0_12px_30px_rgba(11,45,92,0.04)]">
+              {isWriteBlocked ? (
+                <p className="mb-4 rounded-md border border-[#F3B8B8] bg-[#FFF7F7] px-4 py-3 text-sm font-semibold text-[#B42318]">
+                  {restrictionMessage}
+                </p>
+              ) : null}
+              {errors.root ? (
+                <p className="mb-4 rounded-md border border-[#F3B8B8] bg-[#FFF7F7] px-4 py-3 text-sm font-semibold text-[#B42318]">
+                  {errors.root}
+                </p>
+              ) : null}
               <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
 
                 {/* Patient */}
@@ -303,8 +326,9 @@ export function TenantInvoiceFormPage() {
                 </Link>
                 <button
                   className={buttonClassName("primary", "md")}
-                  disabled={isSaving}
+                  disabled={isSaving || isWriteBlocked}
                   onClick={submit}
+                  title={restrictionMessage || undefined}
                   type="button"
                 >
                   {isSaving ? dictionary.common.saving : dictionary.billing.submit}

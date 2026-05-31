@@ -3,15 +3,6 @@ export const API_BASE_URL =
   process.env.NEXT_PUBLIC_ROYALCARE_API_URL ??
   "http://localhost:3001/api/v1";
 
-function getSuperAdminUserHeader(): Record<string, string> {
-  if (typeof window === "undefined") {
-    return {};
-  }
-
-  const userId = window.localStorage.getItem("royalcare.superAdminUserId");
-
-  return userId ? { "x-royalcare-super-admin-user-id": userId } : {};
-}
 
 export type ApiCenterStatus =
   | "TRIAL"
@@ -34,9 +25,13 @@ export type ApiLanguage = "AR" | "HE" | "EN";
 export type ApiCenter = {
   id: string;
   name: string;
+  nameAr?: string | null;
+  nameEn?: string | null;
+  nameHe?: string | null;
   slug: string;
   type: ApiCenterType;
   status: ApiCenterStatus;
+  publicVisible?: boolean;
   primaryLanguage: ApiLanguage;
   createdAt: string;
   updatedAt: string;
@@ -59,6 +54,7 @@ export type ApiCenter = {
     createdAt?: string;
     currentPeriodEnd: string;
     currentPeriodStart: string;
+    gracePeriodEndsAt?: string | null;
     planCode: string;
     planName: string;
     status:
@@ -117,6 +113,9 @@ export type CreateCenterPayload = {
     type: "CUSTOM" | "SUBDOMAIN";
   };
   name: string;
+  nameAr?: string | null;
+  nameEn?: string | null;
+  nameHe?: string | null;
   primaryLanguage: ApiLanguage;
   slug?: string;
   subscription: {
@@ -138,6 +137,9 @@ export type UpdateCenterPayload = {
     phone?: string;
   };
   centerName?: string;
+  nameAr?: string | null;
+  nameEn?: string | null;
+  nameHe?: string | null;
   domain?: {
     hostname?: string;
     isPrimary?: boolean;
@@ -224,6 +226,7 @@ export type UpdateCenterSubscriptionPayload = {
     | "ACTIVE"
     | "EXPIRED"
     | "OVERDUE"
+    | "SUSPENDED"
     | "CANCELLED"
     | string;
 };
@@ -345,10 +348,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${API_BASE_URL}${path}`;
   const headers = new Headers(init?.headers);
   headers.set("Content-Type", "application/json");
-
-  for (const [key, value] of Object.entries(getSuperAdminUserHeader())) {
-    headers.set(key, value);
-  }
 
   let response: Response;
 
@@ -501,4 +500,17 @@ export function updateSuperAdminCenterSubscription(
     body: JSON.stringify(payload),
     method: "PATCH",
   });
+}
+
+export function updateCenterPublicVisibility(
+  centerId: string,
+  publicVisible: boolean,
+) {
+  return request<ApiCenter>(
+    `/admin/centers/${centerId}/public-visibility`,
+    {
+      body: JSON.stringify({ publicVisible }),
+      method: "PATCH",
+    },
+  );
 }

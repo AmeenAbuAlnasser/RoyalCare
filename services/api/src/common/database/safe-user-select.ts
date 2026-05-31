@@ -1,4 +1,4 @@
-import type { Prisma } from '../../../../../packages/database/node_modules/@prisma/client';
+﻿import type { Prisma } from '@royalcare/db';
 
 export const safeUserSelect = {
   id: true,

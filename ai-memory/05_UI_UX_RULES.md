@@ -640,7 +640,10 @@ Design direction:
 - Wizard date fields must use the reusable `DateField` component at `apps/web/src/components/forms/DateField.tsx`.
 - Do not use native `input type="date"` for visible wizard date fields because browser/OS locale can override the app language display.
 - `DateField` stores values internally as `YYYY-MM-DD`.
-- `DateField` controls display formatting from the selected app language: English uses `YYYY-MM-DD`; Arabic and Hebrew use RTL-friendly day/month/year display.
+- Dates displayed anywhere in the web app must use the shared deterministic formatter in `apps/web/src/i18n/formatters.ts`.
+- Visible dates must be numeric only: `DD/MM/YYYY`; visible date-times must be `DD/MM/YYYY HH:mm`.
+- Do not display localized month names in English, Arabic, or Hebrew.
+- `DateField` controls visible display through the shared formatter while continuing to store values internally as `YYYY-MM-DD`.
 - Date field labels, helper text, and day/month/year picker labels must be dictionary-driven and must match the selected language.
 - Logo upload is UI-functional: image file picker opens, accepts image files, and shows selected file name or preview locally without backend upload.
 - Step 4 Branding + Languages keeps UI state for center logo preview, primary color, secondary color, default language, and enabled languages.

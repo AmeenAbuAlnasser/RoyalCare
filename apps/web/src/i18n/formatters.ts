@@ -4,51 +4,8 @@ type DateParts = {
   day: string;
   month: string;
   year: string;
-};
-
-const monthNames: Record<SupportedLocale, string[]> = {
-  en: [
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
-  ],
-  ar: [
-    "يناير",
-    "فبراير",
-    "مارس",
-    "أبريل",
-    "مايو",
-    "يونيو",
-    "يوليو",
-    "أغسطس",
-    "سبتمبر",
-    "أكتوبر",
-    "نوفمبر",
-    "ديسمبر",
-  ],
-  he: [
-    "ינו׳",
-    "פבר׳",
-    "מרץ",
-    "אפר׳",
-    "מאי",
-    "יוני",
-    "יולי",
-    "אוג׳",
-    "ספט׳",
-    "אוק׳",
-    "נוב׳",
-    "דצמ׳",
-  ],
+  hour?: string;
+  minute?: string;
 };
 
 function groupInteger(value: number) {
@@ -61,16 +18,21 @@ function trimDecimal(value: number, maximumFractionDigits = 1) {
 }
 
 function parseIsoDate(value: string): DateParts | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/.exec(value);
+  const match =
+    /^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/.exec(
+      value,
+    );
 
   if (!match) {
     return null;
   }
 
   return {
-    day: match[3],
-    month: match[2],
     year: match[1],
+    month: match[2],
+    day: match[3],
+    hour: match[4],
+    minute: match[5],
   };
 }
 
@@ -106,7 +68,7 @@ export function formatCompactCurrency(value: number, locale: SupportedLocale) {
 
   if (locale === "ar") {
     return isCompact
-      ? `${sign}${formattedAmount} ألف US$`
+      ? `${sign}${formattedAmount} \u0623\u0644\u0641 US$`
       : `${sign}${formattedAmount} US$`;
   }
 
@@ -121,20 +83,63 @@ export function formatCompactCurrency(value: number, locale: SupportedLocale) {
     : `US$ ${sign}${formattedAmount}`;
 }
 
-export function formatDate(value: string, locale: SupportedLocale) {
+export function formatDate(
+  value: Date | string | null | undefined,
+  locale?: SupportedLocale,
+) {
+  void locale;
+
+  if (!value) {
+    return "";
+  }
+
+  if (value instanceof Date) {
+    const day = String(value.getDate()).padStart(2, "0");
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const year = String(value.getFullYear());
+    const hour = String(value.getHours()).padStart(2, "0");
+    const minute = String(value.getMinutes()).padStart(2, "0");
+
+    return `${day}/${month}/${year} ${hour}:${minute}`;
+  }
+
   const parts = parseIsoDate(value);
 
   if (!parts) {
     return value;
   }
 
-  const monthIndex = Number(parts.month) - 1;
-  const month = monthNames[locale][monthIndex] ?? parts.month;
-  const day = Number(parts.day).toString();
+  const date = `${parts.day}/${parts.month}/${parts.year}`;
 
-  if (locale === "en") {
-    return `${month} ${day}, ${parts.year}`;
+  if (parts.hour && parts.minute) {
+    return `${date} ${parts.hour}:${parts.minute}`;
   }
 
-  return `${day} ${month} ${parts.year}`;
+  return date;
+}
+
+export function formatDateTime(
+  value: Date | string | null | undefined,
+  locale?: SupportedLocale,
+) {
+  return formatDate(value, locale);
+}
+
+export function formatDateOnly(
+  value: Date | string | null | undefined,
+  locale?: SupportedLocale,
+) {
+  if (value instanceof Date) {
+    const day = String(value.getDate()).padStart(2, "0");
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const year = String(value.getFullYear());
+
+    return `${day}/${month}/${year}`;
+  }
+
+  if (typeof value === "string") {
+    return formatDate(value.slice(0, 10), locale);
+  }
+
+  return formatDate(value, locale);
 }

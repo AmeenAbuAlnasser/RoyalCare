@@ -18,6 +18,7 @@ type CenterDetailsDictionary = {
     plans: string;
     users: string;
     notifications: string;
+    auditLogs: string;
     settings: string;
   };
   header: {
@@ -40,6 +41,9 @@ type CenterDetailsDictionary = {
   };
   fields: {
     centerName: string;
+    centerNameAr: string;
+    centerNameEn: string;
+    centerNameHe: string;
     logo: string;
     ownerName: string;
     centerType: string;
@@ -73,11 +77,16 @@ type CenterDetailsDictionary = {
     backToCenters: string;
     editCenter: string;
     renewSubscription: string;
+    changePlan: string;
+    extendSubscription: string;
+    suspendSubscription: string;
+    reactivateSubscription: string;
     suspendCenter: string;
     activateCenter: string;
     deactivateCenter: string;
     deleteCenter: string;
     loginAsCenterAdmin: string;
+    addCenterManager: string;
     resetAdminPassword: string;
     forceAdminPasswordChange: string;
     sendWelcomeEmail: string;
@@ -124,6 +133,7 @@ type CenterDetailsDictionary = {
     active: string;
     expired: string;
     overdue: string;
+    suspended: string;
     cancelled: string;
   };
   staffRoles: {
@@ -191,6 +201,13 @@ type CenterDetailsDictionary = {
     placeholder: string;
     helper: string;
   };
+  publicVisibility: {
+    label: string;
+    help: string;
+    saving: string;
+    error: string;
+    updated: string;
+  };
   values: {
     enabled: string;
     disabled: string;
@@ -217,6 +234,7 @@ type CenterDetailsDictionary = {
     updateSubscription: string;
     subscriptionSaving: string;
     subscriptionError: string;
+    subscriptionUpdated: string;
     expiringSoon: string;
     expired: string;
     overdue: string;
@@ -238,6 +256,9 @@ type CenterDetailsDictionary = {
     staffFormTitle: string;
     loginLinkCopied: string;
     loginLinkUnavailable: string;
+    loginAsLoading: string;
+    loginAsError: string;
+    noActiveManager: string;
   };
 };
 
@@ -267,6 +288,7 @@ export const superAdminCenterDetailsDictionaries: Record<
       plans: "Plans",
       users: "Users",
       notifications: "Notifications",
+      auditLogs: "Audit Logs",
       settings: "Settings",
     },
     header: {
@@ -289,6 +311,9 @@ export const superAdminCenterDetailsDictionaries: Record<
     },
     fields: {
       centerName: "Center Name",
+      centerNameAr: "Arabic center name",
+      centerNameEn: "English center name",
+      centerNameHe: "Hebrew center name",
       logo: "Logo",
       ownerName: "Owner Name",
       centerType: "Center Type",
@@ -322,11 +347,16 @@ export const superAdminCenterDetailsDictionaries: Record<
       backToCenters: "Back to Centers",
       editCenter: "Edit Center",
       renewSubscription: "Renew Subscription",
+      changePlan: "Change Plan",
+      extendSubscription: "Extend Subscription",
+      suspendSubscription: "Suspend Subscription",
+      reactivateSubscription: "Reactivate Subscription",
       suspendCenter: "Suspend Center",
       activateCenter: "Activate Center",
       deactivateCenter: "Deactivate Center",
       deleteCenter: "Delete Center",
       loginAsCenterAdmin: "Login as Center Admin",
+      addCenterManager: "Add Center Manager",
       resetAdminPassword: "Reset Admin Password",
       forceAdminPasswordChange: "Force Password Change",
       sendWelcomeEmail: "Send Welcome Email",
@@ -373,6 +403,7 @@ export const superAdminCenterDetailsDictionaries: Record<
       active: "Active",
       expired: "Expired",
       overdue: "Overdue",
+      suspended: "Suspended",
       cancelled: "Cancelled",
     },
     staffRoles: {
@@ -441,6 +472,13 @@ export const superAdminCenterDetailsDictionaries: Record<
         "Add internal notes about this center. These notes are visible only to RoyalCare admins.",
       helper: "Private Super Admin notes are saved for this center only.",
     },
+    publicVisibility: {
+      label: "Show center publicly",
+      help: "When enabled, this center will appear in the public directory.",
+      saving: "Updating visibility...",
+      error: "Could not update public visibility. Try again.",
+      updated: "Public visibility updated.",
+    },
     values: {
       enabled: "Enabled",
       disabled: "Disabled",
@@ -468,6 +506,7 @@ export const superAdminCenterDetailsDictionaries: Record<
       updateSubscription: "Update Subscription",
       subscriptionSaving: "Saving subscription...",
       subscriptionError: "Review the subscription fields and try again.",
+      subscriptionUpdated: "Subscription updated successfully.",
       expiringSoon: "Expiring soon",
       expired: "Expired",
       overdue: "Overdue",
@@ -491,6 +530,10 @@ export const superAdminCenterDetailsDictionaries: Record<
       staffFormTitle: "Staff user details",
       loginLinkCopied: "Login link copied successfully",
       loginLinkUnavailable: "Login link is unavailable because this center has no slug.",
+      loginAsLoading: "Opening tenant dashboard...",
+      loginAsError: "Center admin login could not be started.",
+      noActiveManager:
+        "No active center manager exists for this center. Please add or activate a manager.",
     },
   },
   ar: {
@@ -515,6 +558,7 @@ export const superAdminCenterDetailsDictionaries: Record<
       plans: "الباقات",
       users: "المستخدمون",
       notifications: "الإشعارات",
+      auditLogs: "سجل التدقيق",
       settings: "الإعدادات",
     },
     header: {
@@ -537,6 +581,9 @@ export const superAdminCenterDetailsDictionaries: Record<
     },
     fields: {
       centerName: "اسم المركز",
+      centerNameAr: "اسم المركز بالعربية",
+      centerNameEn: "اسم المركز بالإنجليزية",
+      centerNameHe: "اسم المركز بالعبرية",
       logo: "الشعار",
       ownerName: "اسم المالك",
       centerType: "نوع المركز",
@@ -570,11 +617,16 @@ export const superAdminCenterDetailsDictionaries: Record<
       backToCenters: "العودة إلى المراكز",
       editCenter: "تعديل المركز",
       renewSubscription: "تجديد الاشتراك",
+      changePlan: "تغيير الباقة",
+      extendSubscription: "تمديد الاشتراك",
+      suspendSubscription: "تعليق الاشتراك",
+      reactivateSubscription: "إعادة تفعيل الاشتراك",
       suspendCenter: "إيقاف المركز",
       activateCenter: "تفعيل المركز",
       deactivateCenter: "إلغاء تفعيل المركز",
       deleteCenter: "حذف المركز",
       loginAsCenterAdmin: "الدخول كمدير المركز",
+      addCenterManager: "إضافة مدير مركز",
       resetAdminPassword: "إعادة تعيين كلمة مرور المدير",
       forceAdminPasswordChange: "فرض تغيير كلمة المرور",
       sendWelcomeEmail: "إرسال بريد الترحيب",
@@ -621,6 +673,7 @@ export const superAdminCenterDetailsDictionaries: Record<
       active: "نشط",
       expired: "منتهي",
       overdue: "متأخر",
+      suspended: "معلق",
       cancelled: "ملغى",
     },
     staffRoles: {
@@ -689,6 +742,13 @@ export const superAdminCenterDetailsDictionaries: Record<
         "أضف ملاحظات داخلية عن هذا المركز. هذه الملاحظات تظهر فقط لمديري رويال كير.",
       helper: "واجهة فقط. لا يتم حفظ الملاحظات حاليا.",
     },
+    publicVisibility: {
+      label: "إظهار المركز للعامة",
+      help: "عند التفعيل، سيظهر هذا المركز في الدليل العام.",
+      saving: "جار تحديث الظهور...",
+      error: "تعذر تحديث الظهور العام. حاول مرة أخرى.",
+      updated: "تم تحديث الظهور العام.",
+    },
     values: {
       enabled: "مفعل",
       disabled: "غير مفعل",
@@ -717,6 +777,7 @@ export const superAdminCenterDetailsDictionaries: Record<
       updateSubscription: "تحديث الاشتراك",
       subscriptionSaving: "جار حفظ الاشتراك...",
       subscriptionError: "راجع حقول الاشتراك ثم حاول مرة أخرى.",
+      subscriptionUpdated: "تم تحديث الاشتراك بنجاح.",
       expiringSoon: "ينتهي قريبًا",
       expired: "منتهي",
       overdue: "متأخر",
@@ -740,6 +801,10 @@ export const superAdminCenterDetailsDictionaries: Record<
       staffFormTitle: "بيانات مستخدم الطاقم",
       loginLinkCopied: "تم نسخ رابط الدخول بنجاح",
       loginLinkUnavailable: "رابط الدخول غير متاح لأن هذا المركز لا يملك معرّف رابط.",
+      loginAsLoading: "جاري فتح لوحة تحكم المركز...",
+      loginAsError: "تعذر بدء الدخول كمدير المركز.",
+      noActiveManager:
+        "لا يوجد مدير نشط لهذا المركز. يرجى إضافة مدير أو تفعيل مدير موجود.",
     },
   },
   he: {
@@ -764,6 +829,7 @@ export const superAdminCenterDetailsDictionaries: Record<
       plans: "תוכניות",
       users: "משתמשים",
       notifications: "התראות",
+      auditLogs: "יומן ביקורת",
       settings: "הגדרות",
     },
     header: {
@@ -786,6 +852,9 @@ export const superAdminCenterDetailsDictionaries: Record<
     },
     fields: {
       centerName: "שם המרכז",
+      centerNameAr: "שם המרכז בערבית",
+      centerNameEn: "שם המרכז באנגלית",
+      centerNameHe: "שם המרכז בעברית",
       logo: "לוגו",
       ownerName: "שם בעלים",
       centerType: "סוג מרכז",
@@ -819,11 +888,16 @@ export const superAdminCenterDetailsDictionaries: Record<
       backToCenters: "חזרה למרכזים",
       editCenter: "עריכת מרכז",
       renewSubscription: "חידוש מינוי",
+      changePlan: "שינוי תוכנית",
+      extendSubscription: "הארכת מינוי",
+      suspendSubscription: "השהיית מינוי",
+      reactivateSubscription: "הפעלה מחדש של מינוי",
       suspendCenter: "השהיית מרכז",
       activateCenter: "הפעלת מרכז",
       deactivateCenter: "השבתת מרכז",
       deleteCenter: "מחיקת מרכז",
       loginAsCenterAdmin: "כניסה כמנהל המרכז",
+      addCenterManager: "הוספת מנהל מרכז",
       resetAdminPassword: "איפוס סיסמת מנהל",
       forceAdminPasswordChange: "חובת שינוי סיסמה",
       sendWelcomeEmail: "שליחת אימייל ברוכים הבאים",
@@ -870,6 +944,7 @@ export const superAdminCenterDetailsDictionaries: Record<
       active: "פעיל",
       expired: "פג תוקף",
       overdue: "באיחור",
+      suspended: "מושהה",
       cancelled: "מבוטל",
     },
     staffRoles: {
@@ -938,6 +1013,13 @@ export const superAdminCenterDetailsDictionaries: Record<
         "הוספת הערות פנימיות על המרכז. ההערות גלויות רק למנהלי RoyalCare.",
       helper: "ממשק בלבד. ההערות לא נשמרות כרגע.",
     },
+    publicVisibility: {
+      label: "הצג מרכז בפומבי",
+      help: "כשמופעל, מרכז זה יופיע בספריית המרכזים הציבורית.",
+      saving: "מעדכן נראות...",
+      error: "לא ניתן לעדכן את הנראות הציבורית. נסו שוב.",
+      updated: "הנראות הציבורית עודכנה.",
+    },
     values: {
       enabled: "פעיל",
       disabled: "כבוי",
@@ -966,6 +1048,7 @@ export const superAdminCenterDetailsDictionaries: Record<
       updateSubscription: "עדכון מינוי",
       subscriptionSaving: "שומר מינוי...",
       subscriptionError: "בדקו את שדות המינוי ונסו שוב.",
+      subscriptionUpdated: "המינוי עודכן בהצלחה.",
       expiringSoon: "מסתיים בקרוב",
       expired: "פג תוקף",
       overdue: "באיחור",
@@ -989,9 +1072,12 @@ export const superAdminCenterDetailsDictionaries: Record<
       staffFormTitle: "פרטי משתמש צוות",
       loginLinkCopied: "קישור הכניסה הועתק בהצלחה",
       loginLinkUnavailable: "קישור הכניסה אינו זמין כי למרכז אין מזהה קישור.",
+      loginAsLoading: "פותח את לוח הבקרה של המרכז...",
+      loginAsError: "לא ניתן להתחיל כניסה כמנהל מרכז.",
+      noActiveManager:
+        "לא קיים מנהל פעיל למרכז זה. יש להוסיף או להפעיל מנהל.",
     },
   },
 };
-
 
 

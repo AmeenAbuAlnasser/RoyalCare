@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { formatDate } from "@/i18n/formatters";
 import type { SupportedLocale } from "@/i18n/locales";
 
 type DateFieldLabels = {
@@ -13,24 +14,6 @@ function parseDateValue(value: string) {
   const [year = "", month = "", day = ""] = value.split("-");
 
   return { day, month, year };
-}
-
-function formatDateValue(value: string, locale: SupportedLocale) {
-  if (!value) {
-    return "";
-  }
-
-  const { day, month, year } = parseDateValue(value);
-
-  if (!day || !month || !year) {
-    return value;
-  }
-
-  if (locale === "en") {
-    return `${year}-${month}-${day}`;
-  }
-
-  return `${day}/${month}/${year}`;
 }
 
 function padDatePart(value: string) {
@@ -103,7 +86,7 @@ export function DateField({
         type="button"
       >
         <span className={value ? "font-medium" : "text-[#66758a]"}>
-          {value ? formatDateValue(value, locale) : placeholder}
+          {value ? formatDate(value, locale) : placeholder}
         </span>
         <span aria-hidden="true" className="text-[#0B2D5C]">
           ▾

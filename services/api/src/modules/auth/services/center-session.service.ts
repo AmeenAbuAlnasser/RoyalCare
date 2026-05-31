@@ -3,13 +3,28 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 export type CenterSessionPayload = {
   centerId: string;
   exp: number;
+  impersonatorUserId?: string;
   role: string;
   userId: string;
 };
 
-const CENTER_SESSION_SECRET =
-  process.env.ROYALCARE_CENTER_SESSION_SECRET ??
-  'royalcare-local-center-session-secret';
+function getCenterSessionSecret() {
+  const secret = process.env.ROYALCARE_CENTER_SESSION_SECRET;
+
+  if (secret) {
+    return secret;
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'ROYALCARE_CENTER_SESSION_SECRET is required in production.',
+    );
+  }
+
+  return 'royalcare-local-center-session-secret';
+}
+
+const CENTER_SESSION_SECRET = getCenterSessionSecret();
 
 function base64UrlEncode(value: string) {
   return Buffer.from(value, 'utf8').toString('base64url');

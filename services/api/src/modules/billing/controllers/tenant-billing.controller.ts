@@ -21,6 +21,7 @@ import { UseCreditDto } from '../dto/use-credit.dto';
 import { TenantBillingService } from '../services/tenant-billing.service';
 import { TenantCreditService } from '../services/tenant-credit.service';
 import { TenantPaymentService } from '../services/tenant-payment.service';
+import { TenantReportsService } from '../services/tenant-reports.service';
 
 function getCookie(request: Request, name: string) {
   const cookieHeader = request.headers.cookie;
@@ -43,6 +44,7 @@ export class TenantBillingController {
     private readonly tenantBillingService: TenantBillingService,
     private readonly tenantPaymentService: TenantPaymentService,
     private readonly tenantCreditService: TenantCreditService,
+    private readonly tenantReportsService: TenantReportsService,
   ) {}
 
   @Get()
@@ -50,13 +52,19 @@ export class TenantBillingController {
     @Req() request: Request,
     @Query('search') search?: string,
     @Query('status') status?: string,
+    @Query('appointmentId') appointmentId?: string,
   ) {
     const session = await this.getSession(request);
 
-    return this.tenantBillingService.list(session.center.id, session.role.key, {
-      search,
-      status,
-    });
+    return this.tenantBillingService.list(
+      session.center.id,
+      session.permissions,
+      {
+        search,
+        status,
+        appointmentId,
+      },
+    );
   }
 
   @Get('options')
@@ -65,7 +73,7 @@ export class TenantBillingController {
 
     return this.tenantBillingService.getOptions(
       session.center.id,
-      session.role.key,
+      session.permissions,
     );
   }
 
@@ -75,8 +83,42 @@ export class TenantBillingController {
 
     return this.tenantBillingService.create(
       session.center.id,
-      session.role.key,
+      session.permissions,
+      session.user.id,
       dto,
+    );
+  }
+
+  @Get('for-appointment/:appointmentId')
+  async getForAppointment(
+    @Req() request: Request,
+    @Param('appointmentId') appointmentId: string,
+  ) {
+    const session = await this.getSession(request);
+
+    return this.tenantBillingService.getForAppointment(
+      session.center.id,
+      session.permissions,
+      appointmentId,
+    );
+  }
+
+  @Get('summary')
+  async getSummary(
+    @Req() request: Request,
+    @Query('period') period?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    const session = await this.getSession(request);
+    return this.tenantReportsService.getSummary(
+      session.center.id,
+      session.permissions,
+      {
+        period,
+        from,
+        to,
+      },
     );
   }
 
@@ -89,7 +131,7 @@ export class TenantBillingController {
 
     return this.tenantBillingService.getById(
       session.center.id,
-      session.role.key,
+      session.permissions,
       invoiceId,
     );
   }
@@ -104,7 +146,8 @@ export class TenantBillingController {
 
     return this.tenantBillingService.updateStatus(
       session.center.id,
-      session.role.key,
+      session.permissions,
+      session.user.id,
       invoiceId,
       dto,
     );
@@ -120,7 +163,7 @@ export class TenantBillingController {
 
     return this.tenantPaymentService.create(
       session.center.id,
-      session.role.key,
+      session.permissions,
       invoiceId,
       session.user.id,
       dto,
@@ -136,7 +179,21 @@ export class TenantBillingController {
 
     return this.tenantPaymentService.list(
       session.center.id,
-      session.role.key,
+      session.permissions,
+      invoiceId,
+    );
+  }
+
+  @Get(':invoiceId/patient-credit')
+  async getPatientCredit(
+    @Req() request: Request,
+    @Param('invoiceId') invoiceId: string,
+  ) {
+    const session = await this.getSession(request);
+
+    return this.tenantBillingService.getPatientCreditForInvoice(
+      session.center.id,
+      session.permissions,
       invoiceId,
     );
   }
@@ -151,7 +208,7 @@ export class TenantBillingController {
 
     return this.tenantCreditService.useCredit(
       session.center.id,
-      session.role.key,
+      session.permissions,
       invoiceId,
       session.user.id,
       dto,

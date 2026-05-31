@@ -13,6 +13,10 @@ import {
   type TenantStaffStatus,
 } from "@/lib/api/tenant-staff";
 import { CenterAdminShell } from "../layout/CenterAdminShell";
+import {
+  getTenantSubscriptionRestrictionMessage,
+  isTenantWriteBlocked,
+} from "../subscription-access";
 import { hasTenantStaffPermission } from "./staff-permissions";
 
 const roles: CenterRoleKey[] = [
@@ -84,18 +88,14 @@ export function TenantStaffPage() {
       title={(dictionary) => dictionary.staff.title}
     >
       {({ dictionary, session }) => {
-        const canCreate = hasTenantStaffPermission(
-          session.role.key,
-          "staff.create",
-        );
-        const canUpdate = hasTenantStaffPermission(
-          session.role.key,
-          "staff.update",
-        );
-        const canActivate = hasTenantStaffPermission(
-          session.role.key,
-          "staff.activate",
-        );
+        const isWriteBlocked = isTenantWriteBlocked(session);
+        const restrictionMessage =
+          getTenantSubscriptionRestrictionMessage(session, dictionary);
+        const canActivate =
+          hasTenantStaffPermission(
+          session.permissions,
+          "staff:status",
+        ) && !isWriteBlocked;
 
         const changeStatus = async (item: TenantStaff) => {
           if (!canActivate) {
@@ -167,13 +167,24 @@ export function TenantStaffPage() {
                     </option>
                   </select>
                 </div>
-                {canCreate ? (
-                  <Link
-                    className={buttonClassName("primary", "md")}
-                    href="/tenant/staff/new"
-                  >
-                    {dictionary.staff.addStaff}
-                  </Link>
+                {session.permissions.includes("staff:create") ? (
+                  isWriteBlocked ? (
+                    <button
+                      className={buttonClassName("primary", "md")}
+                      disabled
+                      title={restrictionMessage || undefined}
+                      type="button"
+                    >
+                      {dictionary.staff.addStaff}
+                    </button>
+                  ) : (
+                    <Link
+                      className={buttonClassName("primary", "md")}
+                      href="/tenant/staff/new"
+                    >
+                      {dictionary.staff.addStaff}
+                    </Link>
+                  )
                 ) : null}
               </div>
             </section>
@@ -208,10 +219,10 @@ export function TenantStaffPage() {
             ) : null}
 
             <section className="mt-5 grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
-              {staff.map((item) => (
+              {staff.map((item, index) => (
                 <article
                   className="rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-[0_12px_30px_rgba(11,45,92,0.04)]"
-                  key={item.id}
+                  key={`${item.id ?? "staff"}-${item.email ?? ""}-${index}`}
                 >
                   <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
@@ -254,22 +265,34 @@ export function TenantStaffPage() {
                     >
                       {dictionary.common.view}
                     </Link>
-                    {canUpdate ? (
-                      <Link
-                        className={buttonClassName("secondary", "sm")}
-                        href={`/tenant/staff/${item.id}/edit`}
-                      >
-                        {dictionary.common.edit}
-                      </Link>
+                    {session.permissions.includes("staff:update") ? (
+                      isWriteBlocked ? (
+                        <button
+                          className={buttonClassName("secondary", "sm")}
+                          disabled
+                          title={restrictionMessage || undefined}
+                          type="button"
+                        >
+                          {dictionary.common.edit}
+                        </button>
+                      ) : (
+                        <Link
+                          className={buttonClassName("secondary", "sm")}
+                          href={`/tenant/staff/${item.id}/edit`}
+                        >
+                          {dictionary.common.edit}
+                        </Link>
+                      )
                     ) : null}
-                    {canActivate ? (
+                    {session.permissions.includes("staff:status") ? (
                       <button
                         className={buttonClassName(
                           item.status === "ACTIVE" ? "warning" : "success",
                           "sm",
                         )}
-                        disabled={savingStaffId === item.id}
+                        disabled={savingStaffId === item.id || !canActivate}
                         onClick={() => changeStatus(item)}
+                        title={restrictionMessage || undefined}
                         type="button"
                       >
                         {item.status === "ACTIVE"

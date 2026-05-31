@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { buttonClassName } from "@/components/ui/button-styles";
 import { useLanguage } from "@/i18n/LanguageProvider";
-import { formatDate } from "@/i18n/formatters";
+import { formatDate, formatDateOnly } from "@/i18n/formatters";
 import type { SupportedLocale } from "@/i18n/locales";
 import { SuperAdminLayout } from "@/features/super-admin/layout/SuperAdminLayout";
 import {
@@ -18,6 +18,7 @@ import {
   resetCenterStaffPassword,
   updateCenterStaff,
   updateCenterStaffStatus,
+  updateCenterPublicVisibility,
   updateSuperAdminCenter,
   updateSuperAdminCenterSubscription,
   updateSuperAdminCenterStatus,
@@ -33,9 +34,15 @@ import {
   type UpdateCenterSubscriptionPayload,
 } from "@/lib/api/super-admin-centers";
 import {
-  getCurrentSuperAdminPermissions,
-  hasPlatformPermission,
-} from "@/lib/api/super-admin-permissions";
+  AdminCentersApiError,
+  loginAsAdminCenter,
+} from "@/lib/api/admin-centers";
+import {
+  getSuperAdminCenterPublicProfile,
+  updateSuperAdminCenterPublicProfile,
+  uploadSuperAdminCenterPublicImage,
+} from "@/lib/api/center-public-profile";
+import { CenterPublicProfileSection } from "@/features/center-public-profile/CenterPublicProfileSection";
 import { superAdminCenterDetailsDictionaries } from "@/i18n/dictionaries/super-admin-center-details";
 
 type Dictionary = (typeof superAdminCenterDetailsDictionaries)["en"];
@@ -57,6 +64,9 @@ type CenterDetails = {
   apiType: ApiCenterType;
   autoRenewal: boolean;
   centerName: string;
+  centerNameAr: string;
+  centerNameEn: string;
+  centerNameHe: string;
   centerTypeKey: keyof Dictionary["centerTypes"];
   createdDate: string;
   customDomain: string;
@@ -73,6 +83,7 @@ type CenterDetails = {
   planCode: string;
   planName: string;
   primaryColor: string;
+  publicVisible: boolean;
   secondaryColor: string;
   servicesOffered: ReadonlyArray<keyof Dictionary["services"]>;
   startDate: string;
@@ -90,6 +101,9 @@ type EditFormState = {
   adminName: string;
   adminPhone: string;
   centerName: string;
+  centerNameAr: string;
+  centerNameEn: string;
+  centerNameHe: string;
   centerType: ApiCenterType;
   defaultLanguage: "ar" | "he" | "en";
   domain: string;
@@ -138,7 +152,13 @@ type SubscriptionFormState = {
   subscriptionEndDate: string;
   subscriptionPlan: "BASIC" | "STANDARD" | "PREMIUM" | "ENTERPRISE";
   subscriptionStartDate: string;
-  subscriptionStatus: "TRIAL" | "ACTIVE" | "EXPIRED" | "OVERDUE" | "CANCELLED";
+  subscriptionStatus:
+    | "TRIAL"
+    | "ACTIVE"
+    | "EXPIRED"
+    | "OVERDUE"
+    | "SUSPENDED"
+    | "CANCELLED";
 };
 type SubscriptionErrors = Partial<Record<keyof SubscriptionFormState, string>>;
 
@@ -162,8 +182,8 @@ function mapApiStatus(status: ApiCenterStatus): CenterStatus {
   return "trial";
 }
 
-function mapApiLanguage(language: ApiLanguage) {
-  return language.toLowerCase() as "ar" | "he" | "en";
+function mapApiLanguage(language?: ApiLanguage) {
+  return ((language ?? "EN").toLowerCase()) as "ar" | "he" | "en";
 }
 
 const languageApiMap: Record<"ar" | "he" | "en", ApiLanguage> = {
@@ -222,7 +242,11 @@ function mapManualSubscriptionStatus(status?: string) {
     return "EXPIRED";
   }
 
-  if (status === "PAST_DUE" || status === "SUSPENDED") {
+  if (status === "SUSPENDED") {
+    return "SUSPENDED";
+  }
+
+  if (status === "PAST_DUE") {
     return "OVERDUE";
   }
 
@@ -285,6 +309,9 @@ function getEditFormState(center: CenterDetails): EditFormState {
     adminName: center.adminName === "-" ? "" : center.adminName,
     adminPhone: center.adminMobile === "-" ? "" : center.adminMobile,
     centerName: center.centerName,
+    centerNameAr: center.centerNameAr,
+    centerNameEn: center.centerNameEn,
+    centerNameHe: center.centerNameHe,
     centerType: center.apiType,
     defaultLanguage: center.defaultLanguage,
     domain: center.customDomain,
@@ -476,6 +503,9 @@ function mapApiCenter(center: ApiCenter): CenterDetails {
     apiType: center.type,
     autoRenewal: true,
     centerName: center.name,
+    centerNameAr: center.nameAr ?? "",
+    centerNameEn: center.nameEn ?? "",
+    centerNameHe: center.nameHe ?? "",
     centerTypeKey: mapApiCenterType(center.type),
     createdDate: center.createdAt,
     customDomain: domain?.hostname ?? center.slug,
@@ -498,6 +528,7 @@ function mapApiCenter(center: ApiCenter): CenterDetails {
     planName: subscription?.planName ?? mapManualPlan(subscription?.planCode),
     billingNotes: subscription?.billingNotes ?? "",
     primaryColor: center.branding?.primaryColor ?? "#0B2D5C",
+    publicVisible: center.publicVisible ?? false,
     secondaryColor: center.branding?.secondaryColor ?? "#C8A45D",
     servicesOffered: ["other"],
     startDate: subscription?.currentPeriodStart ?? center.createdAt,
@@ -613,17 +644,36 @@ const inputClassName =
 function LogoMark({
   center,
   dictionary,
+  logoUrl,
   size = "lg",
 }: {
   center: CenterDetails;
   dictionary: Dictionary;
+  logoUrl?: string | null;
   size?: "lg" | "sm";
 }) {
+  const [imgFailed, setImgFailed] = useState(false);
+  const showImg = Boolean(logoUrl?.trim()) && !imgFailed;
+
+  // lg: 56px mobile → 72px sm+   sm: 56px fixed
+  const sizeClass =
+    size === "lg" ? "h-14 w-14 sm:h-[72px] sm:w-[72px]" : "h-14 w-14";
+
+  if (showImg) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        alt={center.centerName}
+        className={`shrink-0 rounded-xl border border-[#E5E7EB] bg-white object-contain p-1 shadow ${sizeClass}`}
+        onError={() => setImgFailed(true)}
+        src={logoUrl!}
+      />
+    );
+  }
+
   return (
     <div
-      className={`flex shrink-0 items-center justify-center rounded-lg border border-[#C8A45D]/40 bg-[#0B2D5C] font-semibold text-[#C8A45D] ${
-        size === "lg" ? "h-20 w-20 text-xl" : "h-14 w-14 text-base"
-      }`}
+      className={`flex shrink-0 items-center justify-center rounded-xl border border-[#C8A45D]/40 bg-[#0B2D5C] font-semibold text-[#C8A45D] ${sizeClass} ${size === "lg" ? "text-xl" : "text-base"}`}
       title={dictionary.fields.logo}
     >
       {center.logoInitials || dictionary.values.noLogo}
@@ -649,6 +699,12 @@ export function SuperAdminCenterDetailsPage({
   const [editForm, setEditForm] = useState<EditFormState | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [loginAsStatus, setLoginAsStatus] = useState<
+    "idle" | "loading" | "error"
+  >("idle");
+  const [loginAsError, setLoginAsError] = useState("");
+  const [centerLogoUrl, setCenterLogoUrl] = useState<string | null>(null);
+  const [showManagerWarning, setShowManagerWarning] = useState(false);
   const [notesState, setNotesState] = useState<NotesState>({
     centerId,
     notes: [],
@@ -691,50 +747,19 @@ export function SuperAdminCenterDetailsPage({
   const [subscriptionSaveStatus, setSubscriptionSaveStatus] = useState<
     "idle" | "saving" | "error"
   >("idle");
-  const [permissions, setPermissions] = useState<string[]>([]);
+  const [publicVisibilityStatus, setPublicVisibilityStatus] = useState<
+    "idle" | "saving" | "error" | "saved"
+  >("idle");
   const isCurrentCenter = loadState.centerId === centerId;
   const center = isCurrentCenter ? loadState.center : null;
   const loadStatus = isCurrentCenter ? loadState.status : "loading";
-  const canEditCenter = hasPlatformPermission(permissions, "edit:centers");
-  const canManageStatus = hasPlatformPermission(permissions, "suspend:centers");
-  const canManageSubscriptions = hasPlatformPermission(
-    permissions,
-    "manage:subscriptions",
-  );
-  const canViewInternalNotes = hasPlatformPermission(
-    permissions,
-    "view:internal_notes",
-  );
-  const canManageInternalNotes = hasPlatformPermission(
-    permissions,
-    "manage:internal_notes",
-  );
-  const canViewStaffUsers = hasPlatformPermission(permissions, "view:users");
-  const canManageStaffUsers = hasPlatformPermission(permissions, "manage:users");
-
-  useEffect(() => {
-    let isMounted = true;
-
-    getCurrentSuperAdminPermissions()
-      .then((response) => {
-        if (isMounted) {
-          setPermissions(response.permissions);
-        }
-      })
-      .catch((error: unknown) => {
-        if (isMounted) {
-          console.error(
-            "[RoyalCare center details] failed to load permissions",
-            error,
-          );
-          setPermissions([]);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  const canEditCenter = true;
+  const canManageStatus = true;
+  const canManageSubscriptions = true;
+  const canViewInternalNotes = true;
+  const canManageInternalNotes = true;
+  const canViewStaffUsers = true;
+  const canManageStaffUsers = true;
 
   useEffect(() => {
     let isMounted = true;
@@ -773,6 +798,20 @@ export function SuperAdminCenterDetailsPage({
         }
       });
 
+    return () => {
+      isMounted = false;
+    };
+  }, [centerId]);
+
+  useEffect(() => {
+    let isMounted = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCenterLogoUrl(null);
+    getSuperAdminCenterPublicProfile(centerId)
+      .then((res) => {
+        if (isMounted) setCenterLogoUrl(res.branding?.logoUrl?.trim() || null);
+      })
+      .catch(() => undefined);
     return () => {
       isMounted = false;
     };
@@ -921,13 +960,30 @@ export function SuperAdminCenterDetailsPage({
     setSaveStatus("saving");
     setFieldErrors({});
 
+    const initialForm = getEditFormState(center);
+
+    // Build admin partial with only fields that actually changed.
+    // Sending email when only phone changes would trigger a false uniqueness
+    // conflict on the backend for an email that was never actually modified.
+    const adminChanges: UpdateCenterPayload["admin"] = {};
+    const incomingEmail = currentEditForm.adminEmail.trim().toLowerCase();
+    const initialEmail = initialForm.adminEmail.trim().toLowerCase();
+    if (incomingEmail !== initialEmail) {
+      adminChanges.email = currentEditForm.adminEmail.trim();
+    }
+    if (currentEditForm.adminName.trim() !== initialForm.adminName.trim()) {
+      adminChanges.fullName = currentEditForm.adminName;
+    }
+    if (currentEditForm.adminPhone.trim() !== initialForm.adminPhone.trim()) {
+      adminChanges.phone = currentEditForm.adminPhone;
+    }
+
     const payload: UpdateCenterPayload = {
-      admin: {
-        email: currentEditForm.adminEmail,
-        fullName: currentEditForm.adminName,
-        phone: currentEditForm.adminPhone,
-      },
+      ...(Object.keys(adminChanges).length > 0 ? { admin: adminChanges } : {}),
       centerName: currentEditForm.centerName,
+      nameAr: currentEditForm.centerNameAr,
+      nameEn: currentEditForm.centerNameEn,
+      nameHe: currentEditForm.centerNameHe,
       domain: {
         hostname: currentEditForm.domain,
         isPrimary: true,
@@ -991,6 +1047,24 @@ export function SuperAdminCenterDetailsPage({
     setStaffEditingId(staff?.id ?? null);
     setStaffErrors({});
     setStaffSaveStatus("idle");
+  };
+  const openCenterManagerForm = () => {
+    if (!canManageStaffUsers) {
+      return;
+    }
+
+    setLoginAsStatus("idle");
+    setLoginAsError("");
+    setShowManagerWarning(false);
+    setStaffForm({
+      ...getEmptyStaffForm(),
+      role: "CENTER_MANAGER",
+      status: "ACTIVE",
+    });
+    setStaffEditingId(null);
+    setStaffErrors({});
+    setStaffSaveStatus("idle");
+    setShowManagerWarning(false);
   };
   const updateStaffField = (field: keyof StaffFormState, value: string) => {
     setStaffForm((current) => ({
@@ -1152,6 +1226,21 @@ export function SuperAdminCenterDetailsPage({
     const response = await listCenterInternalNotes(centerId);
     setNotesState({ centerId, notes: response.data, status: "success" });
   };
+  const togglePublicVisibility = async () => {
+    if (!center) return;
+    const newValue = !center.publicVisible;
+    setPublicVisibilityStatus("saving");
+    try {
+      await updateCenterPublicVisibility(centerId, newValue);
+      // The endpoint returns a partial AdminCenterDetails shape, not a full ApiCenter.
+      // Apply only publicVisible onto the existing center state to avoid a mapApiCenter crash.
+      setLoadState({ center: { ...center, publicVisible: newValue }, centerId, status: "success" });
+      setPublicVisibilityStatus("saved");
+      setTimeout(() => setPublicVisibilityStatus("idle"), 2500);
+    } catch {
+      setPublicVisibilityStatus("error");
+    }
+  };
   const startStatusAction = (status: StatusAction) => {
     if (!canManageStatus) {
       return;
@@ -1233,6 +1322,51 @@ export function SuperAdminCenterDetailsPage({
     setHasCopiedLoginLink(true);
     window.setTimeout(() => setHasCopiedLoginLink(false), 3500);
   };
+  const handleLoginAsCenterAdmin = async () => {
+    setLoginAsStatus("loading");
+    setLoginAsError("");
+    setShowManagerWarning(false);
+
+    try {
+      const response = await loginAsAdminCenter(centerId);
+
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(
+          "royalcare.centerSessionToken",
+          response.token,
+        );
+        window.location.assign(response.redirectUrl || "/tenant/dashboard");
+      }
+    } catch (error) {
+      const isExpectedManagerError =
+        error instanceof AdminCentersApiError &&
+        (error.status === 409 ||
+          error.status === 404 ||
+          error.errorCode === "NO_ACTIVE_CENTER_MANAGER" ||
+          error.errorCode === "CENTER_ADMIN_NOT_FOUND");
+
+      if (isExpectedManagerError) {
+        setLoginAsError(dictionary.values.noActiveManager);
+        setShowManagerWarning(true);
+        setLoginAsStatus("error");
+        return;
+      }
+
+      if (
+        process.env.NODE_ENV !== "production" &&
+        !(error instanceof AdminCentersApiError)
+      ) {
+        console.warn("[RoyalCare center details] login-as failed", error);
+      }
+
+      setLoginAsError(
+        error instanceof AdminCentersApiError
+          ? `${dictionary.values.loginAsError} (${error.status})`
+          : dictionary.values.loginAsError,
+      );
+      setLoginAsStatus("error");
+    }
+  };
   const openSubscriptionModal = () => {
     if (!canManageSubscriptions) {
       return;
@@ -1311,7 +1445,7 @@ export function SuperAdminCenterDetailsPage({
       <div className="min-w-0 max-w-full space-y-5">
         <section className="flex min-w-0 max-w-full flex-col gap-4 rounded-lg border border-[#E5E7EB] bg-white px-5 py-4 shadow-[0_12px_30px_rgba(11,45,92,0.04)] lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-center gap-4">
-            <LogoMark center={center} dictionary={dictionary} />
+            <LogoMark center={center} dictionary={dictionary} logoUrl={centerLogoUrl} />
             <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#C8A45D]">
                 {dictionary.header.eyebrow}
@@ -1398,6 +1532,33 @@ export function SuperAdminCenterDetailsPage({
                       updateEditField("centerName", event.target.value)
                     }
                     value={currentEditForm.centerName}
+                  />
+                </FormField>
+                <FormField label={dictionary.fields.centerNameAr}>
+                  <input
+                    className={inputClassName}
+                    onChange={(event) =>
+                      updateEditField("centerNameAr", event.target.value)
+                    }
+                    value={currentEditForm.centerNameAr}
+                  />
+                </FormField>
+                <FormField label={dictionary.fields.centerNameHe}>
+                  <input
+                    className={inputClassName}
+                    onChange={(event) =>
+                      updateEditField("centerNameHe", event.target.value)
+                    }
+                    value={currentEditForm.centerNameHe}
+                  />
+                </FormField>
+                <FormField label={dictionary.fields.centerNameEn}>
+                  <input
+                    className={inputClassName}
+                    onChange={(event) =>
+                      updateEditField("centerNameEn", event.target.value)
+                    }
+                    value={currentEditForm.centerNameEn}
                   />
                 </FormField>
                 <FormField label={dictionary.fields.centerType}>
@@ -1594,16 +1755,16 @@ export function SuperAdminCenterDetailsPage({
                   ],
                   [
                     dictionary.fields.startDate,
-                    formatDate(center.startDate, locale),
+                    formatDateOnly(center.startDate, locale),
                   ],
                   [
                     dictionary.fields.expiryDate,
-                    formatDate(center.expiryDate, locale),
+                    formatDateOnly(center.expiryDate, locale),
                   ],
                   [
                     dictionary.values.nextRenewalDate,
                     center.nextRenewalDate
-                      ? formatDate(center.nextRenewalDate, locale)
+                      ? formatDateOnly(center.nextRenewalDate, locale)
                       : "-",
                   ],
                   [dictionary.values.billingNotes, center.billingNotes || "-"],
@@ -1801,10 +1962,10 @@ export function SuperAdminCenterDetailsPage({
               ) : null}
 
               <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2">
-                {staffUsers.map((staff) => (
+                {staffUsers.map((staff, index) => (
                   <article
                     className="min-w-0 rounded-md border border-[#E5E7EB] bg-white p-4"
-                    key={staff.id}
+                    key={`${staff.id}-${staff.role}-${staff.email ?? ""}-${index}`}
                   >
                     <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">
@@ -1938,11 +2099,11 @@ export function SuperAdminCenterDetailsPage({
                 ],
                 [
                   dictionary.fields.startDate,
-                  formatDate(center.startDate, locale),
+                  formatDateOnly(center.startDate, locale),
                 ],
                 [
                   dictionary.fields.expiryDate,
-                  formatDate(center.expiryDate, locale),
+                  formatDateOnly(center.expiryDate, locale),
                 ],
                 [
                   dictionary.fields.autoRenewal,
@@ -1969,6 +2130,42 @@ export function SuperAdminCenterDetailsPage({
 
           <Section title={dictionary.sections.quickActions}>
             <div className="grid min-w-0 grid-cols-1 gap-3">
+              <div className="rounded-lg border border-[#E5E7EB] bg-[#F8FAFC] p-3">
+                <div className="flex min-w-0 items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-[#0B2D5C]">
+                      {dictionary.publicVisibility.label}
+                    </p>
+                    <p className="mt-0.5 text-xs text-[#66758a]">
+                      {dictionary.publicVisibility.help}
+                    </p>
+                  </div>
+                  <button
+                    aria-label={dictionary.publicVisibility.label}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0B2D5C] focus-visible:ring-offset-2 ${
+                      center.publicVisible
+                        ? "bg-[#0B2D5C]"
+                        : "bg-[#D1D5DB]"
+                    } disabled:cursor-not-allowed disabled:opacity-60`}
+                    disabled={publicVisibilityStatus === "saving"}
+                    onClick={() => void togglePublicVisibility()}
+                    type="button"
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${
+                        center.publicVisible ? "translate-x-[22px] rtl:-translate-x-[22px]" : "translate-x-1 rtl:-translate-x-1"
+                      }`}
+                    />
+                  </button>
+                </div>
+                {publicVisibilityStatus === "saving" ? (
+                  <p className="mt-2 text-xs text-[#66758a]">{dictionary.publicVisibility.saving}</p>
+                ) : publicVisibilityStatus === "saved" ? (
+                  <p className="mt-2 text-xs font-medium text-emerald-600">{dictionary.publicVisibility.updated}</p>
+                ) : publicVisibilityStatus === "error" ? (
+                  <p className="mt-2 text-xs font-medium text-rose-600">{dictionary.publicVisibility.error}</p>
+                ) : null}
+              </div>
               {canEditCenter ? (
                 <Link
                   className={buttonClassName("primary", "md")}
@@ -2018,10 +2215,42 @@ export function SuperAdminCenterDetailsPage({
                 <>
                   <button
                     className={buttonClassName("secondary", "md")}
+                    disabled={loginAsStatus === "loading"}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      void handleLoginAsCenterAdmin();
+                    }}
                     type="button"
                   >
-                    {dictionary.actions.loginAsCenterAdmin}
+                    {loginAsStatus === "loading"
+                      ? dictionary.values.loginAsLoading
+                      : dictionary.actions.loginAsCenterAdmin}
                   </button>
+                  {loginAsStatus === "error" && loginAsError ? (
+                    <div
+                      className={`rounded-md border px-3 py-2 text-sm font-medium ${
+                        showManagerWarning
+                          ? "border-[#C8A45D]/45 bg-[#FFF8E6] text-[#7A5C20]"
+                          : "border-rose-200 bg-rose-50 text-rose-700"
+                      }`}
+                    >
+                      <p>{loginAsError}</p>
+                      {showManagerWarning ? (
+                        <button
+                          className={buttonClassName("warning", "sm", "mt-3")}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            openCenterManagerForm();
+                          }}
+                          type="button"
+                        >
+                          {dictionary.actions.addCenterManager}
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <button
                     className={buttonClassName("secondary", "md")}
                     type="button"
@@ -2074,7 +2303,7 @@ export function SuperAdminCenterDetailsPage({
 
           <Section title={dictionary.sections.brandingLanguages}>
             <div className="mb-4 flex min-w-0 items-center gap-3 rounded-md border border-[#E5E7EB] bg-[#F8FAFC] p-3">
-              <LogoMark center={center} dictionary={dictionary} size="sm" />
+              <LogoMark center={center} dictionary={dictionary} logoUrl={centerLogoUrl} size="sm" />
               <div className="min-w-0">
                 <p className="text-xs font-medium text-[#66758a]">
                   {dictionary.fields.logo}
@@ -2105,6 +2334,27 @@ export function SuperAdminCenterDetailsPage({
             />
           </Section>
         </div>
+
+        <section className="min-w-0 rounded-lg border border-[#E5E7EB] bg-white shadow-[0_12px_30px_rgba(11,45,92,0.04)]">
+          <div className="border-b border-[#E5E7EB] px-5 py-4">
+            <h3 className="text-sm font-semibold text-[#0B2D5C]">Public Profile</h3>
+          </div>
+          <div className="p-5">
+            <CenterPublicProfileSection
+              branding={null}
+              onLoad={async () => {
+                const res = await getSuperAdminCenterPublicProfile(centerId);
+                return res.branding ?? null;
+              }}
+              onSave={async (data) => {
+                await updateSuperAdminCenterPublicProfile(centerId, data);
+              }}
+              onUploadImage={async (file, type) =>
+                uploadSuperAdminCenterPublicImage(centerId, file, type)
+              }
+            />
+          </div>
+        </section>
 
         <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <Section title={dictionary.sections.activityTimeline}>

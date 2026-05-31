@@ -1,4 +1,5 @@
 import type { CenterAdminDictionary } from "@/i18n/dictionaries/center-admin";
+import { formatDate } from "@/i18n/formatters";
 import type { AppointmentConflictDetails } from "@/lib/api/tenant-appointments";
 import type { SupportedLocale } from "@/i18n/locales";
 
@@ -6,26 +7,14 @@ function localizedServiceName(
   details: AppointmentConflictDetails,
   locale: SupportedLocale,
 ): string {
-  if (locale === "ar") return details.serviceNameAr || details.serviceNameEn;
-  if (locale === "he") return details.serviceNameHe || details.serviceNameEn;
-  return details.serviceNameEn;
+  if (locale === "ar") return details.serviceNameAr || details.serviceNameEn || details.serviceNameHe;
+  if (locale === "he") return details.serviceNameHe || details.serviceNameEn || details.serviceNameAr;
+  return details.serviceNameEn || details.serviceNameAr || details.serviceNameHe;
 }
 
-function formatDate(dateStr: string, locale: SupportedLocale): string {
-  if (!dateStr || !dateStr.trim()) return "—";
-  // Accept both "YYYY-MM-DD" and full ISO datetime strings — take only the
-  // date part so we never double-append a time component.
-  const datePart = dateStr.slice(0, 10);
-  try {
-    const d = new Date(`${datePart}T00:00:00Z`);
-    if (isNaN(d.getTime())) return "—";
-    return d.toLocaleDateString(
-      locale === "ar" ? "ar-SA" : locale === "he" ? "he-IL" : "en-GB",
-      { day: "2-digit", month: "short", year: "numeric" },
-    );
-  } catch {
-    return "—";
-  }
+function formatConflictDate(dateStr: string, locale: SupportedLocale, fallback: string): string {
+  if (!dateStr || !dateStr.trim()) return fallback;
+  return formatDate(dateStr.slice(0, 10), locale) || fallback;
 }
 
 export function AppointmentConflictAlert({
@@ -38,6 +27,7 @@ export function AppointmentConflictAlert({
   locale: SupportedLocale;
 }) {
   const d = dictionary.appointments;
+  const na = dictionary.common.notAvailable;
 
   return (
     <div
@@ -45,7 +35,6 @@ export function AppointmentConflictAlert({
       role="alert"
     >
       <div className="flex items-start gap-3 rtl:flex-row-reverse">
-        {/* Warning icon */}
         <div className="mt-0.5 shrink-0">
           <svg
             aria-hidden="true"
@@ -67,18 +56,20 @@ export function AppointmentConflictAlert({
           <p className="text-sm font-bold text-[#B42318]">{d.conflictTitle}</p>
 
           <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-            <ConflictRow label={d.conflictPatient} value={details.patientName} />
+            <ConflictRow label={d.conflictPatient} value={details.patientName} fallback={na} />
             <ConflictRow
               label={d.conflictService}
               value={localizedServiceName(details, locale)}
+              fallback={na}
             />
-            <ConflictRow label={d.conflictProvider} value={details.providerName} />
+            <ConflictRow label={d.conflictProvider} value={details.providerName} fallback={na} />
             <ConflictRow
               label={d.conflictDate}
-              value={formatDate(details.appointmentDate, locale)}
+              value={formatConflictDate(details.appointmentDate, locale, na)}
+              fallback={na}
             />
-            <ConflictRow label={d.conflictStart} value={details.startTime} />
-            <ConflictRow label={d.conflictEnd} value={details.endTime} />
+            <ConflictRow label={d.conflictStart} value={details.startTime} fallback={na} />
+            <ConflictRow label={d.conflictEnd} value={details.endTime} fallback={na} />
           </dl>
 
           <p className="mt-4 text-sm font-semibold text-[#7D1B1B]">
@@ -90,11 +81,11 @@ export function AppointmentConflictAlert({
   );
 }
 
-function ConflictRow({ label, value }: { label: string; value: string }) {
+function ConflictRow({ label, value, fallback }: { label: string; value: string; fallback: string }) {
   return (
     <div className="flex min-w-0 gap-2 rtl:flex-row-reverse">
       <dt className="shrink-0 font-semibold text-[#7D1B1B]">{label}:</dt>
-      <dd className="min-w-0 truncate text-[#B42318]">{value || "—"}</dd>
+      <dd className="min-w-0 truncate text-[#B42318]">{value || fallback}</dd>
     </div>
   );
 }

@@ -13,6 +13,19 @@ import {
 } from "@/lib/api/tenant-staff";
 import { CenterAdminShell } from "../layout/CenterAdminShell";
 import { hasTenantStaffPermission } from "./staff-permissions";
+import {
+  getPermissionGroups,
+  permKeyToDictKey,
+} from "../profile/role-permissions";
+import type { CenterAdminDictionary } from "@/i18n/dictionaries/center-admin";
+
+const sectionNavKeys: Record<string, keyof CenterAdminDictionary["nav"]> = {
+  staff: "staff",
+  services: "services",
+  appointments: "appointments",
+  billing: "billing",
+  payments: "billing",
+};
 
 export function TenantStaffDetailsPage() {
   const router = useRouter();
@@ -68,12 +81,12 @@ export function TenantStaffDetailsPage() {
     >
       {({ dictionary, session }) => {
         const canUpdate = hasTenantStaffPermission(
-          session.role.key,
-          "staff.update",
+          session.permissions,
+          "staff:update",
         );
         const canActivate = hasTenantStaffPermission(
-          session.role.key,
-          "staff.activate",
+          session.permissions,
+          "staff:status",
         );
 
         const changeStatus = async () => {
@@ -97,6 +110,8 @@ export function TenantStaffDetailsPage() {
             setIsSaving(false);
           }
         };
+
+        const groups = staff ? getPermissionGroups(staff.role) : [];
 
         return (
           <>
@@ -160,54 +175,108 @@ export function TenantStaffDetailsPage() {
             ) : null}
 
             {staff && !isLoading ? (
-              <section className="mt-5 rounded-lg border border-[#E5E7EB] bg-white p-5 shadow-[0_12px_30px_rgba(11,45,92,0.04)]">
-                <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0">
-                    <h2 className="break-words text-xl font-semibold text-[#0B2D5C]">
-                      {staff.fullName || staff.email || dictionary.common.notAvailable}
-                    </h2>
-                    <p className="mt-1 break-words text-sm text-[#66758a]">
-                      {staff.email || dictionary.common.notAvailable}
-                    </p>
+              <>
+                {/* ── Identity card ── */}
+                <section className="mt-5 rounded-lg border border-[#E5E7EB] bg-white p-5 shadow-[0_12px_30px_rgba(11,45,92,0.04)]">
+                  <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <h2 className="break-words text-xl font-semibold text-[#0B2D5C]">
+                        {staff.fullName || staff.email || dictionary.common.notAvailable}
+                      </h2>
+                      <p className="mt-1 break-words text-sm text-[#66758a]">
+                        {staff.email || dictionary.common.notAvailable}
+                      </p>
+                    </div>
+                    <span
+                      className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${
+                        staff.status === "ACTIVE"
+                          ? "bg-emerald-50 text-emerald-800"
+                          : "bg-[#FFF7F7] text-[#B42318]"
+                      }`}
+                    >
+                      {dictionary.staffStatuses[staff.status]}
+                    </span>
                   </div>
-                  <span
-                    className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${
-                      staff.status === "ACTIVE"
-                        ? "bg-emerald-50 text-emerald-800"
-                        : "bg-[#FFF7F7] text-[#B42318]"
-                    }`}
-                  >
-                    {dictionary.staffStatuses[staff.status]}
-                  </span>
-                </div>
 
-                <dl className="mt-5 grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  <Detail
-                    label={dictionary.staff.fullName}
-                    value={staff.fullName || dictionary.common.notAvailable}
-                  />
-                  <Detail
-                    label={dictionary.staff.email}
-                    value={staff.email || dictionary.common.notAvailable}
-                  />
-                  <Detail
-                    label={dictionary.staff.role}
-                    value={dictionary.roles[staff.role]}
-                  />
-                  <Detail
-                    label={dictionary.staff.status}
-                    value={dictionary.staffStatuses[staff.status]}
-                  />
-                  <Detail
-                    label={dictionary.staff.createdAt}
-                    value={formatDate(staff.createdAt, locale)}
-                  />
-                  <Detail
-                    label={dictionary.staff.updatedAt}
-                    value={formatDate(staff.updatedAt, locale)}
-                  />
-                </dl>
-              </section>
+                  <dl className="mt-5 grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    <Detail
+                      label={dictionary.staff.fullName}
+                      value={staff.fullName || dictionary.common.notAvailable}
+                    />
+                    <Detail
+                      label={dictionary.staff.email}
+                      value={staff.email || dictionary.common.notAvailable}
+                    />
+                    <Detail
+                      label={dictionary.staff.phone}
+                      value={staff.phone || dictionary.common.notAvailable}
+                    />
+                    <Detail
+                      label={dictionary.staff.role}
+                      value={dictionary.roles[staff.role]}
+                    />
+                    <Detail
+                      label={dictionary.staff.status}
+                      value={dictionary.staffStatuses[staff.status]}
+                    />
+                    <Detail
+                      label={dictionary.staff.centerLabel}
+                      value={session.center.name}
+                    />
+                    <Detail
+                      label={dictionary.staff.createdAt}
+                      value={formatDate(staff.createdAt, locale)}
+                    />
+                    <Detail
+                      label={dictionary.staff.updatedAt}
+                      value={formatDate(staff.updatedAt, locale)}
+                    />
+                  </dl>
+                </section>
+
+                {/* ── Permissions ── */}
+                <section className="mt-5 rounded-lg border border-[#E5E7EB] bg-white p-5 shadow-[0_12px_30px_rgba(11,45,92,0.04)]">
+                  <h3 className="mb-4 text-base font-semibold text-[#0B2D5C]">
+                    {dictionary.staff.permissionsTitle}
+                  </h3>
+
+                  {groups.length === 0 ? (
+                    <p className="text-sm text-[#66758a]">
+                      {dictionary.profile.noPermissions}
+                    </p>
+                  ) : (
+                    <div className="space-y-4">
+                      {groups.map((group) => {
+                        const navKey = sectionNavKeys[group.sectionKey];
+                        const sectionLabel = navKey
+                          ? dictionary.nav[navKey]
+                          : group.sectionKey;
+
+                        return (
+                          <div key={group.sectionKey} className="min-w-0">
+                            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.1em] text-[#C8A45D]">
+                              {sectionLabel}
+                            </p>
+                            <div className="flex min-w-0 flex-wrap gap-2">
+                              {group.permissions.map((perm) => {
+                                const dictKey = permKeyToDictKey[perm] as keyof typeof dictionary.permissionLabels;
+                                return (
+                                  <span
+                                    key={perm}
+                                    className="rounded-full border border-[#DBEAFE] bg-[#EFF6FF] px-3 py-1 text-xs font-semibold text-[#1D4ED8]"
+                                  >
+                                    {dictionary.permissionLabels[dictKey]}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+              </>
             ) : null}
           </>
         );

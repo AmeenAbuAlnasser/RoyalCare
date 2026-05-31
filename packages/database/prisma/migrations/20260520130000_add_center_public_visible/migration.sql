@@ -1,0 +1,2 @@
+ALTER TABLE "Center"
+  ADD COLUMN IF NOT EXISTS "publicVisible" BOOLEAN NOT NULL DEFAULT false;

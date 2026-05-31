@@ -9,6 +9,7 @@ export type TenantStaff = {
   email: string | null;
   fullName: string;
   id: string;
+  phone: string | null;
   role: CenterRoleKey;
   roleName: string;
   status: TenantStaffStatus;

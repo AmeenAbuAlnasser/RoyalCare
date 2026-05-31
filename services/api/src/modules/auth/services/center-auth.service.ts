@@ -1,4 +1,5 @@
-import {
+﻿import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -6,10 +7,19 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../../common/database/prisma.service';
 import { safeUserSelect } from '../../../common/database/safe-user-select';
-import { verifyPassword } from '../../../common/security/password-hashing';
-import type { Prisma } from '../../../../../../packages/database/node_modules/@prisma/client';
+import {
+  hashPassword,
+  verifyPassword,
+} from '../../../common/security/password-hashing';
+import type { Prisma } from '@royalcare/db';
+import {
+  normalizeTenantPermissionKeys,
+  setTenantPermissionDebugContext,
+  tenantPermissionKeys,
+} from '../../../common/permissions/tenant-permissions';
 import { CenterLoginDto } from '../dto/center-login.dto';
 import type { CenterSessionPayload } from './center-session.service';
+import { TenantSubscriptionAccessService } from './tenant-subscription-access.service';
 
 const CENTER_STAFF_ROLES = [
   'CENTER_OWNER',
@@ -20,6 +30,51 @@ const CENTER_STAFF_ROLES = [
   'STAFF',
 ] as const;
 const ACTIVE_USER_ROLE_STATUS = 'ACTIVE';
+
+const ALL_PERMISSION_KEYS = [...tenantPermissionKeys];
+
+const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
+  CENTER_OWNER: [...ALL_PERMISSION_KEYS],
+  CENTER_MANAGER: [...ALL_PERMISSION_KEYS],
+  DOCTOR: [
+    'staff:view',
+    'services:view',
+    'appointments:view',
+    'appointments:update',
+    'appointments:status',
+    'payments:view',
+  ],
+  RECEPTIONIST: [
+    'staff:view',
+    'services:view',
+    'appointments:view',
+    'appointments:create',
+    'appointments:update',
+    'appointments:cancel',
+    'appointments:status',
+    'billing:view',
+    'billing:create',
+    'payments:view',
+    'payments:create',
+  ],
+  ACCOUNTANT: [
+    'staff:view',
+    'services:view',
+    'appointments:view',
+    'billing:view',
+    'billing:create',
+    'billing:update',
+    'payments:view',
+    'payments:create',
+  ],
+  STAFF: [
+    'staff:view',
+    'services:view',
+    'appointments:view',
+    'billing:view',
+    'payments:view',
+  ],
+};
 const BLOCKED_CENTER_STATUSES = ['SUSPENDED', 'CANCELLED', 'ARCHIVED'];
 
 const safeCenterSelect = {
@@ -58,7 +113,10 @@ function invalidCredentials() {
 
 @Injectable()
 export class CenterAuthService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly subscriptionAccess: TenantSubscriptionAccessService,
+  ) {}
 
   async resolveCenterLogin(centerSlug: string) {
     const slug = normalizeSlug(centerSlug);
@@ -168,11 +226,28 @@ export class CenterAuthService {
       });
     }
 
-    return this.formatSession({
-      center: assignment.center,
-      role: assignment.role,
-      user,
+    const permissions = await this.getEffectivePermissions(
+      assignment.center.id,
+      assignment.role.key,
+    );
+    const subscriptionAccess = await this.subscriptionAccess.getAccessState(
+      assignment.center.id,
+    );
+    setTenantPermissionDebugContext({
+      centerId: assignment.center.id,
+      roleKey: assignment.role.key,
+      userId: user.id,
     });
+
+    return {
+      ...this.formatSession({
+        center: assignment.center,
+        role: assignment.role,
+        user,
+      }),
+      permissions,
+      subscriptionAccess,
+    };
   }
 
   async getSession(payload: CenterSessionPayload | null) {
@@ -221,11 +296,151 @@ export class CenterAuthService {
       });
     }
 
-    return this.formatSession({
-      center: assignment.center,
-      role: assignment.role,
-      user: assignment.user,
+    const permissions = await this.getEffectivePermissions(
+      assignment.center.id,
+      assignment.role.key,
+    );
+    const subscriptionAccess = await this.subscriptionAccess.getAccessState(
+      assignment.center.id,
+    );
+    setTenantPermissionDebugContext({
+      centerId: assignment.center.id,
+      roleKey: assignment.role.key,
+      userId: assignment.user.id,
     });
+
+    return {
+      ...this.formatSession({
+        center: assignment.center,
+        role: assignment.role,
+        user: assignment.user,
+      }),
+      impersonation: payload.impersonatorUserId
+        ? {
+            impersonatedUserId: payload.userId,
+            impersonatorUserId: payload.impersonatorUserId,
+          }
+        : null,
+      permissions,
+      subscriptionAccess,
+    };
+  }
+
+  async changePassword(
+    payload: CenterSessionPayload | null,
+    dto: { currentPassword?: string; newPassword?: string },
+  ) {
+    if (!payload) {
+      throw new UnauthorizedException({
+        message: 'Not authenticated',
+        errors: { session: 'Please log in again.' },
+      });
+    }
+
+    const errors: Record<string, string> = {};
+    const currentPassword = dto.currentPassword?.trim() ?? '';
+    const newPassword = dto.newPassword?.trim() ?? '';
+
+    if (!currentPassword) {
+      errors.currentPassword = 'Current password is required.';
+    }
+
+    if (!newPassword) {
+      errors.newPassword = 'New password is required.';
+    } else if (newPassword.length < 8) {
+      errors.newPassword = 'Password must be at least 8 characters.';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      throw new BadRequestException({ message: 'Validation failed', errors });
+    }
+
+    const session = await this.getSession(payload);
+    const prisma = await this.prisma.getClient();
+    const user = await prisma.user.findFirst({
+      where: {
+        id: session.user.id,
+        roles: {
+          some: {
+            centerId: session.center.id,
+            status: ACTIVE_USER_ROLE_STATUS,
+            role: {
+              key: session.role.key,
+              scope: 'CENTER',
+              status: 'ACTIVE',
+            },
+          },
+        },
+      },
+      select: { id: true, passwordHash: true, deletedAt: true, status: true },
+    });
+
+    if (
+      !user ||
+      user.deletedAt ||
+      user.status !== 'ACTIVE' ||
+      !user.passwordHash
+    ) {
+      throw new UnauthorizedException({
+        message: 'Not authenticated',
+        errors: { session: 'Please log in again.' },
+      });
+    }
+
+    const isValid = await verifyPassword(currentPassword, user.passwordHash);
+
+    if (!isValid) {
+      throw new BadRequestException({
+        message: 'Validation failed',
+        errors: { currentPassword: 'Current password is incorrect.' },
+      });
+    }
+
+    const newHash = await hashPassword(newPassword);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: newHash },
+      select: { id: true },
+    });
+
+    return { success: true };
+  }
+
+  private async getEffectivePermissions(
+    centerId: string,
+    roleKey: string,
+  ): Promise<string[]> {
+    if (roleKey === 'CENTER_OWNER') {
+      return normalizeTenantPermissionKeys(ALL_PERMISSION_KEYS);
+    }
+
+    const prisma = await this.prisma.getClient();
+
+    const role = await prisma.role.findFirst({
+      where: { centerId, key: roleKey, scope: 'CENTER' },
+      select: { id: true },
+    });
+
+    if (!role) {
+      return normalizeTenantPermissionKeys(
+        DEFAULT_ROLE_PERMISSIONS[roleKey] ?? [],
+      );
+    }
+
+    const rolePerms = await prisma.rolePermission.findMany({
+      where: { roleId: role.id },
+      include: { permission: true },
+    });
+
+    if (rolePerms.length === 0) {
+      return normalizeTenantPermissionKeys(
+        DEFAULT_ROLE_PERMISSIONS[roleKey] ?? [],
+      );
+    }
+
+    return normalizeTenantPermissionKeys(
+      rolePerms.map((rp) => rp.permission.key),
+    );
   }
 
   private formatSession(session: {

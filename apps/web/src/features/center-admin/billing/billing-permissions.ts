@@ -1,59 +1,26 @@
 type BillingPermission =
-  | "billing.view"
-  | "billing.create"
-  | "billing.update"
-  | "billing.mark_paid";
+  | "billing:view"
+  | "billing:create"
+  | "billing:update"
+  | "billing:cancel";
 
-type PaymentPermission = "payments.view" | "payments.create";
-
-const rolePermissions: Record<string, BillingPermission[]> = {
-  CENTER_OWNER: [
-    "billing.view",
-    "billing.create",
-    "billing.update",
-    "billing.mark_paid",
-  ],
-  CENTER_MANAGER: [
-    "billing.view",
-    "billing.create",
-    "billing.update",
-    "billing.mark_paid",
-  ],
-  ACCOUNTANT: [
-    "billing.view",
-    "billing.create",
-    "billing.update",
-    "billing.mark_paid",
-  ],
-  RECEPTIONIST: ["billing.view", "billing.create"],
-  DOCTOR: ["billing.view"],
-  STAFF: ["billing.view"],
-};
-
-const paymentRolePermissions: Record<string, PaymentPermission[]> = {
-  CENTER_OWNER: ["payments.view", "payments.create"],
-  CENTER_MANAGER: ["payments.view", "payments.create"],
-  ACCOUNTANT: ["payments.view", "payments.create"],
-  RECEPTIONIST: ["payments.view", "payments.create"],
-  DOCTOR: ["payments.view"],
-  STAFF: ["payments.view"],
-};
+type PaymentPermission = "payments:view" | "payments:create";
 
 export function hasBillingPermission(
-  roleKey: string,
+  permissions: readonly string[] | undefined,
   permission: BillingPermission,
 ): boolean {
-  return rolePermissions[roleKey]?.includes(permission) ?? false;
+  return permissions?.includes(permission) ?? false;
 }
 
 export function hasPaymentPermission(
-  roleKey: string,
+  permissions: readonly string[] | undefined,
   permission: PaymentPermission,
 ): boolean {
-  return paymentRolePermissions[roleKey]?.includes(permission) ?? false;
+  return permissions?.includes(permission) ?? false;
 }
 
-// Manual credit add requires billing.mark_paid (owner/manager/accountant)
-export function canAddManualCredit(roleKey: string): boolean {
-  return ["CENTER_OWNER", "CENTER_MANAGER", "ACCOUNTANT"].includes(roleKey);
+// Manual credit add uses the same privileged billing action as marking paid.
+export function canAddManualCredit(permissions: readonly string[] | undefined): boolean {
+  return hasBillingPermission(permissions, "billing:update");
 }

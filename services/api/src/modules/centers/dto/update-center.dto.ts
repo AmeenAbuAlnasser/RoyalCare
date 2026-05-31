@@ -51,6 +51,9 @@ export class UpdateCenterDto {
   centerName?: string;
   domain?: UpdateCenterDomainDto;
   name?: string;
+  nameAr?: string | null;
+  nameEn?: string | null;
+  nameHe?: string | null;
   primaryLanguage?: SupportedLanguage;
   status?: CenterStatus;
   subscription?: UpdateCenterSubscriptionDto;

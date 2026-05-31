@@ -108,6 +108,13 @@ enum DomainStatus {
   DISABLED
 }
 
+enum SslStatus {
+  PENDING
+  PROVISIONING
+  ACTIVE
+  FAILED
+}
+
 enum CustomerStatus {
   ACTIVE
   INACTIVE
@@ -134,6 +141,27 @@ enum AppointmentStatus {
   COMPLETED
   CANCELLED
   NO_SHOW
+}
+
+enum ServiceFollowUpType {
+  FIXED_INTERVAL
+  SESSION_PLAN
+}
+
+enum PatientFollowUpSourceType {
+  APPOINTMENT_COMPLETED
+  MANUAL
+  BOOKING_REQUEST
+}
+
+enum PatientFollowUpStatus {
+  DUE
+  UPCOMING
+  CONTACTED
+  BOOKED
+  COMPLETED
+  MISSED
+  CANCELLED
 }
 
 enum AppointmentSource {
@@ -163,6 +191,22 @@ enum NotificationStatus {
   CANCELLED
 }
 
+enum NotificationTargetAudience {
+  SUPER_ADMIN
+  CENTER_ADMIN
+}
+
+enum NotificationType {
+  SUBSCRIPTION_EXPIRING
+  SUBSCRIPTION_EXPIRED
+  SUBSCRIPTION_RENEWAL_REQUEST
+  SUBSCRIPTION_SUSPENDED
+  SUBSCRIPTION_RENEWED
+  TRIAL_ENDING_SOON
+  MISSING_WHATSAPP_PHONE
+  BOOKING_REQUEST_CREATED
+}
+
 enum DynamicPageStatus {
   DRAFT
   PUBLISHED
@@ -173,6 +217,14 @@ enum InvoiceStatus {
   PENDING
   PARTIAL
   PAID
+  CANCELLED
+}
+
+enum SubscriptionInvoiceStatus {
+  DRAFT
+  PENDING
+  PAID
+  OVERDUE
   CANCELLED
 }
 
@@ -194,6 +246,64 @@ enum CreditTransactionSource {
   ADJUSTMENT
 }
 
+enum BookingRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum MarketingTrackingProvider {
+  META_PIXEL
+  META_CAPI
+  TIKTOK
+  GA4
+  SNAP
+}
+
+enum MarketingTrackingStatus {
+  SUCCESS
+  FAILED
+  SKIPPED
+}
+
+enum CenterWebsiteEventType {
+  VIEW_CENTER_WEBSITE
+  VIEW_BOOKING_PAGE
+  CLICK_BOOK_NOW
+  CLICK_WHATSAPP
+  CLICK_PHONE
+  CLICK_MAP
+  CLICK_MESSENGER
+  VIEW_GALLERY
+  VIEW_REVIEWS
+  VIEW_BEFORE_AFTER
+  VIEW_OFFERS
+  SELECT_OFFER
+  COMPLETE_BOOKING
+  VIEW_CONTACT
+  VIEW_SERVICES
+  SELECT_SERVICE
+}
+
+enum CenterTrafficSource {
+  FACEBOOK
+  INSTAGRAM
+  TIKTOK
+  GOOGLE
+  DIRECT
+  UNKNOWN
+}
+
 model User {
   id              String     @id @default(uuid()) @db.Uuid
   email           String?    @unique @db.VarChar(320)
@@ -208,16 +318,21 @@ model User {
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
-  ownedCenters        Center[]             @relation("CenterOwner")
-  customers           Customer[]
-  staffAppointments   Appointment[]        @relation("AppointmentStaffUser")
-  createdAppointments Appointment[]        @relation("AppointmentCreatedBy")
-  internalNotes       CenterInternalNote[] @relation("CenterInternalNoteAuthor")
-  notifications       Notification[]
-  roles               UserRole[]
-  staffInvoices          Invoice[]            @relation("InvoiceStaff")
-  paymentsCreated        Payment[]            @relation("PaymentCreatedBy")
-  creditTransactionsCreated CreditTransaction[] @relation("CreditTransactionCreatedBy")
+  ownedCenters              Center[]               @relation("CenterOwner")
+  customers                 Customer[]
+  staffAppointments         Appointment[]          @relation("AppointmentStaffUser")
+  createdAppointments       Appointment[]          @relation("AppointmentCreatedBy")
+  internalNotes             CenterInternalNote[]   @relation("CenterInternalNoteAuthor")
+  notifications             Notification[]
+  roles                     UserRole[]
+  staffInvoices             Invoice[]              @relation("InvoiceStaff")
+  paymentsCreated           Payment[]              @relation("PaymentCreatedBy")
+  creditTransactionsCreated CreditTransaction[]    @relation("CreditTransactionCreatedBy")
+  auditLogsAsActor          AuditLog[]             @relation("AuditLogActor")
+  auditLogsAsTarget         AuditLog[]             @relation("AuditLogTarget")
+  providerWorkingHours      ProviderWorkingHours[] @relation("ProviderWorkingHours")
+  providerLeaveDays         ProviderLeaveDay[]     @relation("ProviderLeaveDay")
+  bookingRequestsAsProvider BookingRequest[]       @relation("BookingRequestProvider")
 
   @@index([status])
   @@index([email, status])
@@ -299,6 +414,9 @@ model Center {
   id              String            @id @default(uuid()) @db.Uuid
   ownerUserId     String?           @db.Uuid
   name            String            @db.VarChar(160)
+  nameAr          String?           @db.VarChar(160)
+  nameEn          String?           @db.VarChar(160)
+  nameHe          String?           @db.VarChar(160)
   slug            String            @unique @db.VarChar(120)
   type            CenterType
   status          CenterStatus      @default(TRIAL)
@@ -308,26 +426,45 @@ model Center {
   suspendedAt     DateTime?
   cancelledAt     DateTime?
   archivedAt      DateTime?
+  publicVisible   Boolean           @default(false)
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
-  owner         User?                @relation("CenterOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  roles         Role[]
-  userRoles     UserRole[]
-  subscriptions Subscription[]
-  domains       Domain[]
-  customers     Customer[]
-  patients      Patient[]
-  services      Service[]
-  appointments  Appointment[]
-  sessions      Session[]
-  notifications Notification[]
-  dynamicPages  DynamicPage[]
-  branding      BrandingSettings?
-  internalNotes CenterInternalNote[]
-  invoices           Invoice[]
-  payments           Payment[]
-  creditTransactions CreditTransaction[]
+  owner                 User?                    @relation("CenterOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  roles                 Role[]
+  userRoles             UserRole[]
+  subscriptions         Subscription[]
+  subscriptionInvoices  SubscriptionInvoice[]
+  domains               Domain[]
+  customers             Customer[]
+  patients              Patient[]
+  services              Service[]
+  appointments          Appointment[]
+  sessions              Session[]
+  notifications         Notification[]
+  dynamicPages          DynamicPage[]
+  branding              BrandingSettings?
+  internalNotes         CenterInternalNote[]
+  invoices              Invoice[]
+  payments              Payment[]
+  creditTransactions    CreditTransaction[]
+  auditLogs             AuditLog[]
+  bookingRequests       BookingRequest[]
+  patientPortalTokens   PatientPortalToken[]
+  workingHours          CenterWorkingHours[]
+  closedDays            CenterClosedDay[]
+  providerWorkingHours  ProviderWorkingHours[]
+  providerLeaveDays     ProviderLeaveDay[]
+  galleryImages         CenterGalleryImage[]
+  reviews               CenterReview[]
+  beforeAfterItems      CenterBeforeAfter[]
+  teamMembers           CenterTeamMember[]
+  offers                CenterOffer[]
+  seoSettings           CenterSeoSettings?
+  marketingSettings     TenantMarketingSettings?
+  marketingTrackingLogs MarketingTrackingLog[]
+  websiteEvents         CenterWebsiteEvent[]
+  patientFollowUps      PatientFollowUp[]
 
   @@index([ownerUserId])
   @@index([status])
@@ -353,30 +490,71 @@ model CenterInternalNote {
 }
 
 model Subscription {
-  id                 String             @id @default(uuid()) @db.Uuid
-  centerId           String             @db.Uuid
-  planCode           String             @db.VarChar(80)
-  planName           String             @db.VarChar(120)
-  status             SubscriptionStatus @default(TRIALING)
-  billingInterval    BillingInterval    @default(MONTHLY)
-  currentPeriodStart DateTime
-  currentPeriodEnd   DateTime
-  nextRenewalDate    DateTime?
-  billingNotes       String?
-  trialEndsAt        DateTime?
-  expiresAt          DateTime?
-  cancelAt           DateTime?
-  cancelledAt        DateTime?
-  metadata           Json?
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
+  id                   String             @id @default(uuid()) @db.Uuid
+  centerId             String             @db.Uuid
+  planCode             String             @db.VarChar(80)
+  planName             String             @db.VarChar(120)
+  status               SubscriptionStatus @default(TRIALING)
+  billingInterval      BillingInterval    @default(MONTHLY)
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  nextRenewalDate      DateTime?
+  billingNotes         String?
+  notificationPhone    String?            @db.VarChar(32)
+  notificationLanguage SupportedLanguage?
+  trialEndsAt          DateTime?
+  expiresAt            DateTime?
+  gracePeriodEndsAt    DateTime?
+  cancelAt             DateTime?
+  cancelledAt          DateTime?
+  metadata             Json?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
 
-  center Center @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  center   Center                @relation(fields: [centerId], references: [id], onDelete: Restrict)
+  invoices SubscriptionInvoice[]
 
   @@index([centerId, status])
   @@index([centerId, currentPeriodEnd])
   @@index([status, currentPeriodEnd])
   @@index([expiresAt])
+  @@index([gracePeriodEndsAt])
+}
+
+model SubscriptionInvoice {
+  id             String                    @id @default(uuid()) @db.Uuid
+  invoiceNumber  String                    @unique @db.VarChar(80)
+  centerId       String                    @db.Uuid
+  subscriptionId String                    @db.Uuid
+  amount         Decimal                   @db.Decimal(12, 2)
+  discount       Decimal                   @default(0) @db.Decimal(12, 2)
+  tax            Decimal                   @default(0) @db.Decimal(12, 2)
+  total          Decimal                   @db.Decimal(12, 2)
+  currency       String                    @default("ILS") @db.VarChar(10)
+  status         SubscriptionInvoiceStatus @default(DRAFT)
+  paymentMethod  String?                   @db.VarChar(80)
+  notes          String?
+  issuedAt       DateTime
+  dueDate        DateTime
+  paidAt         DateTime?
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+
+  center       Center       @relation(fields: [centerId], references: [id], onDelete: Restrict)
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+
+  @@index([centerId])
+  @@index([subscriptionId])
+  @@index([status, dueDate])
+  @@index([centerId, status])
+  @@index([issuedAt])
+}
+
+model SubscriptionInvoiceNumberCounter {
+  year       Int      @id
+  nextNumber Int      @default(1)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 model Domain {
@@ -391,6 +569,7 @@ model Domain {
   activatedAt       DateTime?
   failedAt          DateTime?
   disabledAt        DateTime?
+  sslStatus         SslStatus    @default(PENDING)
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 
@@ -431,6 +610,9 @@ model Patient {
   id            String        @id @default(uuid()) @db.Uuid
   centerId      String        @db.Uuid
   fullName      String        @db.VarChar(160)
+  fullNameAr    String?       @db.VarChar(160)
+  fullNameHe    String?       @db.VarChar(160)
+  fullNameEn    String?       @db.VarChar(160)
   phone         String        @db.VarChar(32)
   email         String?       @db.VarChar(320)
   gender        PatientGender @default(UNKNOWN)
@@ -442,40 +624,54 @@ model Patient {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  center             Center               @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  center             Center               @relation(fields: [centerId], references: [id], onDelete: Restrict)
   appointments       Appointment[]
   invoices           Invoice[]
   payments           Payment[]
   creditTransactions CreditTransaction[]
+  portalTokens       PatientPortalToken[]
+  followUps          PatientFollowUp[]
 
-  @@unique([centerId, phone])
   @@index([centerId])
   @@index([centerId, status])
+  @@index([centerId, phone])
   @@index([centerId, fullName])
   @@index([centerId, createdAt])
 }
 
 model Service {
-  id              String    @id @default(uuid()) @db.Uuid
-  centerId        String    @db.Uuid
-  nameEn          String    @default("") @db.VarChar(160)
-  nameAr          String    @default("") @db.VarChar(160)
-  nameHe          String    @default("") @db.VarChar(160)
-  descriptionEn   String?
-  descriptionAr   String?
-  descriptionHe   String?
-  durationMinutes Int?
-  price           Decimal?  @db.Decimal(10, 2)
-  currency        String    @default("ILS") @db.VarChar(3)
-  isActive        Boolean   @default(true)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  archivedAt      DateTime?
+  id                       String              @id @default(uuid()) @db.Uuid
+  centerId                 String              @db.Uuid
+  nameEn                   String              @default("") @db.VarChar(160)
+  nameAr                   String              @default("") @db.VarChar(160)
+  nameHe                   String              @default("") @db.VarChar(160)
+  descriptionEn            String?
+  descriptionAr            String?
+  descriptionHe            String?
+  durationMinutes          Int?
+  bufferMinutes            Int                 @default(0)
+  followUpEnabled          Boolean             @default(false)
+  followUpType             ServiceFollowUpType @default(FIXED_INTERVAL)
+  defaultIntervalDays      Int?
+  totalRecommendedSessions Int?
+  autoCreateNextReminder   Boolean             @default(true)
+  reminderMessageAr        String?
+  reminderMessageEn        String?
+  reminderMessageHe        String?
+  followUpRules            Json?
+  price                    Decimal?            @db.Decimal(10, 2)
+  currency                 String              @default("ILS") @db.VarChar(3)
+  isActive                 Boolean             @default(true)
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
+  archivedAt               DateTime?
 
-  center       Center        @relation(fields: [centerId], references: [id], onDelete: Cascade)
-  appointments Appointment[]
-  sessions     Session[]
-  invoices     Invoice[]
+  center          Center            @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  appointments    Appointment[]
+  sessions        Session[]
+  invoices        Invoice[]
+  bookingRequests BookingRequest[]
+  followUps       PatientFollowUp[]
 
   @@index([centerId])
   @@index([centerId, isActive])
@@ -485,33 +681,49 @@ model Service {
 }
 
 model Appointment {
-  id                 String            @id @default(uuid()) @db.Uuid
-  centerId           String            @db.Uuid
-  patientId          String            @db.Uuid
-  serviceId          String            @db.Uuid
-  staffUserId        String            @db.Uuid
-  createdByUserId    String            @db.Uuid
-  appointmentDate    DateTime          @db.Date
-  startTime          String            @db.VarChar(5)
-  endTime            String            @db.VarChar(5)
-  durationMinutes    Int
-  status             AppointmentStatus @default(SCHEDULED)
-  notes              String?
-  internalNotes      String?
-  isCancelled        Boolean           @default(false)
-  cancellationReason String?
-  reminderSent       Boolean           @default(false)
-  cancelledAt        DateTime?
-  completedAt        DateTime?
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
+  id                    String            @id @default(uuid()) @db.Uuid
+  centerId              String            @db.Uuid
+  patientId             String            @db.Uuid
+  serviceId             String?           @db.Uuid
+  staffUserId           String            @db.Uuid
+  createdByUserId       String            @db.Uuid
+  appointmentDate       DateTime          @db.Date
+  startTime             String            @db.VarChar(5)
+  endTime               String            @db.VarChar(5)
+  durationMinutes       Int
+  customServiceName     String?           @db.VarChar(160)
+  customServiceDuration Int?
+  customServicePrice    Decimal?          @db.Decimal(10, 2)
+  customServiceCurrency String?           @db.VarChar(10)
+  customServiceSaved    Boolean           @default(false)
+  status                AppointmentStatus @default(SCHEDULED)
+  notes                 String?
+  internalNotes         String?
+  offerTitle            String?           @db.VarChar(200)
+  offerPrice            Decimal?          @db.Decimal(12, 2)
+  offerCurrency         String?           @db.VarChar(10)
+  isCancelled           Boolean           @default(false)
+  cancellationReason    String?
+  reminderSent          Boolean           @default(false)
+  lastReminderSentAt    DateTime?
+  reminderCount         Int               @default(0)
+  reminder24hSent       Boolean           @default(false)
+  reminder2hSent        Boolean           @default(false)
+  cancelledAt           DateTime?
+  completedAt           DateTime?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
 
-  center        Center    @relation(fields: [centerId], references: [id], onDelete: Cascade)
-  patient       Patient   @relation(fields: [patientId], references: [id], onDelete: Restrict)
-  service       Service   @relation(fields: [serviceId], references: [id], onDelete: Restrict)
-  staffUser     User      @relation("AppointmentStaffUser", fields: [staffUserId], references: [id], onDelete: Restrict)
-  createdByUser User      @relation("AppointmentCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  sessions      Session[]
+  center           Center            @relation(fields: [centerId], references: [id], onDelete: Restrict)
+  patient          Patient           @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  service          Service?          @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  staffUser        User              @relation("AppointmentStaffUser", fields: [staffUserId], references: [id], onDelete: Restrict)
+  createdByUser    User              @relation("AppointmentCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  sessions         Session[]
+  invoices         Invoice[]
+  bookingRequest   BookingRequest?
+  followUpsCreated PatientFollowUp[] @relation("FollowUpSourceAppointment")
+  followUpsNext    PatientFollowUp[] @relation("FollowUpNextAppointment")
 
   @@index([centerId, status])
   @@index([centerId, appointmentDate])
@@ -519,6 +731,36 @@ model Appointment {
   @@index([centerId, patientId, appointmentDate])
   @@index([serviceId])
   @@index([createdByUserId])
+}
+
+model PatientFollowUp {
+  id                String                    @id @default(uuid()) @db.Uuid
+  centerId          String                    @db.Uuid
+  patientId         String                    @db.Uuid
+  serviceId         String?                   @db.Uuid
+  appointmentId     String?                   @db.Uuid
+  sourceType        PatientFollowUpSourceType
+  title             String                    @db.VarChar(180)
+  notes             String?
+  sessionNumber     Int?
+  dueDate           DateTime                  @db.Date
+  status            PatientFollowUpStatus     @default(UPCOMING)
+  lastContactedAt   DateTime?
+  nextAppointmentId String?                   @db.Uuid
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  center          Center       @relation(fields: [centerId], references: [id], onDelete: Restrict)
+  patient         Patient      @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  service         Service?     @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  appointment     Appointment? @relation("FollowUpSourceAppointment", fields: [appointmentId], references: [id], onDelete: SetNull)
+  nextAppointment Appointment? @relation("FollowUpNextAppointment", fields: [nextAppointmentId], references: [id], onDelete: SetNull)
+
+  @@unique([centerId, appointmentId, sessionNumber])
+  @@index([centerId, status, dueDate])
+  @@index([centerId, dueDate])
+  @@index([centerId, patientId, dueDate])
+  @@index([centerId, serviceId])
 }
 
 model Session {
@@ -547,34 +789,58 @@ model Session {
 }
 
 model Notification {
-  id              String              @id @default(uuid()) @db.Uuid
-  centerId        String              @db.Uuid
-  customerId      String?             @db.Uuid
-  recipientUserId String?             @db.Uuid
+  id              String                     @id @default(uuid()) @db.Uuid
+  centerId        String                     @db.Uuid
+  customerId      String?                    @db.Uuid
+  recipientUserId String?                    @db.Uuid
+  type            NotificationType?
+  targetAudience  NotificationTargetAudience @default(CENTER_ADMIN)
   channel         NotificationChannel
-  status          NotificationStatus  @default(PENDING)
-  eventKey        String              @db.VarChar(120)
-  language        SupportedLanguage   @default(EN)
+  status          NotificationStatus         @default(PENDING)
+  eventKey        String                     @db.VarChar(120)
+  language        SupportedLanguage          @default(EN)
   title           Json?
   body            Json?
-  recipientEmail  String?             @db.VarChar(320)
-  recipientPhone  String?             @db.VarChar(32)
+  recipientEmail  String?                    @db.VarChar(320)
+  recipientPhone  String?                    @db.VarChar(32)
+  scheduledAt     DateTime?
   sentAt          DateTime?
   failedAt        DateTime?
   failureReason   String?
+  readAt          DateTime?
+  readByUserId    String?                    @db.Uuid
   metadata        Json?
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
 
-  center        Center    @relation(fields: [centerId], references: [id], onDelete: Cascade)
-  customer      Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  recipientUser User?     @relation(fields: [recipientUserId], references: [id], onDelete: SetNull)
+  center        Center            @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  customer      Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  recipientUser User?             @relation(fields: [recipientUserId], references: [id], onDelete: SetNull)
+  logs          NotificationLog[]
 
   @@index([centerId, status])
   @@index([centerId, eventKey])
+  @@index([centerId, type])
+  @@index([centerId, readAt])
+  @@index([targetAudience, readAt])
   @@index([customerId])
   @@index([recipientUserId])
   @@index([createdAt])
+}
+
+model NotificationLog {
+  id             String              @id @default(uuid()) @db.Uuid
+  notificationId String              @db.Uuid
+  channel        NotificationChannel
+  success        Boolean
+  errorMessage   String?
+  metadata       Json?
+  sentAt         DateTime            @default(now())
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@index([notificationId])
+  @@index([sentAt])
 }
 
 model DynamicPage {
@@ -599,49 +865,328 @@ model DynamicPage {
 }
 
 model BrandingSettings {
-  id               String            @id @default(uuid()) @db.Uuid
-  centerId         String            @unique @db.Uuid
-  logoUrl          String?           @db.VarChar(500)
-  primaryColor     String?           @db.VarChar(20)
-  secondaryColor   String?           @db.VarChar(20)
-  accentColor      String?           @db.VarChar(20)
-  defaultLanguage  SupportedLanguage @default(EN)
-  enabledLanguages Json
-  theme            Json?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  id                       String            @id @default(uuid()) @db.Uuid
+  centerId                 String            @unique @db.Uuid
+  logoUrl                  String?           @db.VarChar(500)
+  primaryColor             String?           @db.VarChar(20)
+  secondaryColor           String?           @db.VarChar(20)
+  accentColor              String?           @db.VarChar(20)
+  defaultLanguage          SupportedLanguage @default(EN)
+  enabledLanguages         Json
+  theme                    Json?
+  coverImageUrl            String?           @db.VarChar(500)
+  cardImageUrl             String?           @db.VarChar(500)
+  publicDescriptionAr      String?           @db.VarChar(800)
+  publicDescriptionEn      String?           @db.VarChar(800)
+  publicDescriptionHe      String?           @db.VarChar(800)
+  fullDescriptionAr        String?
+  fullDescriptionEn        String?
+  fullDescriptionHe        String?
+  sloganAr                 String?           @db.VarChar(220)
+  sloganEn                 String?           @db.VarChar(220)
+  sloganHe                 String?           @db.VarChar(220)
+  cityAr                   String?           @db.VarChar(120)
+  cityEn                   String?           @db.VarChar(120)
+  cityHe                   String?           @db.VarChar(120)
+  addressAr                String?           @db.VarChar(300)
+  addressEn                String?           @db.VarChar(300)
+  addressHe                String?           @db.VarChar(300)
+  whatsappPhone            String?           @db.VarChar(30)
+  phone                    String?           @db.VarChar(30)
+  email                    String?           @db.VarChar(320)
+  googleMapsUrl            String?           @db.VarChar(800)
+  workingHoursAr           String?           @db.VarChar(800)
+  workingHoursEn           String?           @db.VarChar(800)
+  workingHoursHe           String?           @db.VarChar(800)
+  facebookUrl              String?           @db.VarChar(500)
+  instagramUrl             String?           @db.VarChar(500)
+  tiktokUrl                String?           @db.VarChar(500)
+  latitude                 Decimal?          @db.Decimal(10, 7)
+  longitude                Decimal?          @db.Decimal(10, 7)
+  websiteSectionOrder      Json?
+  websiteSectionVisibility Json?
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
 
   center Center @relation(fields: [centerId], references: [id], onDelete: Cascade)
 
   @@index([defaultLanguage])
 }
 
-model Invoice {
-  id          String        @id @default(uuid()) @db.Uuid
-  centerId    String        @db.Uuid
-  patientId   String        @db.Uuid
-  serviceId   String        @db.Uuid
-  staffUserId String?       @db.Uuid
-  amount      Decimal       @db.Decimal(12, 2)
-  currency    String        @default("ILS") @db.VarChar(10)
-  status      InvoiceStatus @default(PENDING)
-  notes       String?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+model CenterGalleryImage {
+  id        String   @id @default(uuid()) @db.Uuid
+  centerId  String   @db.Uuid
+  imageUrl  String   @db.VarChar(500)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
 
-  center             Center               @relation(fields: [centerId], references: [id], onDelete: Cascade)
-  patient            Patient              @relation(fields: [patientId], references: [id], onDelete: Restrict)
-  service            Service              @relation(fields: [serviceId], references: [id], onDelete: Restrict)
-  staff              User?                @relation("InvoiceStaff", fields: [staffUserId], references: [id], onDelete: SetNull)
+  center Center @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  @@index([centerId, sortOrder])
+}
+
+model CenterReview {
+  id           String   @id @default(uuid()) @db.Uuid
+  centerId     String   @db.Uuid
+  customerName String   @db.VarChar(160)
+  rating       Int
+  commentAr    String?
+  commentEn    String?
+  commentHe    String?
+  isPublished  Boolean  @default(false)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  center Center @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  @@index([centerId, isPublished, sortOrder])
+  @@index([centerId, sortOrder])
+}
+
+enum CenterBeforeAfterCategory {
+  LASER
+  SKIN
+  DENTAL
+  HAIR
+  OTHER
+}
+
+model CenterBeforeAfter {
+  id             String                    @id @default(uuid()) @db.Uuid
+  centerId       String                    @db.Uuid
+  titleAr        String?                   @db.VarChar(180)
+  titleEn        String?                   @db.VarChar(180)
+  titleHe        String?                   @db.VarChar(180)
+  descriptionAr  String?
+  descriptionEn  String?
+  descriptionHe  String?
+  category       CenterBeforeAfterCategory @default(OTHER)
+  beforeImageUrl String                    @db.VarChar(500)
+  afterImageUrl  String                    @db.VarChar(500)
+  isPublished    Boolean                   @default(false)
+  sortOrder      Int                       @default(0)
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+
+  center Center @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  @@index([centerId, isPublished, sortOrder])
+  @@index([centerId, category])
+  @@index([centerId, sortOrder])
+}
+
+model CenterTeamMember {
+  id              String   @id @default(uuid()) @db.Uuid
+  centerId        String   @db.Uuid
+  photoUrl        String?  @db.VarChar(500)
+  nameAr          String?  @db.VarChar(160)
+  nameEn          String?  @db.VarChar(160)
+  nameHe          String?  @db.VarChar(160)
+  titleAr         String?  @db.VarChar(200)
+  titleEn         String?  @db.VarChar(200)
+  titleHe         String?  @db.VarChar(200)
+  specialtyAr     String?  @db.VarChar(200)
+  specialtyEn     String?  @db.VarChar(200)
+  specialtyHe     String?  @db.VarChar(200)
+  bioAr           String?
+  bioEn           String?
+  bioHe           String?
+  yearsExperience Int?
+  isPublished     Boolean  @default(false)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  center Center @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  @@index([centerId, isPublished, sortOrder])
+  @@index([centerId, sortOrder])
+}
+
+model CenterOffer {
+  id            String    @id @default(uuid()) @db.Uuid
+  centerId      String    @db.Uuid
+  imageUrl      String?   @db.VarChar(500)
+  titleAr       String?   @db.VarChar(200)
+  titleEn       String?   @db.VarChar(200)
+  titleHe       String?   @db.VarChar(200)
+  descriptionAr String?
+  descriptionEn String?
+  descriptionHe String?
+  badgeAr       String?   @db.VarChar(80)
+  badgeEn       String?   @db.VarChar(80)
+  badgeHe       String?   @db.VarChar(80)
+  oldPrice      Decimal?  @db.Decimal(12, 2)
+  newPrice      Decimal?  @db.Decimal(12, 2)
+  currency      String    @default("ILS") @db.VarChar(10)
+  startsAt      DateTime?
+  endsAt        DateTime?
+  isPublished   Boolean   @default(false)
+  sortOrder     Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  center          Center           @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  bookingRequests BookingRequest[]
+
+  @@index([centerId, isPublished, sortOrder])
+  @@index([centerId, sortOrder])
+  @@index([centerId, endsAt])
+}
+
+model TenantMarketingSettings {
+  id                     String   @id @default(uuid()) @db.Uuid
+  centerId               String   @unique @db.Uuid
+  metaPixelId            String?  @db.VarChar(120)
+  metaConversionApiToken String?
+  tiktokPixelId          String?  @db.VarChar(120)
+  snapPixelId            String?  @db.VarChar(120)
+  ga4Id                  String?  @db.VarChar(120)
+  gtmId                  String?  @db.VarChar(120)
+  customHeadScript       String?
+  customBodyScript       String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  center Center @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  @@index([centerId])
+}
+
+model MarketingTrackingLog {
+  id               String                    @id @default(uuid()) @db.Uuid
+  centerId         String                    @db.Uuid
+  provider         MarketingTrackingProvider
+  eventName        String                    @db.VarChar(120)
+  status           MarketingTrackingStatus
+  message          String?                   @db.VarChar(500)
+  eventId          String?                   @db.VarChar(160)
+  bookingRequestId String?                   @db.Uuid
+  createdAt        DateTime                  @default(now())
+
+  center Center @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  @@index([centerId, createdAt])
+  @@index([centerId, provider, createdAt])
+  @@index([bookingRequestId])
+}
+
+// Platform-level (not tenant-owned) tracking configuration and logs.
+// PlatformTrackingConfig is a singleton — at most one row exists.
+model PlatformTrackingConfig {
+  id                     String   @id @default(uuid()) @db.Uuid
+  metaPixelId            String?  @db.VarChar(120)
+  metaConversionApiToken String?
+  tiktokPixelId          String?  @db.VarChar(120)
+  snapPixelId            String?  @db.VarChar(120)
+  ga4Id                  String?  @db.VarChar(120)
+  gtmId                  String?  @db.VarChar(120)
+  testMode               Boolean  @default(false)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model PlatformTrackingLog {
+  id        String                    @id @default(uuid()) @db.Uuid
+  provider  MarketingTrackingProvider
+  eventName String                    @db.VarChar(120)
+  status    MarketingTrackingStatus
+  message   String?                   @db.VarChar(500)
+  eventId   String?                   @db.VarChar(160)
+  createdAt DateTime                  @default(now())
+
+  @@index([provider, createdAt])
+  @@index([createdAt])
+}
+
+// Center-scoped website analytics events. Isolated from platform tracking.
+model CenterWebsiteEvent {
+  id         String                 @id @default(uuid()) @db.Uuid
+  centerId   String                 @db.Uuid
+  eventType  CenterWebsiteEventType
+  source     CenterTrafficSource    @default(UNKNOWN)
+  sessionId  String?                @db.VarChar(100)
+  page       String?                @db.VarChar(200)
+  extraData  Json?
+  occurredAt DateTime               @default(now())
+
+  center Center @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  @@index([centerId, eventType, occurredAt])
+  @@index([centerId, occurredAt])
+  @@index([centerId, source, occurredAt])
+  @@index([centerId, sessionId])
+  @@index([occurredAt])
+}
+
+enum CenterLeadStatus {
+  NEW
+  CONTACTED
+  NO_ANSWER
+  WRONG_NUMBER
+  NOT_INTERESTED
+  CANCELLED
+  DEMO_BOOKED
+  CONVERTED
+}
+
+// Platform-level lead capture — not tenant-owned.
+model CenterLead {
+  id           String           @id @default(uuid()) @db.Uuid
+  centerName   String           @db.VarChar(200)
+  ownerName    String           @db.VarChar(160)
+  phone        String           @db.VarChar(32)
+  whatsapp     String?          @db.VarChar(32)
+  city         String?          @db.VarChar(120)
+  businessType String?          @db.VarChar(120)
+  notes        String?          @db.VarChar(1000)
+  status       CenterLeadStatus @default(NEW)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([status, createdAt])
+  @@index([createdAt])
+}
+
+model Invoice {
+  id                String        @id @default(uuid()) @db.Uuid
+  invoiceNumber     String?       @unique @db.VarChar(80)
+  centerId          String        @db.Uuid
+  patientId         String        @db.Uuid
+  serviceId         String?       @db.Uuid
+  customServiceName String?       @db.VarChar(160)
+  staffUserId       String?       @db.Uuid
+  appointmentId     String?       @db.Uuid
+  amount            Decimal       @db.Decimal(12, 2)
+  currency          String        @default("ILS") @db.VarChar(10)
+  status            InvoiceStatus @default(PENDING)
+  notes             String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  center             Center              @relation(fields: [centerId], references: [id], onDelete: Restrict)
+  patient            Patient             @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  service            Service?            @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  staff              User?               @relation("InvoiceStaff", fields: [staffUserId], references: [id], onDelete: SetNull)
+  appointment        Appointment?        @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
   payments           Payment[]
   creditTransactions CreditTransaction[]
 
+  @@unique([appointmentId])
   @@index([centerId])
   @@index([centerId, status])
   @@index([centerId, patientId])
   @@index([centerId, createdAt])
   @@index([serviceId])
   @@index([staffUserId])
+}
+
+model TenantInvoiceNumberCounter {
+  year       Int      @id
+  nextNumber Int      @default(1)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 model Payment {
@@ -658,8 +1203,8 @@ model Payment {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
-  center    Center  @relation(fields: [centerId], references: [id], onDelete: Cascade)
-  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  center    Center  @relation(fields: [centerId], references: [id], onDelete: Restrict)
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
   patient   Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
   createdBy User    @relation("PaymentCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
 
@@ -682,7 +1227,7 @@ model CreditTransaction {
   notes            String?
   createdAt        DateTime                @default(now())
 
-  center         Center   @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  center         Center   @relation(fields: [centerId], references: [id], onDelete: Restrict)
   patient        Patient  @relation(fields: [patientId], references: [id], onDelete: Restrict)
   createdBy      User     @relation("CreditTransactionCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
   relatedInvoice Invoice? @relation(fields: [relatedInvoiceId], references: [id], onDelete: SetNull)
@@ -692,4 +1237,209 @@ model CreditTransaction {
   @@index([patientId, createdAt])
   @@index([relatedInvoiceId])
   @@index([centerId, type])
+}
+
+model AuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  action       String   @db.VarChar(100)
+  actorUserId  String?  @db.Uuid
+  targetUserId String?  @db.Uuid
+  centerId     String?  @db.Uuid
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  actor  User?   @relation("AuditLogActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  target User?   @relation("AuditLogTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+  center Center? @relation(fields: [centerId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId])
+  @@index([targetUserId])
+  @@index([centerId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model SubscriptionLifecycleJobRun {
+  id                            String    @id @default(uuid()) @db.Uuid
+  startedAt                     DateTime  @default(now())
+  finishedAt                    DateTime?
+  triggeredBy                   String    @db.VarChar(80)
+  scanned                       Int       @default(0)
+  updatedExpired                Int       @default(0)
+  notificationsCreated          Int       @default(0)
+  auditLogsCreated              Int       @default(0)
+  skippedSuspended              Int       @default(0)
+  duplicateNotificationsSkipped Int       @default(0)
+  success                       Boolean   @default(false)
+  errorMessage                  String?
+
+  @@index([startedAt])
+  @@index([success])
+}
+
+model SystemSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+}
+
+model BookingRequest {
+  id            String               @id @default(uuid()) @db.Uuid
+  centerId      String               @db.Uuid
+  serviceId     String?              @db.Uuid
+  offerId       String?              @db.Uuid
+  providerId    String?              @db.Uuid
+  appointmentId String?              @unique @db.Uuid
+  fullName      String               @db.VarChar(160)
+  phone         String               @db.VarChar(32)
+  notes         String?
+  requestedDate DateTime             @db.Date
+  requestedTime String?              @db.VarChar(5)
+  offerTitle    String?              @db.VarChar(200)
+  offerPrice    Decimal?             @db.Decimal(12, 2)
+  offerCurrency String?              @db.VarChar(10)
+  status        BookingRequestStatus @default(PENDING)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  center      Center       @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  service     Service?     @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  offer       CenterOffer? @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  provider    User?        @relation("BookingRequestProvider", fields: [providerId], references: [id], onDelete: SetNull)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@index([centerId, status])
+  @@index([centerId, createdAt])
+  @@index([centerId, offerId])
+  @@index([providerId])
+  @@index([serviceId])
+  @@index([status, createdAt])
+}
+
+model PatientPortalToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  centerId  String    @db.Uuid
+  patientId String    @db.Uuid
+  token     String    @unique @db.VarChar(64)
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+
+  center  Center  @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([centerId, patientId])
+  @@index([expiresAt])
+}
+
+model CenterWorkingHours {
+  id        String    @id @default(uuid()) @db.Uuid
+  centerId  String    @db.Uuid
+  dayOfWeek DayOfWeek
+  isOpen    Boolean   @default(true)
+  openTime  String    @db.VarChar(5)
+  closeTime String    @db.VarChar(5)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  center Center @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  @@unique([centerId, dayOfWeek])
+  @@index([centerId])
+}
+
+model CenterClosedDay {
+  id        String   @id @default(uuid()) @db.Uuid
+  centerId  String   @db.Uuid
+  date      DateTime @db.Date
+  reason    String?
+  createdAt DateTime @default(now())
+
+  center Center @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  @@unique([centerId, date])
+  @@index([centerId, date])
+}
+
+model ProviderWorkingHours {
+  id          String    @id @default(uuid()) @db.Uuid
+  centerId    String    @db.Uuid
+  staffUserId String    @db.Uuid
+  dayOfWeek   DayOfWeek
+  isWorking   Boolean   @default(true)
+  startTime   String    @db.VarChar(5)
+  endTime     String    @db.VarChar(5)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  center    Center @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  staffUser User   @relation("ProviderWorkingHours", fields: [staffUserId], references: [id], onDelete: Cascade)
+
+  @@unique([centerId, staffUserId, dayOfWeek])
+  @@index([centerId, staffUserId])
+  @@index([centerId])
+}
+
+model ProviderLeaveDay {
+  id          String   @id @default(uuid()) @db.Uuid
+  centerId    String   @db.Uuid
+  staffUserId String   @db.Uuid
+  date        DateTime @db.Date
+  reason      String?
+  createdAt   DateTime @default(now())
+
+  center    Center @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  staffUser User   @relation("ProviderLeaveDay", fields: [staffUserId], references: [id], onDelete: Cascade)
+
+  @@unique([centerId, staffUserId, date])
+  @@index([centerId, staffUserId, date])
+  @@index([centerId])
+}
+
+model CenterSeoSettings {
+  id               String   @id @default(uuid()) @db.Uuid
+  centerId         String   @unique @db.Uuid
+  seoTitleAr       String?  @db.VarChar(160)
+  seoTitleEn       String?  @db.VarChar(160)
+  seoTitleHe       String?  @db.VarChar(160)
+  seoDescriptionAr String?  @db.VarChar(320)
+  seoDescriptionEn String?  @db.VarChar(320)
+  seoDescriptionHe String?  @db.VarChar(320)
+  keywordsAr       String?  @db.VarChar(500)
+  keywordsEn       String?  @db.VarChar(500)
+  keywordsHe       String?  @db.VarChar(500)
+  ogTitleAr        String?  @db.VarChar(160)
+  ogTitleEn        String?  @db.VarChar(160)
+  ogTitleHe        String?  @db.VarChar(160)
+  ogDescriptionAr  String?  @db.VarChar(320)
+  ogDescriptionEn  String?  @db.VarChar(320)
+  ogDescriptionHe  String?  @db.VarChar(320)
+  ogImageUrl       String?  @db.VarChar(500)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  center Center @relation(fields: [centerId], references: [id], onDelete: Cascade)
+}
+
+model PublicFeaturedService {
+  id            String   @id @default(uuid()) @db.Uuid
+  titleAr       String   @db.VarChar(200)
+  titleEn       String   @db.VarChar(200)
+  titleHe       String   @default("") @db.VarChar(200)
+  descriptionAr String   @default("") @db.VarChar(500)
+  descriptionEn String   @default("") @db.VarChar(500)
+  descriptionHe String   @default("") @db.VarChar(500)
+  imageUrl      String?  @db.VarChar(500)
+  slug          String   @unique @db.VarChar(160)
+  sortOrder     Int      @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+  @@index([slug])
 }

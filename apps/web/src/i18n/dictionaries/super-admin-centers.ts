@@ -18,6 +18,7 @@ type CentersDictionary = {
     plans: string;
     users: string;
     notifications: string;
+    auditLogs: string;
     settings: string;
   };
   header: {
@@ -40,6 +41,7 @@ type CentersDictionary = {
     trial: string;
     expired: string;
     suspended: string;
+    needsSubscriptionReview: string;
   };
   search: {
     label: string;
@@ -47,10 +49,15 @@ type CentersDictionary = {
   };
   states: {
     actionPrepared: string;
+    clearFilter: string;
     emptyDescription: string;
     emptyTitle: string;
     errorDescription: string;
     errorTitle: string;
+    filterNoAppointments: string;
+    filterNeedsSubscriptionReview: string;
+    filterNeedsSubscriptionReviewEmpty: string;
+    highlightCenter: string;
     loading: string;
     noResultsDescription: string;
     noResultsTitle: string;
@@ -69,7 +76,24 @@ type CentersDictionary = {
     subscriptionExpiryDate: string;
     domain: string;
     status: string;
+    reviewReason: string;
     actions: string;
+  };
+  reviewReasons: {
+    noSubscription: string;
+    subscriptionExpired: string;
+    subscriptionExpiredDaysAgo: string;
+    subscriptionGracePeriod: string;
+    subscriptionSuspended: string;
+    subscriptionCancelled: string;
+  };
+  banner: {
+    centersNeedReview: string;
+    expiredSubscriptions: string;
+    gracePeriod: string;
+    noSubscription: string;
+    suspendedSubscription: string;
+    cancelledSubscription: string;
   };
   statuses: {
     active: string;
@@ -136,6 +160,7 @@ export const superAdminCentersDictionaries: Record<
       plans: "Plans",
       users: "Users",
       notifications: "Notifications",
+      auditLogs: "Audit Logs",
       settings: "Settings",
     },
     header: {
@@ -158,6 +183,7 @@ export const superAdminCentersDictionaries: Record<
       trial: "Trial",
       expired: "Expired",
       suspended: "Suspended",
+      needsSubscriptionReview: "Needs Review",
     },
     search: {
       label: "Search",
@@ -166,11 +192,17 @@ export const superAdminCentersDictionaries: Record<
     states: {
       actionPrepared:
         "This action is ready for confirmation once live actions are enabled.",
+      clearFilter: "Clear filter",
       emptyDescription: "Create your first center to see it here.",
       emptyTitle: "No centers found",
       errorDescription:
         "Centers could not be loaded right now. Try again in a moment.",
       errorTitle: "Centers could not be loaded",
+      filterNoAppointments: "Centers with no recent appointments",
+      filterNeedsSubscriptionReview: "Needs Review",
+      filterNeedsSubscriptionReviewEmpty:
+        "No centers require subscription attention right now.",
+      highlightCenter: "Viewing specific center",
       loading: "Loading centers...",
       noResultsDescription: "Try changing the search text or status filter.",
       noResultsTitle: "No matching centers",
@@ -189,7 +221,24 @@ export const superAdminCentersDictionaries: Record<
       subscriptionExpiryDate: "Subscription Expiry Date",
       domain: "Domain",
       status: "Status",
+      reviewReason: "Review Reason",
       actions: "Actions",
+    },
+    reviewReasons: {
+      noSubscription: "No subscription",
+      subscriptionExpired: "Subscription expired",
+      subscriptionExpiredDaysAgo: "day|days",
+      subscriptionGracePeriod: "Grace period",
+      subscriptionSuspended: "Subscription suspended",
+      subscriptionCancelled: "Subscription cancelled",
+    },
+    banner: {
+      centersNeedReview: "centers need review",
+      expiredSubscriptions: "expired subscriptions",
+      gracePeriod: "in grace period",
+      noSubscription: "centers with no subscription",
+      suspendedSubscription: "subscription suspended",
+      cancelledSubscription: "subscription cancelled",
     },
     statuses: {
       active: "Active",
@@ -251,6 +300,7 @@ export const superAdminCentersDictionaries: Record<
       plans: "الباقات",
       users: "المستخدمون",
       notifications: "الإشعارات",
+      auditLogs: "سجل التدقيق",
       settings: "الإعدادات",
     },
     header: {
@@ -273,6 +323,7 @@ export const superAdminCentersDictionaries: Record<
       trial: "تجربة",
       expired: "منتهي",
       suspended: "موقوف",
+      needsSubscriptionReview: "تحتاج متابعة",
     },
     search: {
       label: "بحث",
@@ -280,10 +331,15 @@ export const superAdminCentersDictionaries: Record<
     },
     states: {
       actionPrepared: "هذا الإجراء جاهز للتأكيد عند تفعيل الإجراءات المباشرة.",
+      clearFilter: "إزالة الفلتر",
       emptyDescription: "أنشئ المركز الأول ليظهر هنا.",
       emptyTitle: "لا توجد مراكز",
       errorDescription: "تعذر تحميل المراكز الآن. حاول مرة أخرى بعد قليل.",
       errorTitle: "تعذر تحميل المراكز",
+      filterNoAppointments: "مراكز بدون مواعيد حديثة",
+      filterNeedsSubscriptionReview: "تحتاج متابعة",
+      filterNeedsSubscriptionReviewEmpty: "لا توجد مراكز تحتاج متابعة حالياً.",
+      highlightCenter: "عرض مركز محدد",
       loading: "جار تحميل المراكز...",
       noResultsDescription: "جرّب تغيير نص البحث أو فلتر الحالة.",
       noResultsTitle: "لا توجد مراكز مطابقة",
@@ -302,7 +358,24 @@ export const superAdminCentersDictionaries: Record<
       subscriptionExpiryDate: "تاريخ انتهاء الاشتراك",
       domain: "النطاق",
       status: "الحالة",
+      reviewReason: "سبب المتابعة",
       actions: "الإجراءات",
+    },
+    reviewReasons: {
+      noSubscription: "لا يوجد اشتراك",
+      subscriptionExpired: "الاشتراك منتهي",
+      subscriptionExpiredDaysAgo: "يوم|أيام",
+      subscriptionGracePeriod: "فترة السماح",
+      subscriptionSuspended: "الاشتراك موقوف",
+      subscriptionCancelled: "الاشتراك ملغي",
+    },
+    banner: {
+      centersNeedReview: "مراكز تحتاج متابعة",
+      expiredSubscriptions: "اشتراكات منتهية",
+      gracePeriod: "في فترة السماح",
+      noSubscription: "مراكز بدون اشتراك",
+      suspendedSubscription: "اشتراك موقوف",
+      cancelledSubscription: "اشتراك ملغي",
     },
     statuses: {
       active: "نشط",
@@ -364,6 +437,7 @@ export const superAdminCentersDictionaries: Record<
       plans: "תוכניות",
       users: "משתמשים",
       notifications: "התראות",
+      auditLogs: "יומן ביקורת",
       settings: "הגדרות",
     },
     header: {
@@ -386,6 +460,7 @@ export const superAdminCentersDictionaries: Record<
       trial: "ניסיון",
       expired: "פג תוקף",
       suspended: "מושהה",
+      needsSubscriptionReview: "דורשים מעקב",
     },
     search: {
       label: "חיפוש",
@@ -393,10 +468,15 @@ export const superAdminCentersDictionaries: Record<
     },
     states: {
       actionPrepared: "הפעולה הזו מוכנה לאישור לאחר הפעלת הפעולות החיות.",
+      clearFilter: "הסר סינון",
       emptyDescription: "צרו את המרכז הראשון כדי לראות אותו כאן.",
       emptyTitle: "לא נמצאו מרכזים",
       errorDescription: "לא ניתן לטעון מרכזים כרגע. נסו שוב בעוד רגע.",
       errorTitle: "לא ניתן לטעון מרכזים",
+      filterNoAppointments: "מרכזים ללא תורים אחרונים",
+      filterNeedsSubscriptionReview: "דורשים מעקב",
+      filterNeedsSubscriptionReviewEmpty: "אין מרכזים הדורשים בדיקת מינוי כרגע.",
+      highlightCenter: "צפייה במרכז ספציפי",
       loading: "טוען מרכזים...",
       noResultsDescription: "נסו לשנות את החיפוש או את מסנן הסטטוס.",
       noResultsTitle: "אין מרכזים תואמים",
@@ -415,7 +495,24 @@ export const superAdminCentersDictionaries: Record<
       subscriptionExpiryDate: "תאריך סיום מינוי",
       domain: "דומיין",
       status: "סטטוס",
+      reviewReason: "סיבת הבדיקה",
       actions: "פעולות",
+    },
+    reviewReasons: {
+      noSubscription: "אין מינוי",
+      subscriptionExpired: "המינוי פג",
+      subscriptionExpiredDaysAgo: "יום|ימים",
+      subscriptionGracePeriod: "תקופת חסד",
+      subscriptionSuspended: "המינוי מושהה",
+      subscriptionCancelled: "המינוי בוטל",
+    },
+    banner: {
+      centersNeedReview: "מרכזים דורשים בדיקה",
+      expiredSubscriptions: "מינויים שפגו",
+      gracePeriod: "בתקופת חסד",
+      noSubscription: "מרכזים ללא מינוי",
+      suspendedSubscription: "מינוי מושהה",
+      cancelledSubscription: "מינוי בוטל",
     },
     statuses: {
       active: "פעיל",

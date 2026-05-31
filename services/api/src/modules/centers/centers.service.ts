@@ -1,4 +1,4 @@
-import {
+﻿import {
   BadRequestException,
   ConflictException,
   Injectable,
@@ -9,11 +9,14 @@ import { PrismaService } from '../../common/database/prisma.service';
 import { safeUserSelect } from '../../common/database/safe-user-select';
 import { hashPassword } from '../../common/security/password-hashing';
 import { parsePagination } from '../../common/utils/pagination';
+import { AuditService } from '../audit/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import type {
   Prisma,
   SupportedLanguage,
-} from '../../../../../packages/database/node_modules/@prisma/client';
+} from '@royalcare/db';
 import { CreateCenterInternalNoteDto } from './dto/create-center-internal-note.dto';
+import { CreateAdminCenterManagerDto } from './dto/create-admin-center-manager.dto';
 import {
   CreateCenterStaffDto,
   type CenterStaffRole,
@@ -96,6 +99,7 @@ const MANUAL_SUBSCRIPTION_STATUSES = [
   'ACTIVE',
   'EXPIRED',
   'OVERDUE',
+  'SUSPENDED',
   'CANCELLED',
 ] as const;
 const PLAN_NAMES: Record<(typeof MANUAL_SUBSCRIPTION_PLANS)[number], string> = {
@@ -112,8 +116,16 @@ const SUBSCRIPTION_STATUS_MAP: Record<
   CANCELLED: 'CANCELLED',
   EXPIRED: 'EXPIRED',
   OVERDUE: 'PAST_DUE',
+  SUSPENDED: 'SUSPENDED',
   TRIAL: 'TRIALING',
 };
+
+type CenterStatusAuditContext = {
+  ip?: string;
+  userAgent?: string | string[];
+};
+
+type SubscriptionAuditContext = CenterStatusAuditContext;
 
 const safeDomainSelect = {
   id: true,
@@ -139,6 +151,7 @@ const safeSubscriptionSelect = {
   billingInterval: true,
   currentPeriodStart: true,
   currentPeriodEnd: true,
+  gracePeriodEndsAt: true,
   nextRenewalDate: true,
   billingNotes: true,
   trialEndsAt: true,
@@ -447,7 +460,7 @@ function isAllowedValue<T extends readonly string[]>(
   return typeof value === 'string' && allowedValues.includes(value);
 }
 
-function optionalTrimmed(value?: string) {
+function optionalTrimmed(value: unknown) {
   return typeof value === 'string' ? value.trim() : undefined;
 }
 
@@ -489,6 +502,14 @@ function getManualSubscriptionValidation(dto: UpdateCenterSubscriptionDto) {
   const errors: Record<string, unknown> = {};
   const plan = optionalTrimmed(dto.subscriptionPlan)?.toUpperCase();
   const status = optionalTrimmed(dto.subscriptionStatus)?.toUpperCase();
+  const notificationPhone = hasValue(dto.notificationPhone)
+    ? optionalTrimmed(dto.notificationPhone)
+    : undefined;
+  const notificationLanguage = hasValue(dto.notificationLanguage)
+    ? (optionalTrimmed(
+        dto.notificationLanguage,
+      )?.toUpperCase() as SupportedLanguage)
+    : undefined;
   const startDate = parseDateField(
     dto.subscriptionStartDate,
     'startDate',
@@ -521,17 +542,38 @@ function getManualSubscriptionValidation(dto: UpdateCenterSubscriptionDto) {
     errors.subscriptionStatus = invalidSubscriptionStatusError;
   }
 
+  if (
+    notificationLanguage !== undefined &&
+    !isAllowedValue(notificationLanguage, SUPPORTED_LANGUAGES)
+  ) {
+    errors.notificationLanguage = 'Enter a valid notification language.';
+  }
+
+  if (
+    notificationPhone !== undefined &&
+    notificationPhone &&
+    !isValidPhone(notificationPhone)
+  ) {
+    errors.notificationPhone = 'Enter a valid notification phone number.';
+  }
+
   if (startDate && endDate && endDate <= startDate) {
     errors.subscriptionDates = invalidSubscriptionDatesError;
   }
 
+  const billingNotes = hasValue(dto.billingNotes)
+    ? (dto.billingNotes ?? '').trim()
+    : hasValue(dto.subscriptionNotes)
+      ? (dto.subscriptionNotes ?? '').trim()
+      : undefined;
+
   return {
-    billingNotes: hasValue(dto.billingNotes)
-      ? (dto.billingNotes ?? '').trim()
-      : undefined,
+    billingNotes,
     endDate,
     errors,
     nextRenewalDate,
+    notificationLanguage,
+    notificationPhone,
     plan,
     startDate,
     status,
@@ -545,6 +587,15 @@ function getUpdateCenterValidation(dto: UpdateCenterDto) {
     : hasValue(dto.name)
       ? optionalTrimmed(dto.name)
       : undefined;
+  const centerNameAr = hasValue(dto.nameAr)
+    ? optionalTrimmed(dto.nameAr) || null
+    : undefined;
+  const centerNameEn = hasValue(dto.nameEn)
+    ? optionalTrimmed(dto.nameEn) || null
+    : undefined;
+  const centerNameHe = hasValue(dto.nameHe)
+    ? optionalTrimmed(dto.nameHe) || null
+    : undefined;
   const adminEmail = optionalLowerTrimmed(dto.admin?.email);
   const adminPhone = optionalTrimmed(dto.admin?.phone);
   const domainHostname = optionalLowerTrimmed(dto.domain?.hostname);
@@ -648,6 +699,9 @@ function getUpdateCenterValidation(dto: UpdateCenterDto) {
     adminFullName: optionalTrimmed(dto.admin?.fullName),
     adminPhone,
     centerName,
+    centerNameAr,
+    centerNameEn,
+    centerNameHe,
     domainHostname,
     errors,
     expiryDate,
@@ -681,6 +735,40 @@ function formatCenterStaffAssignment(
     assignmentStatus: assignment.status,
     createdAt: assignment.user.createdAt,
     updatedAt: assignment.updatedAt,
+  };
+}
+
+function formatAdminCenterSummary(
+  center: {
+    id: string;
+    name: string;
+    slug: string;
+    status: string;
+    publicVisible: boolean;
+    createdAt: Date;
+    subscriptions?: Array<{
+      status: string;
+      currentPeriodEnd: Date;
+      planCode: string;
+      planName: string;
+    }>;
+  },
+  usersCount: number,
+) {
+  return {
+    id: center.id,
+    name: center.name,
+    slug: center.slug,
+    status: center.status,
+    publicVisible: center.publicVisible,
+    createdAt: center.createdAt,
+    usersCount,
+    subscriptions: (center.subscriptions ?? []).map((s) => ({
+      currentPeriodEnd: s.currentPeriodEnd,
+      planCode: s.planCode,
+      planName: s.planName,
+      status: s.status,
+    })),
   };
 }
 
@@ -751,7 +839,11 @@ function getStaffRoleName(roleKey: CenterStaffRole) {
 
 @Injectable()
 export class CentersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async list(query: ListCentersQueryDto) {
     const prisma = await this.prisma.getClient();
@@ -830,6 +922,457 @@ export class CentersService {
     }
 
     return center;
+  }
+
+  async listAdminCenters() {
+    const prisma = await this.prisma.getClient();
+    const centers = await prisma.center.findMany({
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        status: true,
+        publicVisible: true,
+        createdAt: true,
+        subscriptions: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: {
+            currentPeriodEnd: true,
+            planCode: true,
+            planName: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    const centerIds = centers.map((center) => center.id);
+    const assignments = centerIds.length
+      ? await prisma.userRole.findMany({
+          where: {
+            centerId: { in: centerIds },
+            status: { not: 'REVOKED' },
+            user: { deletedAt: null },
+            role: { scope: 'CENTER' },
+          },
+          select: {
+            centerId: true,
+            userId: true,
+          },
+        })
+      : [];
+
+    const usersByCenter = new Map<string, Set<string>>();
+    for (const assignment of assignments) {
+      if (!assignment.centerId) {
+        continue;
+      }
+
+      const centerUsers =
+        usersByCenter.get(assignment.centerId) ?? new Set<string>();
+      centerUsers.add(assignment.userId);
+      usersByCenter.set(assignment.centerId, centerUsers);
+    }
+
+    return {
+      data: centers.map((center) =>
+        formatAdminCenterSummary(
+          center,
+          usersByCenter.get(center.id)?.size ?? 0,
+        ),
+      ),
+    };
+  }
+
+  async getAdminCenter(centerId: string) {
+    if (!UUID_REGEX.test(centerId)) {
+      throw new NotFoundException('Center not found.');
+    }
+
+    const prisma = await this.prisma.getClient();
+    const center = await prisma.center.findUnique({
+      where: { id: centerId },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        status: true,
+        publicVisible: true,
+        createdAt: true,
+      },
+    });
+
+    if (!center) {
+      throw new NotFoundException('Center not found.');
+    }
+
+    const assignments = await prisma.userRole.findMany({
+      where: {
+        centerId,
+        status: { not: 'REVOKED' },
+        user: { deletedAt: null },
+        role: { scope: 'CENTER' },
+      },
+      orderBy: { assignedAt: 'asc' },
+      select: safeCenterStaffUserRoleSelect,
+    });
+
+    const seenUsers = new Set<string>();
+    const users = assignments
+      .map(formatCenterStaffAssignment)
+      .filter((user) => {
+        if (seenUsers.has(user.id)) {
+          return false;
+        }
+
+        seenUsers.add(user.id);
+        return true;
+      });
+
+    return {
+      ...formatAdminCenterSummary(center, users.length),
+      users,
+    };
+  }
+
+  async updateAdminCenterStatus(
+    centerId: string,
+    dto: UpdateCenterStatusDto,
+    authorId: string,
+    auditContext?: CenterStatusAuditContext,
+  ) {
+    await this.updateStatus(centerId, dto, authorId, auditContext);
+    const result = await this.getAdminCenter(centerId);
+    return result;
+  }
+
+  async updateAdminCenterPublicVisibility(
+    centerId: string,
+    publicVisible: boolean,
+    authorId: string,
+  ) {
+    if (!UUID_REGEX.test(centerId)) {
+      throw new NotFoundException('Center not found.');
+    }
+
+    const prisma = await this.prisma.getClient();
+
+    await prisma.center.update({
+      where: { id: centerId },
+      data: { publicVisible },
+    });
+
+    await this.auditService.log({
+      action: 'center.public_visibility_updated',
+      actorUserId: authorId,
+      centerId,
+      metadata: { publicVisible },
+    });
+
+    return this.getAdminCenter(centerId);
+  }
+
+  async createAdminCenterLogin(centerId: string, superAdminUserId: string) {
+    if (!UUID_REGEX.test(centerId)) {
+      throw new NotFoundException('Center not found.');
+    }
+
+    const prisma = await this.prisma.getClient();
+
+    return prisma.$transaction(async (tx) => {
+      const center = await tx.center.findUnique({
+        where: { id: centerId },
+        select: {
+          id: true,
+          name: true,
+          ownerUserId: true,
+          slug: true,
+          status: true,
+        },
+      });
+
+      if (!center) {
+        throw new NotFoundException('Center not found.');
+      }
+
+      const superAdmin = await tx.user.findFirst({
+        where: {
+          id: superAdminUserId,
+          deletedAt: null,
+          roles: {
+            some: {
+              centerId: null,
+              status: ACTIVE_USER_ROLE_STATUS,
+              role: {
+                key: 'super_admin',
+                scope: 'PLATFORM',
+                status: 'ACTIVE',
+              },
+            },
+          },
+        },
+        select: safeUserSelect,
+      });
+
+      if (!superAdmin) {
+        throw new BadRequestException({
+          message: 'Impersonation validation failed.',
+          errors: { superAdmin: 'SUPER_ADMIN role is required.' },
+        });
+      }
+
+      const ownerAssignment = center.ownerUserId
+        ? await tx.userRole.findFirst({
+            where: {
+              centerId,
+              userId: center.ownerUserId,
+              status: ACTIVE_USER_ROLE_STATUS,
+              user: {
+                deletedAt: null,
+                status: 'ACTIVE',
+                roles: {
+                  none: {
+                    centerId: null,
+                    status: ACTIVE_USER_ROLE_STATUS,
+                    role: { key: 'super_admin', scope: 'PLATFORM' },
+                  },
+                },
+              },
+              role: {
+                key: { in: ['CENTER_OWNER', 'CENTER_MANAGER'] },
+                scope: 'CENTER',
+                status: 'ACTIVE',
+              },
+            },
+            include: {
+              role: { select: { id: true, key: true, name: true } },
+              user: { select: safeUserSelect },
+            },
+          })
+        : null;
+
+      const assignment =
+        ownerAssignment ??
+        (await tx.userRole.findFirst({
+          where: {
+            centerId,
+            status: ACTIVE_USER_ROLE_STATUS,
+            user: {
+              deletedAt: null,
+              status: 'ACTIVE',
+              roles: {
+                none: {
+                  centerId: null,
+                  status: ACTIVE_USER_ROLE_STATUS,
+                  role: { key: 'super_admin', scope: 'PLATFORM' },
+                },
+              },
+            },
+            role: {
+              key: { in: ['CENTER_OWNER', 'CENTER_MANAGER'] },
+              scope: 'CENTER',
+              status: 'ACTIVE',
+            },
+          },
+          orderBy: [{ role: { key: 'asc' } }, { assignedAt: 'asc' }],
+          include: {
+            role: { select: { id: true, key: true, name: true } },
+            user: { select: safeUserSelect },
+          },
+        }));
+
+      if (!assignment?.user || !assignment.role) {
+        throw new ConflictException({
+          message: 'Center admin not found',
+          errorCode: 'NO_ACTIVE_CENTER_MANAGER',
+          errors: {
+            user: 'No active center owner or manager is available for this center.',
+          },
+        });
+      }
+
+      await tx.centerInternalNote.create({
+        data: {
+          authorId: superAdmin.id,
+          centerId,
+          note: `Super Admin ${superAdmin.fullName || superAdmin.email} (${superAdmin.id}) logged in as ${assignment.user.fullName || assignment.user.email} (${assignment.user.id}) for center ${center.name} (${center.id}).`,
+        },
+        select: { id: true },
+      });
+
+      return {
+        center: {
+          id: center.id,
+          name: center.name,
+          slug: center.slug,
+          status: center.status,
+        },
+        impersonatedUser: {
+          id: assignment.user.id,
+          email: assignment.user.email,
+          fullName: assignment.user.fullName,
+          status: assignment.user.status,
+        },
+        role: assignment.role,
+      };
+    });
+  }
+
+  async createAdminCenterManager(
+    centerId: string,
+    dto: CreateAdminCenterManagerDto,
+  ) {
+    if (!UUID_REGEX.test(centerId)) {
+      throw new NotFoundException('Center not found.');
+    }
+
+    const email = optionalLowerTrimmed(dto.email);
+    const fullName = optionalTrimmed(dto.fullName);
+    const phone = optionalTrimmed(dto.phone);
+    const temporaryPassword = dto.temporaryPassword?.trim() ?? '';
+    const errors: Record<string, unknown> = {};
+
+    if (!fullName) {
+      errors.fullName = requiredStaffNameError;
+    }
+
+    if (!email || !isValidEmail(email)) {
+      errors.email = invalidStaffEmailError;
+    }
+
+    if (phone && !isValidPhone(phone)) {
+      errors.phone = invalidStaffPhoneError;
+    }
+
+    if (!temporaryPassword) {
+      errors.temporaryPassword = requiredTemporaryPasswordError;
+    } else if (temporaryPassword.length < 8) {
+      errors.temporaryPassword = shortTemporaryPasswordError;
+    }
+
+    if (Object.keys(errors).length > 0) {
+      throw new BadRequestException({
+        message: 'Center manager validation failed.',
+        errors,
+      });
+    }
+
+    const prisma = await this.prisma.getClient();
+    const passwordHash = await hashPassword(temporaryPassword);
+
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const center = await tx.center.findUnique({
+          where: { id: centerId },
+          select: { id: true },
+        });
+
+        if (!center) {
+          throw new NotFoundException('Center not found.');
+        }
+
+        const role = await this.ensureCenterStaffRole(
+          tx,
+          centerId,
+          'CENTER_MANAGER',
+        );
+
+        const existingUser = await tx.user.findUnique({
+          where: { email },
+          include: {
+            roles: {
+              include: { role: true },
+            },
+          },
+        });
+
+        if (
+          existingUser?.roles.some(
+            (assignment) =>
+              assignment.centerId === null &&
+              assignment.status === ACTIVE_USER_ROLE_STATUS &&
+              assignment.role.key === 'super_admin' &&
+              assignment.role.scope === 'PLATFORM',
+          )
+        ) {
+          throw new ConflictException({
+            message: 'Center manager validation failed.',
+            errors: {
+              email:
+                'A platform Super Admin cannot be assigned as a center manager.',
+            },
+          });
+        }
+
+        if (existingUser?.deletedAt) {
+          throw new ConflictException({
+            message: 'Center manager validation failed.',
+            errors: {
+              email:
+                'This user cannot be assigned because the account is deleted.',
+            },
+          });
+        }
+
+        const user = existingUser
+          ? await tx.user.update({
+              where: { id: existingUser.id },
+              data: {
+                fullName,
+                passwordHash,
+                phone: phone || null,
+                status: 'ACTIVE',
+              },
+              select: { id: true },
+            })
+          : await tx.user.create({
+              data: {
+                email,
+                fullName: fullName ?? '',
+                passwordHash,
+                phone: phone || null,
+                status: 'ACTIVE',
+              },
+              select: { id: true },
+            });
+
+        const existingAssignment = await tx.userRole.findFirst({
+          where: {
+            centerId,
+            userId: user.id,
+            role: { scope: 'CENTER' },
+          },
+          select: { id: true },
+        });
+
+        const assignment = existingAssignment
+          ? await tx.userRole.update({
+              where: { id: existingAssignment.id },
+              data: {
+                roleId: role.id,
+                revokedAt: null,
+                status: ACTIVE_USER_ROLE_STATUS,
+              },
+              select: safeCenterStaffUserRoleSelect,
+            })
+          : await tx.userRole.create({
+              data: {
+                centerId,
+                roleId: role.id,
+                status: ACTIVE_USER_ROLE_STATUS,
+                userId: user.id,
+              },
+              select: safeCenterStaffUserRoleSelect,
+            });
+
+        return formatCenterStaffAssignment(assignment);
+      });
+    } catch (error) {
+      this.mapStaffUniqueError(error);
+      throw error;
+    }
   }
 
   async listStaff(centerId: string) {
@@ -974,8 +1517,9 @@ export class CentersService {
     centerId: string,
     userId: string,
     dto: UpdateCenterStaffStatusDto,
+    actorUserId?: string,
   ) {
-    await this.ensureCenterExists(centerId);
+    const center = await this.ensureCenterExists(centerId);
     const status = optionalTrimmed(dto.status)?.toUpperCase();
 
     if (!isAllowedValue(status, CENTER_STAFF_STATUSES)) {
@@ -987,12 +1531,16 @@ export class CentersService {
 
     const prisma = await this.prisma.getClient();
 
-    return prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const existingAssignment = await this.getCenterStaffAssignment(
         tx,
         centerId,
         userId,
       );
+      const oldStatus =
+        existingAssignment.user.status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE';
+      const targetEmail = existingAssignment.user.email;
+      const targetName = existingAssignment.user.fullName;
 
       await tx.user.update({
         where: { id: userId },
@@ -1009,16 +1557,54 @@ export class CentersService {
         select: safeCenterStaffUserRoleSelect,
       });
 
-      return formatCenterStaffAssignment(assignment);
+      return {
+        oldStatus,
+        targetEmail,
+        targetName,
+        user: formatCenterStaffAssignment(assignment),
+      };
     });
+
+    try {
+      const actor = actorUserId
+        ? await prisma.user.findFirst({
+            where: { deletedAt: null, id: actorUserId },
+            select: { email: true, fullName: true },
+          })
+        : null;
+
+      await this.auditService.log({
+        action: 'STAFF_STATUS_CHANGED',
+        actorUserId,
+        centerId,
+        targetUserId: userId,
+        metadata: {
+          actorName: actor?.fullName ?? actor?.email ?? null,
+          centerName: center.name,
+          newStatus: result.user.status,
+          oldStatus: result.oldStatus,
+          source: 'CENTER_DETAILS_PAGE',
+          targetEmail: result.targetEmail,
+          targetName: result.targetName,
+        },
+      });
+    } catch (error) {
+      console.error(
+        '[CentersService] Failed to write staff status audit log:',
+        error,
+      );
+    }
+
+    return result.user;
   }
 
   async resetStaffPassword(
     centerId: string,
     userId: string,
     dto: ResetCenterStaffPasswordDto,
+    actorUserId?: string,
   ) {
-    await this.ensureCenterExists(centerId);
+    const center = await this.ensureCenterExists(centerId);
     const temporaryPassword =
       dto.temporaryPassword?.trim() ||
       `RC-temp-${randomBytes(3).toString('hex')}`;
@@ -1035,7 +1621,7 @@ export class CentersService {
     const prisma = await this.prisma.getClient();
     const passwordHash = await hashPassword(temporaryPassword);
 
-    return prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const existingAssignment = await this.getCenterStaffAssignment(
         tx,
         centerId,
@@ -1057,6 +1643,36 @@ export class CentersService {
         temporaryPassword,
       };
     });
+
+    try {
+      const actor = actorUserId
+        ? await prisma.user.findFirst({
+            where: { deletedAt: null, id: actorUserId },
+            select: { email: true, fullName: true },
+          })
+        : null;
+
+      await this.auditService.log({
+        action: 'STAFF_PASSWORD_RESET',
+        actorUserId,
+        centerId,
+        targetUserId: userId,
+        metadata: {
+          actorName: actor?.fullName ?? actor?.email ?? null,
+          centerName: center.name,
+          source: 'PASSWORD_RESET',
+          targetEmail: result.user.email ?? null,
+          targetName: result.user.fullName,
+        },
+      });
+    } catch (error) {
+      console.error(
+        '[CentersService] Failed to write staff password reset audit log:',
+        error,
+      );
+    }
+
+    return result;
   }
 
   async listInternalNotes(centerId: string) {
@@ -1067,7 +1683,7 @@ export class CentersService {
     const prisma = await this.prisma.getClient();
     const center = await prisma.center.findUnique({
       where: { id: centerId },
-      select: { id: true },
+      select: { id: true, name: true },
     });
 
     if (!center) {
@@ -1133,6 +1749,7 @@ export class CentersService {
     centerId: string,
     dto: UpdateCenterStatusDto,
     requestedAuthorId?: string,
+    auditContext?: CenterStatusAuditContext,
   ) {
     if (!UUID_REGEX.test(centerId)) {
       throw new NotFoundException('Center not found.');
@@ -1159,10 +1776,10 @@ export class CentersService {
 
     const prisma = await this.prisma.getClient();
 
-    return prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const existingCenter = await tx.center.findUnique({
         where: { id: centerId },
-        select: { id: true, status: true },
+        select: { id: true, name: true, slug: true, status: true },
       });
 
       if (!existingCenter) {
@@ -1194,7 +1811,7 @@ export class CentersService {
         select: { id: true },
       });
 
-      return tx.center.findUniqueOrThrow({
+      const center = await tx.center.findUniqueOrThrow({
         where: { id: centerId },
         include: {
           branding: true,
@@ -1213,13 +1830,63 @@ export class CentersService {
           },
         },
       });
+
+      return {
+        center,
+        oldStatus: existingCenter.status,
+      };
     });
+
+    try {
+      const actor = requestedAuthorId
+        ? await prisma.user.findFirst({
+            where: { deletedAt: null, id: requestedAuthorId },
+            select: { email: true, fullName: true },
+          })
+        : null;
+      const userAgent = Array.isArray(auditContext?.userAgent)
+        ? auditContext?.userAgent[0]
+        : auditContext?.userAgent;
+
+      await this.auditService.log({
+        action: 'CENTER_STATUS_CHANGED',
+        actorUserId: requestedAuthorId,
+        centerId,
+        metadata: {
+          actorEmail: actor?.email ?? null,
+          actorName: actor?.fullName ?? actor?.email ?? null,
+          centerName: result.center.name,
+          centerSlug: result.center.slug,
+          changedBy: actor?.fullName ?? actor?.email ?? null,
+          device: userAgent ?? null,
+          ip: auditContext?.ip ?? null,
+          newIsActive: result.center.status === 'ACTIVE',
+          newStatus: result.center.status,
+          oldIsActive: result.oldStatus === 'ACTIVE',
+          oldStatus: result.oldStatus,
+          source: 'CENTER_STATUS_UPDATE',
+          targetEmail: null,
+          targetId: result.center.id,
+          targetName: result.center.name,
+          targetType: 'CENTER',
+          userAgent: userAgent ?? null,
+        },
+      });
+    } catch (error) {
+      console.error(
+        '[CentersService] Failed to write center status audit log:',
+        error,
+      );
+    }
+
+    return result.center;
   }
 
   async updateSubscription(
     centerId: string,
     dto: UpdateCenterSubscriptionDto,
     requestedAuthorId?: string,
+    auditContext?: SubscriptionAuditContext,
   ) {
     if (!UUID_REGEX.test(centerId)) {
       throw new NotFoundException('Center not found.');
@@ -1236,7 +1903,7 @@ export class CentersService {
 
     const prisma = await this.prisma.getClient();
 
-    return prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const existingCenter = await tx.center.findUnique({
         where: { id: centerId },
         include: {
@@ -1244,11 +1911,12 @@ export class CentersService {
             orderBy: { createdAt: 'desc' },
             take: 1,
             select: {
+              currentPeriodEnd: true,
+              currentPeriodStart: true,
               id: true,
               planCode: true,
+              planName: true,
               status: true,
-              currentPeriodStart: true,
-              currentPeriodEnd: true,
             },
           },
         },
@@ -1259,6 +1927,8 @@ export class CentersService {
       }
 
       const latestSubscription = existingCenter.subscriptions[0];
+      const oldStatus = latestSubscription?.status ?? null;
+      const oldEndDate = latestSubscription?.currentPeriodEnd ?? null;
       const nextPlan =
         validation.plan ?? latestSubscription?.planCode ?? 'BASIC';
       const nextStatus =
@@ -1281,9 +1951,16 @@ export class CentersService {
         ...(validation.nextRenewalDate !== undefined
           ? { nextRenewalDate: validation.nextRenewalDate }
           : {}),
+        ...(validation.notificationPhone !== undefined
+          ? { notificationPhone: validation.notificationPhone || null }
+          : {}),
+        ...(validation.notificationLanguage !== undefined
+          ? { notificationLanguage: validation.notificationLanguage }
+          : {}),
         currentPeriodEnd: nextEndDate,
         currentPeriodStart: nextStartDate,
         expiresAt: nextEndDate,
+        gracePeriodEndsAt: null,
         planCode: nextPlan,
         planName: PLAN_NAMES[nextPlan as keyof typeof PLAN_NAMES] ?? nextPlan,
         status: nextStatus,
@@ -1325,7 +2002,7 @@ export class CentersService {
         select: { id: true },
       });
 
-      return tx.center.findUniqueOrThrow({
+      const center = await tx.center.findUniqueOrThrow({
         where: { id: centerId },
         include: {
           branding: true,
@@ -1344,7 +2021,265 @@ export class CentersService {
           },
         },
       });
+
+      return {
+        center,
+        centerName: existingCenter.name,
+        newEndDate: nextEndDate,
+        newPlanName:
+          PLAN_NAMES[nextPlan as keyof typeof PLAN_NAMES] ?? nextPlan,
+        newStartDate: nextStartDate,
+        newStatus: nextStatus,
+        oldEndDate,
+        oldPlanName: latestSubscription?.planName ?? null,
+        oldStartDate: latestSubscription?.currentPeriodStart ?? null,
+        oldStatus,
+        planCode: nextPlan,
+      };
     });
+
+    try {
+      const actor = requestedAuthorId
+        ? await prisma.user.findFirst({
+            where: { deletedAt: null, id: requestedAuthorId },
+            select: { email: true, fullName: true },
+          })
+        : null;
+      const changedFields: string[] = [];
+      const oldStartDate = result.oldStartDate?.toISOString() ?? null;
+      const newStartDate = result.newStartDate?.toISOString() ?? null;
+      const oldEndDate = result.oldEndDate?.toISOString() ?? null;
+      const newEndDate = result.newEndDate?.toISOString() ?? null;
+      const oldNotificationPhone = null;
+      const newNotificationPhone = validation.notificationPhone ?? null;
+      const oldNotificationLanguage = null;
+      const newNotificationLanguage = validation.notificationLanguage ?? null;
+
+      if (result.oldStatus !== result.newStatus) {
+        changedFields.push('status');
+      }
+      if (result.oldPlanName !== result.newPlanName) {
+        changedFields.push('planName');
+      }
+      if (oldStartDate !== newStartDate) {
+        changedFields.push('startDate');
+      }
+      if (oldEndDate !== newEndDate) {
+        changedFields.push('endDate');
+      }
+      if (validation.notificationPhone !== undefined) {
+        changedFields.push('notificationPhone');
+      }
+      if (validation.notificationLanguage !== undefined) {
+        changedFields.push('notificationLanguage');
+      }
+      if (validation.billingNotes !== undefined) {
+        changedFields.push('billingNotes');
+      }
+      if (validation.nextRenewalDate !== undefined) {
+        changedFields.push('nextRenewalDate');
+      }
+
+      const baseMetadata = {
+        actorEmail: actor?.email ?? null,
+        actorName: actor?.fullName ?? actor?.email ?? null,
+        centerId,
+        centerName: result.centerName,
+        changedBy: actor?.fullName ?? actor?.email ?? null,
+        changedByEmail: actor?.email ?? null,
+        changedFields,
+        device: Array.isArray(auditContext?.userAgent)
+          ? auditContext.userAgent.join(' ')
+          : auditContext?.userAgent,
+        ip: auditContext?.ip,
+        newEndDate,
+        newNotificationLanguage,
+        newNotificationPhone,
+        newPlanName: result.newPlanName,
+        newStartDate,
+        newStatus: result.newStatus,
+        oldEndDate,
+        oldNotificationLanguage,
+        oldNotificationPhone,
+        oldPlanName: result.oldPlanName,
+        oldStartDate,
+        oldStatus: result.oldStatus,
+        targetEmail: null,
+        targetId: centerId,
+        targetName: result.centerName,
+        targetType: 'CENTER',
+        userAgent: Array.isArray(auditContext?.userAgent)
+          ? auditContext.userAgent.join(' ')
+          : auditContext?.userAgent,
+      };
+      const nonStatusFields = changedFields.filter(
+        (field) => field !== 'status',
+      );
+
+      if (nonStatusFields.length > 0) {
+        await this.auditService.log({
+          action: 'SUBSCRIPTION_UPDATED',
+          actorUserId: requestedAuthorId,
+          centerId,
+          metadata: {
+            ...baseMetadata,
+            changedFields: nonStatusFields,
+          },
+        });
+      }
+
+      if (result.oldStatus !== result.newStatus) {
+        await this.auditService.log({
+          action: 'SUBSCRIPTION_STATUS_CHANGED',
+          actorUserId: requestedAuthorId,
+          centerId,
+          metadata: {
+            ...baseMetadata,
+            changedFields: ['status'],
+          },
+        });
+      }
+    } catch (error) {
+      console.error(
+        '[CentersService] Failed to write subscription audit log:',
+        error,
+      );
+    }
+
+    // Trigger subscription lifecycle notifications (fire-and-forget)
+    this.triggerSubscriptionNotifications({
+      centerId,
+      centerName: result.centerName,
+      newPlanName: result.newPlanName,
+      newStatus: result.newStatus,
+      oldStatus: result.oldStatus,
+      newEndDate: result.newEndDate,
+    }).catch((error) => {
+      console.error(
+        '[CentersService] Failed to create subscription notification:',
+        error,
+      );
+    });
+
+    return result.center;
+  }
+
+  private async triggerSubscriptionNotifications(context: {
+    centerId: string;
+    centerName: string;
+    newPlanName: string;
+    newStatus: string;
+    oldStatus: string | null;
+    newEndDate: Date;
+  }) {
+    const {
+      centerId,
+      centerName,
+      newPlanName,
+      newStatus,
+      oldStatus,
+      newEndDate,
+    } = context;
+    const now = new Date();
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const daysRemaining = Math.ceil(
+      (newEndDate.getTime() - now.getTime()) / msPerDay,
+    );
+
+    if (newStatus === 'EXPIRED' || daysRemaining < 0) {
+      await this.notificationsService.createSuperAdminSubscriptionNotification({
+        centerId,
+        type: 'SUBSCRIPTION_EXPIRED',
+        titleEn: 'Subscription expired',
+        titleAr: 'انتهى الاشتراك',
+        titleHe: 'המינוי פג',
+        messageEn: `The subscription for ${centerName} has expired.`,
+        messageAr: `انتهى اشتراك مركز ${centerName}.`,
+        messageHe: `המינוי של ${centerName} פג תוקפו.`,
+        metadata: {
+          centerName,
+          newStatus,
+          daysRemaining,
+          endDate: newEndDate.toISOString(),
+        },
+      });
+      return;
+    }
+
+    if (newStatus === 'SUSPENDED') {
+      await this.notificationsService.createSuperAdminSubscriptionNotification({
+        centerId,
+        type: 'SUBSCRIPTION_SUSPENDED',
+        titleEn: 'Subscription suspended',
+        titleAr: 'تم إيقاف الاشتراك',
+        titleHe: 'המינוי הושעה',
+        messageEn: `The subscription for ${centerName} was suspended.`,
+        messageAr: `تم إيقاف اشتراك مركز ${centerName}.`,
+        messageHe: `המינוי של ${centerName} הושעה.`,
+        metadata: {
+          centerName,
+          newStatus,
+          oldStatus,
+          endDate: newEndDate.toISOString(),
+        },
+      });
+      return;
+    }
+
+    if (newStatus === 'ACTIVE' && oldStatus && oldStatus !== 'ACTIVE') {
+      await this.notificationsService.createSuperAdminSubscriptionNotification({
+        centerId,
+        type: 'SUBSCRIPTION_RENEWED',
+        titleEn: 'Subscription renewed',
+        titleAr: 'تم تجديد الاشتراك',
+        titleHe: 'המינוי חודש',
+        messageEn: `The subscription for ${centerName} was renewed on ${newPlanName}.`,
+        messageAr: `تم تجديد اشتراك مركز ${centerName} على باقة ${newPlanName}.`,
+        messageHe: `המינוי של ${centerName} חודש בתוכנית ${newPlanName}.`,
+        metadata: {
+          centerName,
+          newPlanName,
+          newStatus,
+          oldStatus,
+          endDate: newEndDate.toISOString(),
+        },
+      });
+    }
+
+    if (
+      (newStatus === 'ACTIVE' || newStatus === 'TRIALING') &&
+      daysRemaining >= 0 &&
+      daysRemaining <= 3
+    ) {
+      await this.notificationsService.createSuperAdminSubscriptionNotification({
+        centerId,
+        type:
+          newStatus === 'TRIALING'
+            ? 'TRIAL_ENDING_SOON'
+            : 'SUBSCRIPTION_EXPIRING',
+        titleEn:
+          newStatus === 'TRIALING'
+            ? 'Trial ending soon'
+            : 'Subscription expiring soon',
+        titleAr:
+          newStatus === 'TRIALING'
+            ? 'الفترة التجريبية تنتهي قريباً'
+            : 'الاشتراك ينتهي قريباً',
+        titleHe:
+          newStatus === 'TRIALING'
+            ? 'תקופת הניסיון עומדת להסתיים'
+            : 'המינוי עומד לפוג בקרוב',
+        messageEn: `The subscription for ${centerName} expires in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'}.`,
+        messageAr: `ينتهي اشتراك مركز ${centerName} خلال ${daysRemaining} ${daysRemaining === 1 ? 'يوم' : 'أيام'}.`,
+        messageHe: `המינוי של ${centerName} יפוג בעוד ${daysRemaining} ${daysRemaining === 1 ? 'יום' : 'ימים'}.`,
+        metadata: {
+          centerName,
+          newStatus,
+          daysRemaining,
+          endDate: newEndDate.toISOString(),
+        },
+      });
+    }
   }
 
   private async ensureCenterExists(centerId: string) {
@@ -1355,7 +2290,7 @@ export class CentersService {
     const prisma = await this.prisma.getClient();
     const center = await prisma.center.findUnique({
       where: { id: centerId },
-      select: { id: true },
+      select: { id: true, name: true },
     });
 
     if (!center) {
@@ -1575,29 +2510,54 @@ export class CentersService {
           throw new NotFoundException('Center not found.');
         }
 
+        // Resolve the admin user ID: prefer ownerUserId, fall back to first active role.
         const adminUserId =
-          existingCenter.userRoles[0]?.userId ?? existingCenter.ownerUserId;
+          existingCenter.ownerUserId ?? existingCenter.userRoles[0]?.userId;
+
+        // Load the current admin user now so duplicate checks and the update step
+        // both operate against the exact same user record.
+        const currentAdmin = adminUserId
+          ? await tx.user.findUnique({
+              where: { id: adminUserId },
+              select: { email: true, fullName: true, id: true, phone: true },
+            })
+          : null;
+
         const duplicateErrors: Record<string, unknown> = {};
 
+        // Email duplicate check: only run when the incoming email differs from the
+        // stored email (normalized). When unchanged, skip — no query, no false conflict.
         if (validation.adminEmail) {
-          const existingEmailUser = await tx.user.findUnique({
-            where: { email: validation.adminEmail },
-            select: { id: true },
-          });
+          const incomingEmail = validation.adminEmail; // already lowercased by optionalLowerTrimmed
+          const storedEmail = currentAdmin?.email?.trim().toLowerCase() ?? null;
 
-          if (existingEmailUser && existingEmailUser.id !== adminUserId) {
-            duplicateErrors.adminEmail = duplicateAdminEmailError;
+          if (incomingEmail !== storedEmail) {
+            const emailConflict = await tx.user.findUnique({
+              where: { email: incomingEmail },
+              select: { id: true },
+            });
+
+            if (emailConflict && emailConflict.id !== adminUserId) {
+              duplicateErrors.adminEmail = duplicateAdminEmailError;
+            }
           }
         }
 
+        // Phone duplicate check: same strategy — skip when phone is unchanged,
+        // otherwise check for a conflict on a different user.
         if (validation.adminPhone) {
-          const existingPhoneUser = await tx.user.findUnique({
-            where: { phone: validation.adminPhone },
-            select: { id: true },
-          });
+          const incomingPhone = validation.adminPhone;
+          const storedPhone = currentAdmin?.phone ?? null;
 
-          if (existingPhoneUser && existingPhoneUser.id !== adminUserId) {
-            duplicateErrors.adminPhone = duplicateAdminPhoneError;
+          if (incomingPhone !== storedPhone) {
+            const phoneConflict = await tx.user.findUnique({
+              where: { phone: incomingPhone },
+              select: { id: true },
+            });
+
+            if (phoneConflict && phoneConflict.id !== adminUserId) {
+              duplicateErrors.adminPhone = duplicateAdminPhoneError;
+            }
           }
         }
 
@@ -1619,21 +2579,38 @@ export class CentersService {
         let nextOwnerUserId = existingCenter.ownerUserId;
 
         if (dto.admin) {
-          if (adminUserId) {
-            await tx.user.update({
-              where: { id: adminUserId },
-              data: {
-                ...(validation.adminEmail !== undefined
-                  ? { email: validation.adminEmail }
-                  : {}),
-                ...(validation.adminPhone !== undefined
-                  ? { phone: validation.adminPhone }
-                  : {}),
-                ...(validation.adminFullName !== undefined
-                  ? { fullName: validation.adminFullName }
-                  : {}),
-              },
-            });
+          if (adminUserId && currentAdmin) {
+            const adminUpdateData: Record<string, string | null> = {};
+
+            // Only include email if it actually changed after normalization.
+            const incomingEmail = validation.adminEmail;
+            const storedEmail =
+              currentAdmin.email?.trim().toLowerCase() ?? null;
+            if (incomingEmail !== undefined && incomingEmail !== storedEmail) {
+              adminUpdateData.email = incomingEmail;
+            }
+
+            if (
+              validation.adminPhone !== undefined &&
+              validation.adminPhone !== currentAdmin.phone
+            ) {
+              adminUpdateData.phone = validation.adminPhone;
+            }
+
+            if (
+              validation.adminFullName !== undefined &&
+              validation.adminFullName !== currentAdmin.fullName
+            ) {
+              adminUpdateData.fullName = validation.adminFullName;
+            }
+
+            if (Object.keys(adminUpdateData).length > 0) {
+              await tx.user.update({
+                where: { id: adminUserId },
+                data: adminUpdateData,
+              });
+            }
+
             nextOwnerUserId = existingCenter.ownerUserId ?? adminUserId;
           } else if (
             validation.adminFullName &&
@@ -1656,6 +2633,15 @@ export class CentersService {
         const centerData: Prisma.CenterUncheckedUpdateInput = {
           ...(validation.centerName !== undefined
             ? { name: validation.centerName }
+            : {}),
+          ...(validation.centerNameAr !== undefined
+            ? { nameAr: validation.centerNameAr }
+            : {}),
+          ...(validation.centerNameEn !== undefined
+            ? { nameEn: validation.centerNameEn }
+            : {}),
+          ...(validation.centerNameHe !== undefined
+            ? { nameHe: validation.centerNameHe }
             : {}),
           ...(dto.status !== undefined ? { status: dto.status } : {}),
           ...(dto.type !== undefined ? { type: dto.type } : {}),
@@ -1720,6 +2706,11 @@ export class CentersService {
               : {}),
             ...(dto.subscription.status !== undefined
               ? { status: dto.subscription.status }
+              : {}),
+            // Clear grace period when admin manually updates the subscription
+            ...(dto.subscription.status !== undefined ||
+            validation.expiryDate !== undefined
+              ? { gracePeriodEndsAt: null }
               : {}),
           };
 
@@ -1917,6 +2908,9 @@ export class CentersService {
         const center = await tx.center.create({
           data: {
             name: dto.name,
+            nameAr: optionalTrimmed(dto.nameAr) || null,
+            nameEn: optionalTrimmed(dto.nameEn) || null,
+            nameHe: optionalTrimmed(dto.nameHe) || null,
             slug,
             type: dto.type,
             status: dto.status ?? DEFAULT_CENTER_STATUS,
@@ -1927,14 +2921,12 @@ export class CentersService {
         });
 
         if (dto.admin && adminUser) {
-          const permissionPreset =
-            dto.admin.permissionsPreset ?? 'standardManagement';
           const role = await tx.role.create({
             data: {
               centerId: center.id,
-              key: `center_admin_${permissionPreset}`,
-              name: 'Center Admin',
-              description: `Initial center admin role from ${permissionPreset} preset.`,
+              key: 'CENTER_OWNER',
+              name: 'Center Owner',
+              description: 'Full-access owner role assigned to the initial center admin.',
               scope: 'CENTER',
             },
           });

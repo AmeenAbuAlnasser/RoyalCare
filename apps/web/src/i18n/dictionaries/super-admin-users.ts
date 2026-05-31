@@ -12,6 +12,7 @@ type UsersDictionary = {
     plans: string;
     users: string;
     notifications: string;
+    auditLogs: string;
     settings: string;
   };
   header: {
@@ -37,6 +38,7 @@ type UsersDictionary = {
     searchLabel: string;
     searchPlaceholder: string;
     all: string;
+    clearFilter: string;
     role: string;
     status: string;
     lastLogin: string;
@@ -55,18 +57,28 @@ type UsersDictionary = {
     addNewUser: string;
     view: string;
     edit: string;
+    activate: string;
+    deactivate: string;
     suspend: string;
     resetPassword: string;
     forcePasswordChange: string;
     sendWelcomeEmail: string;
     delete: string;
+    cancel: string;
+    save: string;
   };
   roles: {
-    superAdmin: string;
-    support: string;
-    sales: string;
-    finance: string;
-    viewer: string;
+    SUPER_ADMIN: string;
+    PLATFORM_ADMIN: string;
+    SUPPORT_ADMIN: string;
+    FINANCE_ADMIN: string;
+    READ_ONLY_ADMIN: string;
+    CENTER_OWNER: string;
+    CENTER_MANAGER: string;
+    DOCTOR: string;
+    RECEPTIONIST: string;
+    ACCOUNTANT: string;
+    STAFF: string;
   };
   departments: {
     finance: string;
@@ -77,6 +89,7 @@ type UsersDictionary = {
   };
   statuses: {
     active: string;
+    inactive: string;
     pending: string;
     suspended: string;
   };
@@ -87,11 +100,59 @@ type UsersDictionary = {
     noamBar: string;
     saraLevi: string;
   };
+  form: {
+    addTitle: string;
+    editTitle: string;
+    fullName: string;
+    email: string;
+    phone: string;
+    temporaryPassword: string;
+    status: string;
+    platformRole: string;
+    center: string;
+    centerRole: string;
+    optional: string;
+    noPlatformRole: string;
+    noCenter: string;
+    noCenterRole: string;
+  };
+  centerRoles: {
+    CENTER_OWNER: string;
+    CENTER_MANAGER: string;
+    DOCTOR: string;
+    RECEPTIONIST: string;
+    ACCOUNTANT: string;
+    STAFF: string;
+  };
   values: {
     mobileHint: string;
     neverLoggedIn: string;
     rolePreviewHint: string;
+    loading: string;
+    empty: string;
+    loadError: string;
+    saved: string;
+    statusUpdated: string;
+    passwordReset: string;
+    temporaryPassword: string;
+    copy: string;
+    copied: string;
+    copyFailed: string;
+    close: string;
+    passwordResetWarning: string;
   };
+};
+
+const navEn = {
+  dashboard: "Dashboard",
+  centers: "Centers",
+  subscriptions: "Subscriptions",
+  domains: "Domains",
+  plans: "Plans",
+  users: "Users",
+  notifications: "Notifications",
+  auditLogs: "Audit Logs",
+  settings: "Settings",
 };
 
 export const superAdminUsersDictionaries: Record<
@@ -102,21 +163,12 @@ export const superAdminUsersDictionaries: Record<
     brand: { name: "RoyalCare", console: "Super Admin" },
     languages: { en: "English", ar: "Arabic", he: "Hebrew" },
     shell: { menu: "Menu", close: "Close" },
-    nav: {
-      dashboard: "Dashboard",
-      centers: "Centers",
-      subscriptions: "Subscriptions",
-      domains: "Domains",
-      plans: "Plans",
-      users: "Users",
-      notifications: "Notifications",
-      settings: "Settings",
-    },
+    nav: navEn,
     header: {
       eyebrow: "Platform access",
       title: "Users Management",
       subtitle:
-        "Manage RoyalCare platform users, roles, status, departments, and access actions.",
+        "Manage RoyalCare platform users, roles, status, and center access.",
       language: "Language",
       account: "Platform Admin",
     },
@@ -134,8 +186,9 @@ export const superAdminUsersDictionaries: Record<
     },
     filters: {
       searchLabel: "Search",
-      searchPlaceholder: "Search by name, email, or role",
+      searchPlaceholder: "Search by name or email",
       all: "All",
+      clearFilter: "Clear filter",
       role: "Role",
       status: "Status",
       lastLogin: "Last Login",
@@ -144,7 +197,7 @@ export const superAdminUsersDictionaries: Record<
       userName: "User Name",
       email: "Email",
       role: "Role",
-      department: "Department",
+      department: "Scope",
       status: "Status",
       lastLogin: "Last Login",
       createdDate: "Created Date",
@@ -154,18 +207,28 @@ export const superAdminUsersDictionaries: Record<
       addNewUser: "Add New User",
       view: "View",
       edit: "Edit",
+      activate: "Activate",
+      deactivate: "Deactivate",
       suspend: "Suspend",
       resetPassword: "Reset Password",
       forcePasswordChange: "Force Password Change",
       sendWelcomeEmail: "Send Welcome Email",
       delete: "Delete",
+      cancel: "Cancel",
+      save: "Save",
     },
     roles: {
-      superAdmin: "Super Admin",
-      support: "Support",
-      sales: "Sales",
-      finance: "Finance",
-      viewer: "Viewer",
+      SUPER_ADMIN: "Super Admin",
+      PLATFORM_ADMIN: "Platform Admin",
+      SUPPORT_ADMIN: "Support Admin",
+      FINANCE_ADMIN: "Finance Admin",
+      READ_ONLY_ADMIN: "Read Only Admin",
+      CENTER_OWNER: "Center Owner",
+      CENTER_MANAGER: "Center Manager",
+      DOCTOR: "Doctor",
+      RECEPTIONIST: "Receptionist",
+      ACCOUNTANT: "Accountant",
+      STAFF: "Staff",
     },
     departments: {
       finance: "Finance",
@@ -176,6 +239,7 @@ export const superAdminUsersDictionaries: Record<
     },
     statuses: {
       active: "Active",
+      inactive: "Inactive",
       pending: "Pending",
       suspended: "Suspended",
     },
@@ -186,11 +250,47 @@ export const superAdminUsersDictionaries: Record<
       noamBar: "Noam Bar",
       saraLevi: "Sara Levi",
     },
+    form: {
+      addTitle: "Add user",
+      editTitle: "Edit user",
+      fullName: "Full Name",
+      email: "Email",
+      phone: "Phone",
+      temporaryPassword: "Temporary Password",
+      status: "Status",
+      platformRole: "Platform Role",
+      center: "Center",
+      centerRole: "Center Role",
+      optional: "Optional",
+      noPlatformRole: "No platform role",
+      noCenter: "No center",
+      noCenterRole: "No center role",
+    },
+    centerRoles: {
+      ACCOUNTANT: "Accountant",
+      CENTER_MANAGER: "Center Manager",
+      CENTER_OWNER: "Center Owner",
+      DOCTOR: "Doctor",
+      RECEPTIONIST: "Receptionist",
+      STAFF: "Staff",
+    },
     values: {
       mobileHint: "Mobile uses user cards with one Actions menu per user.",
       neverLoggedIn: "Never logged in",
       rolePreviewHint:
-        "Platform roles control RoyalCare staff access only, not center customer access.",
+        "Platform roles control RoyalCare staff access. Center roles connect users to a specific tenant center.",
+      loading: "Loading users...",
+      empty: "No users match the current filters.",
+      loadError: "Users could not be loaded. Try again.",
+      saved: "User saved successfully.",
+      statusUpdated: "User status updated.",
+      passwordReset: "Password reset successfully.",
+      temporaryPassword: "Temporary password",
+      copy: "Copy",
+      copied: "Copied",
+      copyFailed: "Copy failed. Please copy the password manually.",
+      close: "Close",
+      passwordResetWarning: "Save this password now. It will not be shown again.",
     },
   },
   ar: {
@@ -205,13 +305,13 @@ export const superAdminUsersDictionaries: Record<
       plans: "الباقات",
       users: "المستخدمون",
       notifications: "الإشعارات",
+      auditLogs: "سجل التدقيق",
       settings: "الإعدادات",
     },
     header: {
       eyebrow: "وصول المنصة",
       title: "إدارة المستخدمين",
-      subtitle:
-        "إدارة مستخدمي منصة رويال كير والأدوار والحالات والأقسام وإجراءات الوصول.",
+      subtitle: "إدارة مستخدمي رويال كير وأدوارهم وحالاتهم ووصولهم للمراكز.",
       language: "اللغة",
       account: "مدير المنصة",
     },
@@ -224,13 +324,14 @@ export const superAdminUsersDictionaries: Record<
     stats: {
       totalUsers: "إجمالي المستخدمين",
       activeUsers: "المستخدمون النشطون",
-      pendingUsers: "مستخدمون بانتظار التفعيل",
+      pendingUsers: "بانتظار التفعيل",
       suspendedUsers: "المستخدمون الموقوفون",
     },
     filters: {
       searchLabel: "بحث",
-      searchPlaceholder: "ابحث حسب الاسم أو البريد أو الدور",
+      searchPlaceholder: "ابحث بالاسم أو البريد",
       all: "الكل",
+      clearFilter: "مسح الفلتر",
       role: "الدور",
       status: "الحالة",
       lastLogin: "آخر دخول",
@@ -239,7 +340,7 @@ export const superAdminUsersDictionaries: Record<
       userName: "اسم المستخدم",
       email: "البريد الإلكتروني",
       role: "الدور",
-      department: "القسم",
+      department: "النطاق",
       status: "الحالة",
       lastLogin: "آخر دخول",
       createdDate: "تاريخ الإنشاء",
@@ -249,18 +350,28 @@ export const superAdminUsersDictionaries: Record<
       addNewUser: "إضافة مستخدم جديد",
       view: "عرض",
       edit: "تعديل",
+      activate: "تفعيل",
+      deactivate: "تعطيل",
       suspend: "إيقاف",
       resetPassword: "إعادة تعيين كلمة المرور",
       forcePasswordChange: "فرض تغيير كلمة المرور",
       sendWelcomeEmail: "إرسال بريد الترحيب",
       delete: "حذف",
+      cancel: "إلغاء",
+      save: "حفظ",
     },
     roles: {
-      superAdmin: "مدير عام",
-      support: "الدعم",
-      sales: "المبيعات",
-      finance: "المالية",
-      viewer: "مشاهد",
+      SUPER_ADMIN: "مدير عام",
+      PLATFORM_ADMIN: "مدير منصة",
+      SUPPORT_ADMIN: "مدير دعم",
+      FINANCE_ADMIN: "مدير مالي",
+      READ_ONLY_ADMIN: "مشاهد فقط",
+      CENTER_OWNER: "مالك المركز",
+      CENTER_MANAGER: "مدير المركز",
+      DOCTOR: "طبيب",
+      RECEPTIONIST: "موظف استقبال",
+      ACCOUNTANT: "محاسب",
+      STAFF: "موظف",
     },
     departments: {
       finance: "المالية",
@@ -271,6 +382,7 @@ export const superAdminUsersDictionaries: Record<
     },
     statuses: {
       active: "نشط",
+      inactive: "غير نشط",
       pending: "بانتظار التفعيل",
       suspended: "موقوف",
     },
@@ -281,12 +393,47 @@ export const superAdminUsersDictionaries: Record<
       noamBar: "نوعام بار",
       saraLevi: "سارة ليفي",
     },
+    form: {
+      addTitle: "إضافة مستخدم",
+      editTitle: "تعديل مستخدم",
+      fullName: "الاسم الكامل",
+      email: "البريد الإلكتروني",
+      phone: "الهاتف",
+      temporaryPassword: "كلمة مرور مؤقتة",
+      status: "الحالة",
+      platformRole: "دور المنصة",
+      center: "المركز",
+      centerRole: "دور المركز",
+      optional: "اختياري",
+      noPlatformRole: "بدون دور منصة",
+      noCenter: "بدون مركز",
+      noCenterRole: "بدون دور مركز",
+    },
+    centerRoles: {
+      ACCOUNTANT: "محاسب",
+      CENTER_MANAGER: "مدير المركز",
+      CENTER_OWNER: "مالك المركز",
+      DOCTOR: "طبيب",
+      RECEPTIONIST: "موظف استقبال",
+      STAFF: "موظف",
+    },
     values: {
-      mobileHint:
-        "في الجوال يظهر المستخدمون كبطاقات مع قائمة إجراءات واحدة لكل مستخدم.",
+      mobileHint: "في الجوال يظهر المستخدمون كبطاقات مع قائمة إجراءات واحدة.",
       neverLoggedIn: "لم يسجل الدخول",
       rolePreviewHint:
-        "أدوار المنصة تتحكم بوصول فريق رويال كير فقط، وليس وصول عملاء المراكز.",
+        "أدوار المنصة تتحكم بوصول فريق رويال كير. أدوار المراكز تربط المستخدم بمركز محدد.",
+      loading: "جار تحميل المستخدمين...",
+      empty: "لا يوجد مستخدمون مطابقون للفلاتر الحالية.",
+      loadError: "تعذر تحميل المستخدمين. حاول مرة أخرى.",
+      saved: "تم حفظ المستخدم بنجاح.",
+      statusUpdated: "تم تحديث حالة المستخدم.",
+      passwordReset: "تمت إعادة تعيين كلمة المرور.",
+      temporaryPassword: "كلمة المرور المؤقتة",
+      copy: "نسخ",
+      copied: "تم النسخ",
+      copyFailed: "تعذر النسخ. يرجى نسخ كلمة المرور يدويًا.",
+      close: "إغلاق",
+      passwordResetWarning: "احفظ كلمة المرور الآن، لن تظهر مرة أخرى.",
     },
   },
   he: {
@@ -301,13 +448,13 @@ export const superAdminUsersDictionaries: Record<
       plans: "תוכניות",
       users: "משתמשים",
       notifications: "התראות",
+      auditLogs: "יומן ביקורת",
       settings: "הגדרות",
     },
     header: {
       eyebrow: "גישת מערכת",
       title: "ניהול משתמשים",
-      subtitle:
-        "ניהול משתמשי פלטפורמת RoyalCare, תפקידים, סטטוסים, מחלקות ופעולות גישה.",
+      subtitle: "ניהול משתמשי RoyalCare, תפקידים, סטטוס וגישה למרכזים.",
       language: "שפה",
       account: "מנהל מערכת",
     },
@@ -320,13 +467,14 @@ export const superAdminUsersDictionaries: Record<
     stats: {
       totalUsers: "סך משתמשים",
       activeUsers: "משתמשים פעילים",
-      pendingUsers: "משתמשים ממתינים",
-      suspendedUsers: "משתמשים מושעים",
+      pendingUsers: "ממתינים להפעלה",
+      suspendedUsers: "משתמשים מושהים",
     },
     filters: {
       searchLabel: "חיפוש",
-      searchPlaceholder: "חיפוש לפי שם, אימייל או תפקיד",
+      searchPlaceholder: "חיפוש לפי שם או אימייל",
       all: "הכל",
+      clearFilter: "נקה סינון",
       role: "תפקיד",
       status: "סטטוס",
       lastLogin: "כניסה אחרונה",
@@ -335,7 +483,7 @@ export const superAdminUsersDictionaries: Record<
       userName: "שם משתמש",
       email: "אימייל",
       role: "תפקיד",
-      department: "מחלקה",
+      department: "תחום",
       status: "סטטוס",
       lastLogin: "כניסה אחרונה",
       createdDate: "תאריך יצירה",
@@ -345,18 +493,28 @@ export const superAdminUsersDictionaries: Record<
       addNewUser: "הוספת משתמש חדש",
       view: "צפייה",
       edit: "עריכה",
-      suspend: "השעיה",
+      activate: "הפעלה",
+      deactivate: "השבתה",
+      suspend: "השהיה",
       resetPassword: "איפוס סיסמה",
       forcePasswordChange: "חובת שינוי סיסמה",
       sendWelcomeEmail: "שליחת אימייל ברוכים הבאים",
       delete: "מחיקה",
+      cancel: "ביטול",
+      save: "שמירה",
     },
     roles: {
-      superAdmin: "Super Admin",
-      support: "תמיכה",
-      sales: "מכירות",
-      finance: "כספים",
-      viewer: "צופה",
+      SUPER_ADMIN: "מנהל על",
+      PLATFORM_ADMIN: "מנהל מערכת",
+      SUPPORT_ADMIN: "מנהל תמיכה",
+      FINANCE_ADMIN: "מנהל כספים",
+      READ_ONLY_ADMIN: "צפייה בלבד",
+      CENTER_OWNER: "בעלי המרכז",
+      CENTER_MANAGER: "מנהל מרכז",
+      DOCTOR: "רופא",
+      RECEPTIONIST: "קבלה",
+      ACCOUNTANT: "חשבונות",
+      STAFF: "צוות",
     },
     departments: {
       finance: "כספים",
@@ -367,8 +525,9 @@ export const superAdminUsersDictionaries: Record<
     },
     statuses: {
       active: "פעיל",
+      inactive: "לא פעיל",
       pending: "ממתין",
-      suspended: "מושעה",
+      suspended: "מושהה",
     },
     names: {
       amirHaddad: "אמיר חדאד",
@@ -377,12 +536,47 @@ export const superAdminUsersDictionaries: Record<
       noamBar: "נועם בר",
       saraLevi: "שרה לוי",
     },
+    form: {
+      addTitle: "הוספת משתמש",
+      editTitle: "עריכת משתמש",
+      fullName: "שם מלא",
+      email: "אימייל",
+      phone: "טלפון",
+      temporaryPassword: "סיסמה זמנית",
+      status: "סטטוס",
+      platformRole: "תפקיד מערכת",
+      center: "מרכז",
+      centerRole: "תפקיד במרכז",
+      optional: "אופציונלי",
+      noPlatformRole: "ללא תפקיד מערכת",
+      noCenter: "ללא מרכז",
+      noCenterRole: "ללא תפקיד מרכז",
+    },
+    centerRoles: {
+      ACCOUNTANT: "חשבונות",
+      CENTER_MANAGER: "מנהל מרכז",
+      CENTER_OWNER: "בעלי המרכז",
+      DOCTOR: "רופא",
+      RECEPTIONIST: "קבלה",
+      STAFF: "צוות",
+    },
     values: {
-      mobileHint:
-        "במובייל המשתמשים מוצגים ככרטיסים עם תפריט פעולות אחד לכל משתמש.",
+      mobileHint: "במובייל המשתמשים מוצגים ככרטיסים עם תפריט פעולות אחד.",
       neverLoggedIn: "לא התחבר",
       rolePreviewHint:
-        "תפקידי המערכת שולטים בגישת צוות RoyalCare בלבד, לא בגישת לקוחות המרכזים.",
+        "תפקידי מערכת שולטים בגישת צוות RoyalCare. תפקידי מרכז מחברים משתמש למרכז מסוים.",
+      loading: "טוען משתמשים...",
+      empty: "אין משתמשים שתואמים למסננים הנוכחיים.",
+      loadError: "לא ניתן לטעון משתמשים. נסו שוב.",
+      saved: "המשתמש נשמר בהצלחה.",
+      statusUpdated: "סטטוס המשתמש עודכן.",
+      passwordReset: "הסיסמה אופסה בהצלחה.",
+      temporaryPassword: "סיסמה זמנית",
+      copy: "העתק",
+      copied: "הועתק",
+      copyFailed: "ההעתקה נכשלה. יש להעתיק את הסיסמה ידנית.",
+      close: "סגירה",
+      passwordResetWarning: "שמור את הסיסמה כעת. היא לא תוצג שוב.",
     },
   },
 };

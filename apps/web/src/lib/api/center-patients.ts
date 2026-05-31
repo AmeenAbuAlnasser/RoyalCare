@@ -3,10 +3,21 @@ import { API_BASE_URL, ApiRequestError } from "./super-admin-centers";
 export type PatientStatus = "ACTIVE" | "INACTIVE" | "ARCHIVED";
 export type PatientGender = "MALE" | "FEMALE" | "OTHER" | "UNKNOWN";
 
+export type LinkedRecordCounts = {
+  appointments: number;
+  invoices: number;
+  payments: number;
+  followUps: number;
+  creditTransactions: number;
+};
+
 export type CenterPatient = {
   id: string;
   centerId: string;
   fullName: string;
+  fullNameAr: string | null;
+  fullNameHe: string | null;
+  fullNameEn: string | null;
   phone: string;
   email: string | null;
   gender: PatientGender;
@@ -14,6 +25,8 @@ export type CenterPatient = {
   nationalId: string | null;
   notes: string | null;
   status: PatientStatus;
+  canDelete: boolean;
+  linkedRecordCounts: LinkedRecordCounts;
   createdAt: string;
   updatedAt: string;
 };
@@ -22,6 +35,9 @@ export type PatientPayload = {
   dateOfBirth?: string | null;
   email?: string | null;
   fullName: string;
+  fullNameAr?: string | null;
+  fullNameHe?: string | null;
+  fullNameEn?: string | null;
   gender?: PatientGender;
   nationalId?: string | null;
   notes?: string | null;
@@ -109,5 +125,18 @@ export function updatePatientStatus(
   return request<CenterPatient>(`/patients/${patientId}/status`, {
     body: JSON.stringify({ status }),
     method: "PATCH",
+  });
+}
+
+export function generatePatientPortalToken(patientId: string) {
+  return request<{ token: string; createdAt: string }>(
+    `/patients/${patientId}/portal-token`,
+    { method: "POST" },
+  );
+}
+
+export function deleteTenantPatient(patientId: string) {
+  return request<{ deleted: boolean }>(`/patients/${patientId}`, {
+    method: "DELETE",
   });
 }

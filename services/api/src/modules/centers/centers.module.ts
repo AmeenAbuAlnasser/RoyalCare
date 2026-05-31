@@ -1,4 +1,7 @@
 import { Module } from '@nestjs/common';
+import { AuditModule } from '../audit/audit.module';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { AdminCentersController } from './admin-centers.controller';
 import {
   CentersAliasController,
   CentersController,
@@ -6,7 +9,12 @@ import {
 import { CentersService } from './centers.service';
 
 @Module({
-  controllers: [CentersController, CentersAliasController],
+  imports: [AuditModule, NotificationsModule],
+  controllers: [
+    AdminCentersController,
+    CentersController,
+    CentersAliasController,
+  ],
   providers: [CentersService],
   exports: [CentersService],
 })

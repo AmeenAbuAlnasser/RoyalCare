@@ -7,6 +7,7 @@ import { buttonClassName } from "@/components/ui/button-styles";
 import { useLanguage } from "@/i18n/LanguageProvider";
 import { formatDate } from "@/i18n/formatters";
 import {
+  deleteTenantService,
   getTenantService,
   updateTenantServiceStatus,
   type TenantService,
@@ -28,6 +29,8 @@ export function TenantServiceDetailsPage() {
   const [loadError, setLoadError] = useState(false);
   const [notice, setNotice] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -72,17 +75,32 @@ export function TenantServiceDetailsPage() {
     >
       {({ dictionary, session }) => {
         const canUpdate = hasTenantServicePermission(
-          session.role.key,
-          "services.update",
+          session.permissions,
+          "services:update",
         );
         const canArchive = hasTenantServicePermission(
-          session.role.key,
-          "services.archive",
+          session.permissions,
+          "services:archive",
         );
         const canActivate = hasTenantServicePermission(
-          session.role.key,
-          "services.activate",
+          session.permissions,
+          "services:status",
         );
+        const canDelete = hasTenantServicePermission(
+          session.permissions,
+          "services:delete",
+        );
+
+        const handleDelete = async () => {
+          if (!service) return;
+          setIsDeleting(true);
+          try {
+            await deleteTenantService(service.id);
+            router.push("/tenant/services");
+          } finally {
+            setIsDeleting(false);
+          }
+        };
 
         const changeStatus = async () => {
           if (!service) {
@@ -148,7 +166,61 @@ export function TenantServiceDetailsPage() {
                     : dictionary.common.activate}
                 </button>
               ) : null}
+              {service && canDelete ? (
+                service.safeDeleteAllowed ? (
+                  <button
+                    className={buttonClassName("danger", "md")}
+                    disabled={isSaving}
+                    onClick={() => setShowDeleteModal(true)}
+                    type="button"
+                  >
+                    {dictionary.services.deleteService}
+                  </button>
+                ) : (
+                  <button
+                    className={buttonClassName("danger", "md")}
+                    disabled
+                    title={dictionary.services.deleteServiceBlockedTooltip}
+                    type="button"
+                  >
+                    {dictionary.services.deleteService}
+                  </button>
+                )
+              ) : null}
             </div>
+
+            {showDeleteModal ? (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                <div className="w-full max-w-md rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-xl">
+                  <h3 className="text-base font-semibold text-[#0B2D5C]">
+                    {dictionary.services.deleteServiceConfirmTitle}
+                  </h3>
+                  <p className="mt-2 text-sm text-[#66758a]">
+                    {dictionary.services.deleteServiceConfirmBody}
+                  </p>
+                  <div className="mt-6 flex flex-wrap justify-end gap-3">
+                    <button
+                      className={buttonClassName("secondary", "md")}
+                      disabled={isDeleting}
+                      onClick={() => setShowDeleteModal(false)}
+                      type="button"
+                    >
+                      {dictionary.common.cancel}
+                    </button>
+                    <button
+                      className={buttonClassName("danger", "md")}
+                      disabled={isDeleting}
+                      onClick={handleDelete}
+                      type="button"
+                    >
+                      {isDeleting
+                        ? dictionary.common.saving
+                        : dictionary.services.deleteServiceConfirmButton}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             {notice ? (
               <p className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">

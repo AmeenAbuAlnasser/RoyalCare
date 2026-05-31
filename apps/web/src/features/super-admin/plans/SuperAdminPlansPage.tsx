@@ -222,7 +222,7 @@ export function SuperAdminPlansPage() {
               </thead>
               <tbody>
                 {planRows.map((plan) => (
-                  <tr className="border-t border-[#E5E7EB]" key={plan.id}>
+                  <tr className="border-t border-[#E5E7EB] transition-colors duration-100 hover:bg-[#F8FAFC]" key={plan.id}>
                     <td className="px-4 py-4 font-semibold text-[#0B2D5C]">{dictionary.plans[plan.nameKey]}</td>
                     <td className="whitespace-nowrap px-4 py-4 text-[#526176]">{formatCompactCurrency(plan.monthlyPrice, locale)}</td>
                     <td className="whitespace-nowrap px-4 py-4 text-[#526176]">{formatCompactCurrency(plan.yearlyPrice, locale)}</td>

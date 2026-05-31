@@ -5,34 +5,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../common/database/prisma.service';
+import { hasTenantPermission } from '../../../common/permissions/tenant-permissions';
+import { AuditService } from '../../audit/audit.service';
 import type { UseCreditDto } from '../dto/use-credit.dto';
 
-type CreditPermission = 'payments.view' | 'payments.create';
-
-const rolePermissions: Record<string, CreditPermission[]> = {
-  CENTER_OWNER: ['payments.view', 'payments.create'],
-  CENTER_MANAGER: ['payments.view', 'payments.create'],
-  ACCOUNTANT: ['payments.view', 'payments.create'],
-  RECEPTIONIST: ['payments.view', 'payments.create'],
-  DOCTOR: ['payments.view'],
-  STAFF: ['payments.view'],
-};
-
-const creditTxSelect = {
-  id: true,
-  centerId: true,
-  patientId: true,
-  createdByUserId: true,
-  amount: true,
-  type: true,
-  source: true,
-  relatedInvoiceId: true,
-  notes: true,
-  createdAt: true,
-  createdBy: {
-    select: { id: true, fullName: true, email: true },
-  },
-};
+type CreditPermission = 'payments:view' | 'payments:create';
 
 function isValidAmount(value: unknown): boolean {
   if (typeof value === 'number') return isFinite(value) && value > 0;
@@ -58,19 +35,24 @@ function calcNewStatus(
 
 @Injectable()
 export class TenantCreditService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   async useCredit(
     centerId: string,
-    roleKey: string,
+    permissions: string[],
     invoiceId: string,
     createdByUserId: string,
     dto: UseCreditDto,
   ) {
-    this.requirePermission(roleKey, 'payments.create');
+    this.requirePermission(permissions, 'payments:create');
 
     if (!isValidAmount(dto.amount))
-      throw validationFailed({ amount: 'Enter a valid amount greater than zero.' });
+      throw validationFailed({
+        amount: 'Enter a valid amount greater than zero.',
+      });
 
     const creditAmount = parseFloat(String(dto.amount));
     const notes =
@@ -82,7 +64,25 @@ export class TenantCreditService {
 
     const invoice = await prisma.invoice.findFirst({
       where: { id: invoiceId, centerId },
-      select: { id: true, patientId: true, amount: true, currency: true, status: true },
+      select: {
+        id: true,
+        patientId: true,
+        amount: true,
+        currency: true,
+        invoiceNumber: true,
+        status: true,
+        patient: {
+          select: {
+            fullName: true,
+            fullNameAr: true,
+            fullNameHe: true,
+            fullNameEn: true,
+          },
+        },
+        center: {
+          select: { name: true, nameAr: true, nameEn: true, nameHe: true },
+        },
+      },
     });
 
     if (!invoice)
@@ -94,7 +94,10 @@ export class TenantCreditService {
     if (invoice.status === 'CANCELLED')
       throw new BadRequestException({
         message: 'Validation failed',
-        errors: { invoice: 'Cannot apply credit to a cancelled invoice. Reopen it first.' },
+        errors: {
+          invoice:
+            'Cannot apply credit to a cancelled invoice. Reopen it first.',
+        },
       });
 
     if (invoice.status === 'PAID')
@@ -106,7 +109,14 @@ export class TenantCreditService {
     // Load patient's credit balance
     const patient = await prisma.patient.findFirst({
       where: { id: invoice.patientId, centerId },
-      select: { id: true, creditBalance: true },
+      select: {
+        id: true,
+        creditBalance: true,
+        fullName: true,
+        fullNameAr: true,
+        fullNameHe: true,
+        fullNameEn: true,
+      },
     });
 
     if (!patient)
@@ -152,7 +162,7 @@ export class TenantCreditService {
     const afterPayment = alreadyPaid + applied;
     const newStatus = calcNewStatus(afterPayment, invoiceTotal);
 
-    await prisma.$transaction([
+    const [creditTransaction] = await prisma.$transaction([
       prisma.creditTransaction.create({
         data: {
           centerId,
@@ -165,15 +175,43 @@ export class TenantCreditService {
           notes,
         },
       }),
-      prisma.patient.update({
-        where: { id: invoice.patientId },
+      prisma.patient.updateMany({
+        where: { id: invoice.patientId, centerId },
         data: { creditBalance: { decrement: applied } },
       }),
-      prisma.invoice.update({
-        where: { id: invoiceId },
+      prisma.invoice.updateMany({
+        where: { id: invoiceId, centerId },
         data: { status: newStatus },
       }),
     ]);
+
+    await this.auditService.log({
+      action: 'TENANT_CREDIT_USED',
+      actorUserId: createdByUserId,
+      centerId,
+      metadata: {
+        amount: applied.toFixed(2),
+        centerId,
+        creditAmount: applied.toFixed(2),
+        creditTransactionId: creditTransaction.id,
+        invoiceId,
+        invoiceNumber: invoice.invoiceNumber,
+        newStatus,
+        patientId: invoice.patientId,
+        patientName: patient.fullName || invoice.patient.fullName,
+        patientNameAr:
+          (patient.fullNameAr || invoice.patient.fullNameAr) ?? undefined,
+        patientNameHe:
+          (patient.fullNameHe || invoice.patient.fullNameHe) ?? undefined,
+        patientNameEn:
+          (patient.fullNameEn || invoice.patient.fullNameEn) ?? undefined,
+        centerName: invoice.center.name,
+        centerNameAr: invoice.center.nameAr ?? undefined,
+        centerNameEn: invoice.center.nameEn ?? undefined,
+        centerNameHe: invoice.center.nameHe ?? undefined,
+        source: 'TENANT_BILLING',
+      },
+    });
 
     const updatedPatient = await prisma.patient.findFirst({
       where: { id: invoice.patientId, centerId },
@@ -191,8 +229,11 @@ export class TenantCreditService {
     };
   }
 
-  private requirePermission(roleKey: string, permission: CreditPermission) {
-    if (!rolePermissions[roleKey]?.includes(permission)) {
+  private requirePermission(
+    permissions: string[],
+    permission: CreditPermission,
+  ) {
+    if (!hasTenantPermission(permissions, permission)) {
       throw new ForbiddenException({
         message: 'Permission denied',
         errors: { permission: `Missing permission: ${permission}` },

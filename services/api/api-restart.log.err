@@ -1,0 +1,45 @@
+[31m[Nest] 10456  - [39m05/30/2026, 2:05:27 AM [31m  ERROR[39m [38;5;3m[ExceptionsHandler] [39mPrismaClientKnownRequestError: 
+Invalid `prisma.user.findFirst()` invocation in
+C:\Users\DVDSTORE\Desktop\RoyalCare\services\api\dist\modules\permissions\services\permissions.service.js:38:32
+
+  35 await this.ensurePlatformRbacFoundation();
+  36 const prisma = await this.prisma.getClient();
+  37 if (userId) {
+→ 38     return prisma.user.findFirst(
+Invalid input value: invalid input syntax for type uuid: "test"
+    at zr.handleRequestError (C:\Users\DVDSTORE\Desktop\RoyalCare\packages\database\node_modules\[4m@prisma\client[24m\runtime\client.js:65:8286)
+    at zr.handleAndLogRequestError (C:\Users\DVDSTORE\Desktop\RoyalCare\packages\database\node_modules\[4m@prisma\client[24m\runtime\client.js:65:7581)
+    at zr.request (C:\Users\DVDSTORE\Desktop\RoyalCare\packages\database\node_modules\[4m@prisma\client[24m\runtime\client.js:65:7288)
+[90m    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)[39m
+    at async a (C:\Users\DVDSTORE\Desktop\RoyalCare\packages\database\node_modules\[4m@prisma\client[24m\runtime\client.js:75:6862)
+    at async PermissionsService.getUserPermissions [90m(C:\Users\DVDSTORE\Desktop\RoyalCare\services\api\[39mdist\modules\permissions\services\permissions.service.js:63:22[90m)[39m
+    at async PermissionsService.userHasPermissions [90m(C:\Users\DVDSTORE\Desktop\RoyalCare\services\api\[39mdist\modules\permissions\services\permissions.service.js:108:33[90m)[39m
+    at async PermissionGuard.canActivate [90m(C:\Users\DVDSTORE\Desktop\RoyalCare\services\api\[39mdist\modules\permissions\guards\permission.guard.js:40:32[90m)[39m
+    at async GuardsConsumer.tryActivate [90m(C:\Users\DVDSTORE\Desktop\RoyalCare\services\api\[39mnode_modules\[4m@nestjs\core[24m\guards\guards-consumer.js:22:17[90m)[39m
+    at async canActivateFn [90m(C:\Users\DVDSTORE\Desktop\RoyalCare\services\api\[39mnode_modules\[4m@nestjs\core[24m\router\router-execution-context.js:135:33[90m)[39m {
+  code: [32m'P2007'[39m,
+  meta: {
+    modelName: [32m'User'[39m,
+    driverAdapterError: DriverAdapterError: invalid input syntax for type uuid: "test"
+        at PrismaPgAdapter.onError [90m(C:\Users\DVDSTORE\Desktop\RoyalCare\services\api\[39mnode_modules\[4m@prisma\adapter-pg[24m\dist\index.js:678:11[90m)[39m
+        at PrismaPgAdapter.performIO [90m(C:\Users\DVDSTORE\Desktop\RoyalCare\services\api\[39mnode_modules\[4m@prisma\adapter-pg[24m\dist\index.js:673:12[90m)[39m
+    [90m    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)[39m
+        at async PrismaPgAdapter.queryRaw [90m(C:\Users\DVDSTORE\Desktop\RoyalCare\services\api\[39mnode_modules\[4m@prisma\adapter-pg[24m\dist\index.js:604:30[90m)[39m
+        at async e.interpretNode (C:\Users\DVDSTORE\Desktop\RoyalCare\packages\database\node_modules\[4m@prisma\client[24m\runtime\client.js:11:44621)
+        at async e.interpretNode (C:\Users\DVDSTORE\Desktop\RoyalCare\packages\database\node_modules\[4m@prisma\client[24m\runtime\client.js:11:45065)
+        at async e.interpretNode (C:\Users\DVDSTORE\Desktop\RoyalCare\packages\database\node_modules\[4m@prisma\client[24m\runtime\client.js:11:46285)
+        at async e.run (C:\Users\DVDSTORE\Desktop\RoyalCare\packages\database\node_modules\[4m@prisma\client[24m\runtime\client.js:11:43335)
+        at async e.execute (C:\Users\DVDSTORE\Desktop\RoyalCare\packages\database\node_modules\[4m@prisma\client[24m\runtime\client.js:57:815)
+        at async jt.request (C:\Users\DVDSTORE\Desktop\RoyalCare\packages\database\node_modules\[4m@prisma\client[24m\runtime\client.js:58:2401) {
+      cause: {
+        originalCode: [32m'22P02'[39m,
+        originalMessage: [32m'invalid input syntax for type uuid: "test"'[39m,
+        kind: [32m'InvalidInputValue'[39m,
+        message: [32m'invalid input syntax for type uuid: "test"'[39m
+      }
+    }
+  },
+  clientVersion: [32m'7.8.0'[39m
+}
+(node:10456) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)

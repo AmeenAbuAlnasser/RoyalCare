@@ -1,7 +1,24 @@
 # RoyalCare - API Map
 
-Last updated: 2026-04-29
-Status: Dedicated tenant login, tenant patients, services, appointments, and tenant staff API foundations documented
+Last updated: 2026-05-26
+Status: Dedicated tenant login, tenant patients, services, appointments, tenant staff, booking requests, tenant notifications, tenant website builder settings, center website gallery/reviews/before-after, and center website analytics routes documented
+
+Latest center analytics endpoints:
+- `POST /api/v1/public/centers/:slug/track` — fire-and-forget public event ingestion (no auth)
+- `GET /api/v1/tenant/marketing/analytics` — center website analytics dashboard (session auth, `reports:view`)
+
+Latest center website builder endpoints:
+- `GET /api/v1/tenant/before-after`
+- `POST /api/v1/tenant/before-after`
+- `PATCH /api/v1/tenant/before-after/:id`
+- `DELETE /api/v1/tenant/before-after/:id`
+- `POST /api/v1/tenant/before-after/upload`
+- `GET /api/v1/public/centers/:slug/before-after`
+
+Rules:
+- Tenant before/after endpoints derive `centerId` from the authenticated tenant session.
+- Public before/after endpoint resolves `slug` to the center id and returns published items only.
+- Public response does not expose tenant/admin-only fields.
 
 ## 1. API Principles
 
@@ -118,6 +135,32 @@ Currently implemented:
 - `GET /api/v1/tenant/billing/:invoiceId`
 - `PATCH /api/v1/tenant/billing/:invoiceId/status`
 - `GET /api/v1/tenant/billing/:invoiceId/payments`
+- `GET /api/v1/tenant/public-profile`
+- `PATCH /api/v1/tenant/public-profile`
+- `POST /api/v1/tenant/public-profile/upload-image`
+- `GET /api/v1/tenant/center-gallery`
+- `POST /api/v1/tenant/center-gallery/upload`
+- `DELETE /api/v1/tenant/center-gallery/:id`
+- `PATCH /api/v1/tenant/center-gallery/reorder`
+- `GET /api/v1/tenant/reviews`
+- `POST /api/v1/tenant/reviews`
+- `PATCH /api/v1/tenant/reviews/:id`
+- `DELETE /api/v1/tenant/reviews/:id`
+- `GET /api/v1/public/centers/:slug`
+- `GET /api/v1/public/centers/:slug/gallery`
+- `GET /api/v1/public/centers/:slug/reviews`
+
+Public center profile response notes:
+- `GET /api/v1/public/centers/:slug` returns public-safe center website fields from `BrandingSettings`, including logo, cover image, primary/secondary colors, localized short/full descriptions, localized slogans, localized address, WhatsApp, phone, email, Google Maps URL, localized working-hours text, and public social links.
+- `GET /api/v1/public/centers/:slug` also returns public-safe website builder fields `websiteSectionOrder` and `websiteSectionVisibility`; these control `/c/[slug]` homepage section order and navbar/footer visibility.
+- It must never include tenant-private settings, admin-only notes, or marketing server-side tokens such as `metaConversionApiToken`.
+- `GET/PATCH /api/v1/tenant/public-profile` persists the same builder fields for the authenticated center only. Tenant clients must not provide or trust `centerId`.
+- `GET /api/v1/public/centers/:slug/gallery` returns only center-scoped public gallery image ids, image URLs, and sort order for active/public/subscribed centers.
+- `GET /api/v1/public/centers/:slug/reviews` returns only published center-scoped reviews with customer name, rating, localized comments, and sort order. It never exposes phone/email/private patient data.
+- The web center website routes `/c/[slug]`, `/c/[slug]/about`, `/c/[slug]/services`, `/c/[slug]/contact`, `/c/[slug]/gallery`, and `/c/[slug]/reviews` all use public-safe center data.
+- `/c/[slug]/services` renders all active public services from this response; `/c/[slug]/about` renders public full description, working hours, and center info; `/c/[slug]/contact` renders public contact/social/map fields.
+- `/c/[slug]` renders a Gallery section only when `GET /api/v1/public/centers/:slug/gallery` returns images; `/c/[slug]/gallery` renders the full center gallery.
+- `/c/[slug]` renders a Reviews section only when `GET /api/v1/public/centers/:slug/reviews` returns published reviews; `/c/[slug]/reviews` renders the full public reviews page.
 - `POST /api/v1/tenant/billing/:invoiceId/payments`
 - `GET /api/v1/patients`
 - `POST /api/v1/patients`
@@ -150,7 +193,29 @@ Currently implemented:
 - `GET /api/v1/super-admin/subscriptions`
 - `POST /api/v1/super-admin/subscriptions`
 - `GET /api/v1/super-admin/subscriptions/:subscriptionId`
+- `GET /api/v1/super-admin/subscriptions/:subscriptionId/timeline`
+- `POST /api/v1/super-admin/subscriptions/:subscriptionId/manual-whatsapp-log`
+- `GET /api/v1/super-admin/subscriptions/invoices`
+- `POST /api/v1/super-admin/subscriptions/invoices`
+- `PATCH /api/v1/super-admin/subscriptions/invoices/:invoiceId/mark-paid`
+- `PATCH /api/v1/super-admin/subscriptions/invoices/:invoiceId/cancel`
+- `GET /api/v1/super-admin/subscriptions/invoices/:invoiceId/pdf`
+- `GET /api/v1/super-admin/subscriptions/lifecycle-job/status`
+- `POST /api/v1/super-admin/subscriptions/run-lifecycle-job`
 - `GET /api/v1/super-admin/centers/:centerId/subscription`
+- `GET /api/v1/tenant/subscription/invoices`
+- `GET /api/v1/tenant/reports/financial`
+- `GET /api/v1/public/centers/:slug` - returns public center profile, active services, and active public providers.
+- `GET /api/v1/public/centers/:slug/gallery` - returns public-safe gallery images scoped by the resolved center slug.
+- `GET /api/v1/public/centers/:slug/reviews` - returns published public-safe reviews scoped by the resolved center slug.
+- `GET /api/v1/public/centers/:slug/availability?serviceId=&date=&providerId=` - returns availability slots with unavailable reasons; `providerId` is optional.
+- `POST /api/v1/public/centers/:slug/booking-requests` - accepts optional `providerId` and revalidates availability with the selected provider.
+- `GET /api/v1/tenant/booking-requests`
+- `PATCH /api/v1/tenant/booking-requests/:id/accept`
+- `PATCH /api/v1/tenant/booking-requests/:id/reject`
+- `GET /api/v1/tenant/notifications`
+- `GET /api/v1/tenant/notifications/stream`
+- `PATCH /api/v1/tenant/notifications/:id/read`
 
 Purpose:
 - Basic service health check for local development, deployment checks, and future monitoring.
@@ -168,6 +233,7 @@ Notes:
 - Centers, Users, Subscriptions, and platform RBAC endpoints are the first real database-backed foundation endpoints.
 - Tenant Patients and Tenant Services endpoints are protected by the signed center session cookie and always derive `centerId` from the authenticated center staff session.
 - Tenant Appointments endpoints are protected by the signed center session cookie and always derive `centerId` from the authenticated center staff session.
+- Public booking creation creates a `BOOKING_REQUEST_CREATED` Center Admin in-app notification with `actionUrl: "/tenant/booking-requests"`, emits it through the tenant notification SSE stream, and returns `bookingRequestId` for same-browser UI refresh events.
 - Permission guards now protect the implemented Super Admin Centers and Users actions.
 - Full authentication and tenant-aware request context still need to be added before production exposure.
 
@@ -279,6 +345,27 @@ Security:
 - Invoice responses contain no `passwordHash`, token, secret, or auth metadata fields.
 - `invoice.amount` and `service.price` are serialized as strings (from Prisma `Decimal`) in all responses.
 
+## 4.4 Tenant Financial Reports API
+
+Implemented endpoint:
+- `GET /api/v1/tenant/reports/financial` - returns Center Admin financial report cards and chart datasets for the authenticated center only.
+
+Query:
+- `period=today|last7days|month|custom`
+- `from=YYYY-MM-DD` and `to=YYYY-MM-DD` when `period=custom`
+
+Response:
+- `cards`: `revenueToday`, `revenueThisMonth`, `paidInvoices`, `pendingInvoices`, `overdueInvoices`, `totalPatientCredit`, and `averageInvoiceValue`.
+- `charts`: `revenueByDay`, `revenueByPaymentStatus`, `revenueByService`, and `topPatientsBySpending`.
+- `currency`, `periodStart`, and `periodEnd`.
+
+Rules:
+- Uses the authenticated center staff session and derives `centerId` server-side.
+- Requires `reports:view`.
+- Excludes `CANCELLED` invoices from report invoice and revenue calculations.
+- Includes both cash payments and `CREDIT_USE` patient credit usage in revenue charts and top-patient spending.
+- Existing `GET /api/v1/tenant/billing/summary` and `GET /api/v1/tenant/reports/top-patients` remain available for compatibility.
+
 ## 5. Super Admin - Centers
 
 Endpoints:
@@ -359,6 +446,8 @@ Endpoints:
 - `GET /api/v1/super-admin/subscriptions` - implemented
 - `POST /api/v1/super-admin/subscriptions` - implemented
 - `GET /api/v1/super-admin/subscriptions/:subscriptionId` - implemented
+- `GET /api/v1/super-admin/subscriptions/lifecycle-job/status` - implemented
+- `POST /api/v1/super-admin/subscriptions/run-lifecycle-job` - implemented
 - `GET /api/v1/super-admin/centers/:centerId/subscription` - implemented
 - `PATCH /api/v1/super-admin/centers/:centerId/subscription`
 
@@ -367,6 +456,8 @@ Implemented foundation behavior:
 - View one subscription.
 - Create a subscription for a center.
 - Get the latest subscription for a center.
+- Monitor subscription lifecycle automation status.
+- Run the subscription lifecycle job manually for QA/operations.
 
 Permissions:
 - `manage:plans`
@@ -382,20 +473,27 @@ Endpoints:
 - `GET /api/v1/super-admin/users` - implemented
 - `POST /api/v1/super-admin/users` - implemented
 - `GET /api/v1/super-admin/users/:userId` - implemented
+- `PATCH /api/v1/super-admin/users/:userId` - implemented
+- `PATCH /api/v1/super-admin/users/:userId/status` - implemented
+- `POST /api/v1/super-admin/users/:userId/reset-password` - implemented
 - `POST /api/v1/super-admin/users/:userId/center-roles` - implemented
 - `GET /api/v1/permissions/me` - implemented
 - `GET /api/v1/permissions/platform-roles` - implemented
 - `POST /api/v1/permissions/platform-users/:userId/roles` - implemented
 
 Implemented foundation behavior:
-- List users with pagination, search, and status filters.
+- List users with pagination, search, status, and role filters plus real status counters.
 - View one user with owned centers and role assignments.
-- Create a user with email or phone identity.
-- Link a user to a center role through `UserRole.centerId`.
+- Create a user with full name, email, temporary password, status, optional platform role, and optional center role.
+- Update user full name, email, phone, and status.
+- Activate/deactivate/suspend users through the status endpoint; no hard delete is used in the Super Admin UI.
+- Reset user passwords by hashing the new temporary password and returning the temporary value only for the reset workflow.
+- Link a user to a center role through `UserRole.centerId`, accepting a center role key and creating the center system role if missing.
 - Seed platform permissions and default roles on API startup.
 - Resolve current platform permissions for the development Super Admin user.
 - Assign implemented platform roles to users through `UserRole.centerId = null`.
 - Protected endpoints return `403 Forbidden` when the current platform user lacks the required permission.
+- User responses select safe fields and never include `passwordHash`.
 
 Permissions:
 - `view:users`
@@ -445,6 +543,7 @@ Permissions:
 Endpoints:
 - `GET /api/v1/admin/settings`
 - `PATCH /api/v1/admin/settings`
+- `GET /api/v1/public/settings`
 - `GET /api/v1/admin/branding`
 - `PATCH /api/v1/admin/branding`
 - `POST /api/v1/admin/branding/logo`
@@ -454,6 +553,11 @@ Permissions:
 - `settings.update`
 - `branding.read`
 - `branding.update`
+
+Public website appearance update:
+- `GET/PATCH /api/v1/admin/settings` now includes non-secret public website appearance keys for site name, public logo/favicon/hero/footer images, support phone/WhatsApp/email, social links, and AR/EN/HE landing CTA text.
+- `GET /api/v1/public/settings` exposes only `public_*` settings for the public web frontend and does not require authentication.
+- Public social links are optional; empty values should be hidden by the frontend.
 
 ## 11. Center Admin - Users and Roles
 
@@ -692,12 +796,445 @@ Rules:
 ## 22. Audit and Backup API
 
 Endpoints:
-- `GET /api/v1/super-admin/audit-log`
+- `GET /api/v1/super-admin/audit-logs`
 - `GET /api/v1/admin/audit-log`
 - `GET /api/v1/super-admin/backups`
 - `POST /api/v1/super-admin/backups`
 - `GET /api/v1/super-admin/backups/:backupId`
 
+Implemented Super Admin audit logs:
+- `GET /api/v1/super-admin/audit-logs`
+- Supports filters: `actorUserId`, `actorSearch`, `targetUserId`, `targetSearch`, `centerId`, `action`, `dateFrom`, `dateTo`, `page`, `pageSize`.
+- With no filters, returns the latest 50 logs ordered by `createdAt desc`.
+- Center status updates write `CENTER_STATUS_CHANGED` audit rows after successful `PATCH /api/v1/admin/centers/:centerId/status`.
+- Super Admin user status updates write `USER_STATUS_CHANGED` audit rows after successful `PATCH /api/v1/super-admin/users/:userId/status`.
+- Super Admin user edits write `USER_UPDATED` audit rows after successful `PATCH /api/v1/super-admin/users/:userId`.
+- Super Admin password resets write `PASSWORD_RESET` audit rows after successful `POST /api/v1/super-admin/users/:userId/reset-password`.
+- Tenant staff status updates write `TENANT_STAFF_STATUS_CHANGED` audit rows after successful `PATCH /api/v1/tenant/staff/:staffId/status`.
+- `POST /api/v1/admin/centers/:centerId/login-as` tenant sessions include optional `impersonatorUserId`; tenant audit logs use it to show the original Super Admin actor while preserving the tenant session user in metadata.
+
 Needs Confirmation:
 - Whether center admins can view audit logs.
 - Whether restore actions are API-triggered or operational only.
+
+## 23. Tenant RBAC APIs
+
+Endpoints:
+- `GET /api/v1/tenant/roles`
+- `GET /api/v1/tenant/roles/:roleId/permissions`
+- `PATCH /api/v1/tenant/roles/:roleId/permissions`
+- `GET /api/v1/auth/center/me`
+- `GET /api/v1/permissions/me`
+
+Rules:
+- Tenant role-permission endpoints are scoped to the authenticated center session.
+- `PATCH /api/v1/tenant/roles/:roleId/permissions` stores canonical colon permission keys.
+- `GET /api/v1/auth/center/me` returns the logged-in center user's effective `permissions` array.
+- `GET /api/v1/permissions/me` remains the platform permissions endpoint for Super Admin headers, but when a tenant center session cookie is present it returns the tenant center session with normalized effective permissions.
+- Tenant operational APIs must enforce the same effective permission keys returned in the tenant session.
+
+## 24. Tenant Dashboard API
+
+Endpoints:
+- `GET /api/v1/tenant/dashboard/stats`
+
+Response:
+- `patients`
+- `appointments`
+- `services`
+- `staff`
+- `todayActivity.appointmentsToday`
+- `todayActivity.upcomingNextTwoHours`
+- `todayActivity.noShow`
+- `alerts.upcomingSoon`
+- `alerts.patientsWithCredit`
+- `alerts.pendingInvoices`
+- `recentAppointments`
+- `recentInvoices`
+
+Rules:
+- Uses the authenticated tenant center session cookie.
+- Counts `Patient`, `Appointment`, and `Service` by the session `centerId`.
+- Counts center staff through same-center `UserRole` rows for tenant staff roles, excluding only revoked assignments and deleted users.
+- Does not accept `centerId` from the frontend.
+
+## 24.1 Tenant Subscription Access Control
+
+Backend enforcement:
+- Tenant write requests are checked by `TenantSubscriptionAccessMiddleware`.
+- Protected tenant write surfaces include patients, tenant appointments, tenant billing/payments/credit, tenant services, tenant staff, and tenant role permissions.
+- `GET`, `HEAD`, and `OPTIONS` requests remain readable for expired centers.
+- `POST /api/v1/tenant/subscription/renewal-request` and `POST /api/v1/auth/center/logout` remain allowed.
+- `ACTIVE` and `TRIALING` subscriptions allow writes.
+- `EXPIRING_SOON` is computed from the latest subscription period end and allows writes with frontend warning only.
+- `EXPIRED` blocks write methods with `403 SUBSCRIPTION_EXPIRED`.
+- `SUSPENDED` and `CANCELLED` block write methods with `403 SUBSCRIPTION_SUSPENDED`.
+
+Session response:
+- `GET /api/v1/auth/center/me` and tenant-mode `GET /api/v1/permissions/me` include `subscriptionAccess` with `status`, `planName`, `daysRemaining`, `isExpiringSoon`, `isExpired`, and `isSuspended`.
+
+## 25. Super Admin Centers API
+
+Endpoints:
+- `GET /api/v1/admin/centers`
+- `GET /api/v1/admin/centers/:centerId`
+- `PATCH /api/v1/admin/centers/:centerId/status`
+- `POST /api/v1/admin/centers/:centerId/login-as`
+- `POST /api/v1/admin/centers/:centerId/manager`
+
+Response:
+- List rows return `id`, `name`, `slug`, `status`, `createdAt`, and `usersCount`.
+- Details returns the same center fields plus safe center users (`id`, `fullName`, `email`, `phone`, `role`, `roleName`, `status`, `assignmentStatus`, `createdAt`).
+
+Rules:
+- Requires an explicit Super Admin platform user header.
+- Only users assigned the platform `super_admin` role can access these endpoints.
+- Tenant sessions do not grant access.
+- User responses must never include `passwordHash`.
+- `POST /api/v1/admin/centers/:centerId/login-as` selects the center owner or first active center manager, refuses platform Super Admin targets, creates a tenant center session cookie, returns `token` and `redirectUrl`, and writes an internal audit note.
+- `POST /api/v1/admin/centers/:centerId/manager` creates or assigns an active `CENTER_MANAGER` for the center using a required temporary password and returns a safe user summary.
+
+## 26. Super Admin Analytics Dashboard API
+
+Endpoints:
+- `GET /api/v1/super-admin/analytics/dashboard`
+
+Response:
+- `centers`: `totalCenters`, `activeCenters`, `inactiveCenters`, `recentlyCreatedCenters`, `latestCenters`
+- `users`: `totalUsers`, `activeUsers`, `inactiveUsers`, `superAdminsCount`, `centerAdminsCount`
+- `appointments`: `totalAppointments`, `todayAppointments`, `completedAppointments`, `cancelledAppointments`, `pendingAppointments`, `appointmentsThisMonth`, `appointmentsPreviousMonth`, `appointmentsByCenter`
+- `billing`: `totalInvoices`, `paidInvoices`, `pendingInvoices`, `partialInvoices`, `cancelledInvoices`, `totalPaidAmount`, `totalOutstandingAmount`, `totalPatientCredit`, `revenueThisMonth`, `revenuePreviousMonth`, `revenueByCenter`
+- `audit`: `latestAuditLogs`, `sensitiveActionsCount`, `mostActiveAdmins`, `recentLoginAsCenterActions`
+- `insights`: `alerts`, `highlights`, `recommendations`
+
+Rules:
+- Requires `PermissionGuard` and platform permission `view:reports`.
+- Requires an explicit `x-royalcare-super-admin-user-id` header for protected Super Admin access.
+- Uses existing Prisma models only: `Center`, `User`, `UserRole`, `Role`, `Appointment`, `Invoice`, `Payment`, `Patient`, and `AuditLog`.
+- Revenue totals are based on payments linked to non-cancelled invoices; `CANCELLED` invoices are excluded from all revenue totals.
+- Audit slices reuse the enriched audit response fields used by `GET /api/v1/super-admin/audit-logs`.
+- `latestCenters` is included for the Super Admin dashboard recent-centers panel and returns safe center summaries only: `id`, `name`, `slug`, `status`, `createdAt`, `ownerName`, `ownerEmail`, and `plan`.
+- Smart insights are rule-based only and return translated EN/AR/HE messages. Alerts cover no active centers, centers with no appointments in the last 7 days, revenue drops, cancelled invoices exceeding paid invoices, and high same-day sensitive action counts. Highlights cover top center by revenue, top center by appointments, most active admin, and revenue growth. Recommendations cover inactive centers, high cancellation review, inactive users, and centers with no recent appointment activity.
+- Responses return safe zero/default values when tables are empty and never expose password hashes or tokens.
+
+## 27. Super Admin Subscription Timeline API
+
+Endpoint:
+- `GET /api/v1/super-admin/subscriptions/:id/timeline`
+- `POST /api/v1/super-admin/subscriptions/:id/manual-whatsapp-log`
+
+ID handling:
+- `:id` may be a direct subscription id.
+- If no subscription exists with that id, the service treats `:id` as a center id and loads the latest subscription for that center.
+
+Response:
+- `subscriptionId`
+- `centerId`
+- `data[]` sorted by `createdAt` descending
+
+Timeline item shape:
+- `id`
+- `type`
+- `title`
+- `description`
+- `actorName`
+- `actorType`
+- `createdAt`
+- `metadata`
+
+Sources:
+- Subscription row creation.
+- Subscription audit logs: `SUBSCRIPTION_UPDATED`, `SUBSCRIPTION_STATUS_CHANGED`, `SUBSCRIPTION_RENEWAL_REQUESTED`.
+- Subscription notifications: `SUBSCRIPTION_EXPIRING`, `SUBSCRIPTION_EXPIRED`, `SUBSCRIPTION_RENEWAL_REQUEST`.
+- WhatsApp manual notification logs with metadata actions `OPENED_WHATSAPP` and `COPIED_MESSAGE`.
+
+Rules:
+- Timeline entries are normalized to user-facing lifecycle event types such as created, renewed, suspended, cancelled, expired, renewal request, WhatsApp opened/copied, phone updated, plan changed, trial started, and trial ended.
+- Duplicate entries with the same type, timestamp, and description are filtered.
+- No password hashes, tokens, or sensitive fields are returned.
+
+## 28. Super Admin Notification Center API
+
+Endpoints:
+- `GET /api/v1/super-admin/notifications`
+- `PATCH /api/v1/super-admin/notifications/:id/read`
+- `PATCH /api/v1/super-admin/notifications/read-all`
+
+List query:
+- `page`, `pageSize`
+- `unreadOnly=true`
+- `category=all|subscriptions|renewal_requests|system_alerts`
+- `type`, `status`, `centerId`
+
+Response:
+- `data[]`: `id`, `type`, `title`, `body`, `status`, `centerId`, `centerName`, `createdAt`, `readAt`, `actionUrl`, `metadata`, safe `center`, and WhatsApp manual attempt summary.
+- `stats`: total, pending, sent, failed, sentToday, unread.
+
+Rules:
+- Requires Super Admin/report permission through existing `PermissionGuard`.
+- Only `targetAudience=SUPER_ADMIN` notifications are returned.
+- Read operations update `readAt`/`readByUserId`; they do not delete notifications.
+- Super Admin subscription endpoints are protected by the platform permission guard:
+  - Read/list/timeline: `view:reports`
+  - Create/manual WhatsApp logging: `manage:subscriptions`
+- Manual WhatsApp logging stores a `WHATSAPP` notification log and appears in the subscription timeline.
+
+## 29. Tenant Schedule Management API
+
+Endpoints:
+- `GET /api/v1/tenant/schedule`
+- `PATCH /api/v1/tenant/schedule/center-hours`
+- `POST /api/v1/tenant/schedule/closed-days`
+- `DELETE /api/v1/tenant/schedule/closed-days/:id`
+- `GET /api/v1/tenant/schedule/providers/:providerId`
+- `PATCH /api/v1/tenant/schedule/providers/:providerId/hours`
+- `POST /api/v1/tenant/schedule/providers/:providerId/leave`
+- `DELETE /api/v1/tenant/schedule/providers/leave/:id`
+
+Rules:
+- Requires an active tenant session and tenant permission `settings:view`.
+- All reads and writes are scoped by the session `centerId`.
+- Public booking availability and booking submission can pass `providerId`; the backend validates the provider belongs to the public center and is active.
+- Schedule availability uses center hours/closed days, provider working hours, provider leave, existing appointments, pending/accepted booking requests, service duration, and service `bufferMinutes`.
+- `GET` seeds default center weekly hours `09:00` to `17:30` for all seven days if no center hours exist yet.
+- Center hours, closed days, provider hours, and provider leave use the existing schedule models consumed by `ScheduleService`.
+- Invalid time ranges where end time is not after start time return structured validation errors.
+
+## 30. Public Branding Upload API
+
+Endpoint:
+- `POST /api/v1/admin/uploads/public-image`
+
+Request:
+- Super Admin only through the existing `x-royalcare-super-admin-user-id` platform header check.
+- `multipart/form-data`
+- File field: `file`
+
+Validation:
+- Accepted MIME types: `image/png`, `image/jpeg`, `image/webp`, `image/svg+xml`.
+- Maximum size: 2MB.
+
+Response:
+- `{ "url": "/uploads/branding/<filename>" }`
+
+Storage:
+- Files are written to `apps/web/public/uploads/branding/` so the existing web app can serve them as public assets under `/uploads/branding/...`.
+
+Usage:
+- Super Admin Public Website Appearance settings use this endpoint for `logoUrl`, `faviconUrl`, `heroImageUrl`, and `footerLogoUrl`.
+
+## 31. Tenant Marketing Settings API
+
+Endpoints:
+- `GET /api/v1/tenant/settings/marketing`
+- `PATCH /api/v1/tenant/settings/marketing`
+- `POST /api/v1/tenant/settings/marketing/test-meta-capi`
+- `GET /api/v1/tenant/settings/marketing/logs?limit=20`
+
+Request/response fields:
+- `metaPixelId`
+- `metaConversionApiToken` in PATCH requests only; GET/PATCH responses return `metaConversionApiToken: null` plus `hasMetaConversionApiToken`
+- `tiktokPixelId`
+- `snapPixelId`
+- `ga4Id`
+- `gtmId`
+- `customHeadScript`
+- `customBodyScript`
+- `updatedAt` in responses
+
+Rules:
+- Requires a valid center session.
+- Requires tenant permission `settings:view`.
+- All reads/writes use `session.center.id`; no client-provided `centerId` is accepted.
+- PATCH upserts the one settings row for the center and normalizes blank strings to `null`.
+- Omitting `metaConversionApiToken` during PATCH preserves the existing saved token; sending `null` or an empty string clears it; sending a non-empty string replaces it.
+- `metaConversionApiToken` is stored for backend-only Meta Conversion API calls and is never returned by public endpoints.
+- Authenticated tenant settings responses mask the raw token by returning `hasMetaConversionApiToken` instead of echoing the secret value.
+- `POST /test-meta-capi` sends a backend-only Meta `TestMarketingEvent` using the saved center-scoped pixel id and token; it returns only success/error status and never returns the token or provider response details.
+- `GET /logs` returns the latest center-scoped marketing tracking debug rows for the tenant settings UI. `limit` defaults to 20 and is clamped server-side.
+- Log responses include only safe fields: `id`, `provider`, `eventName`, `status`, `message`, `eventId`, `bookingRequestId`, and `createdAt`.
+- Log responses never include tokens, raw phone numbers, raw emails, raw names, hashed user data payloads, or full provider request payloads.
+- If the log table is missing because the migration has not been applied, the logs endpoint returns an empty safe fallback with `unavailable: true`; booking and settings reads/writes must not fail because marketing debug logs are unavailable.
+
+## 32. Public Center Marketing Settings API
+
+Endpoint:
+- `GET /api/v1/public/centers/:slug/marketing-settings`
+
+Response:
+- `metaPixelId`
+- `tiktokPixelId`
+- `snapPixelId`
+- `ga4Id`
+- `gtmId`
+- `customHeadScript`
+- `customBodyScript`
+
+Rules:
+- Only returns settings for active, public-visible centers with an allowed subscription state.
+- Does not require authentication because it is consumed by public center pages.
+- Never returns `metaConversionApiToken`.
+- Custom script fields are exposed only through this public-safe center endpoint for tenant-owned marketing injection on the public journey.
+- Used only by public center journey pages such as `/c/[slug]`, `/c/[slug]/book`, and the patient portal route.
+
+Server-side conversion tracking:
+- Successful `POST /api/v1/public/centers/:slug/booking-requests` calls trigger a best-effort backend Meta Conversion API `CompleteBooking` event.
+- The backend reads `metaPixelId` and `metaConversionApiToken` from the center-scoped tenant marketing settings row by trusted `centerId`.
+- The public booking response includes `bookingRequestId` and `trackingEventId` for browser/server Meta deduplication; `trackingEventId` uses `booking_<bookingRequestId>`.
+- The public booking response does not include the token or any CAPI response data.
+- Missing pixel/token or provider failures silently skip/warn and never block booking creation.
+- User data values sent to Meta are hashed server-side where available; logs must not contain tokens or raw personal data.
+
+## 33. Center Website Analytics API
+
+### Public track endpoint
+
+`POST /api/v1/public/centers/:slug/track`
+
+- No authentication required.
+- Returns HTTP 200 always (fire-and-forget); errors are swallowed so analytics never block UX.
+- Controller: `PublicCenterTrackController` in `center-analytics.module`.
+
+Request body:
+```json
+{
+  "eventType": "VIEW_BOOKING_PAGE",
+  "source": "GOOGLE",
+  "sessionId": "abc123...",
+  "page": "/c/qa-recovery/book",
+  "extraData": { "serviceId": "...", "serviceName": "..." }
+}
+```
+
+Validation:
+- `eventType` must be one of 14 `CenterWebsiteEventType` enum values; invalid values return 400.
+- `source` must be one of 6 `CenterTrafficSource` enum values or absent (defaults to `UNKNOWN`).
+- Center is resolved by `slug` with `publicVisible: true`; events for inactive/unknown centers are silently ignored.
+- `sessionId`, `page`, and `extraData` are optional.
+
+Storage: writes one `CenterWebsiteEvent` row with `centerId`, `eventType`, `source`, `sessionId`, `page`, `extraData`, and `occurredAt`.
+
+### Tenant analytics dashboard
+
+`GET /api/v1/tenant/marketing/analytics`
+
+- Requires active tenant session cookie (`royalcare_center_session`).
+- Requires tenant permission `reports:view`.
+- Controller: `TenantCenterAnalyticsController` in `center-analytics.module`.
+- `centerId` is derived from the session; no client-supplied center id is accepted.
+
+Query: none (always returns last 30 days).
+
+Response:
+```json
+{
+  "period": "last30days",
+  "cards": {
+    "visitors": 0,
+    "bookingPageViews": 0,
+    "bookNowClicks": 0,
+    "whatsappClicks": 0,
+    "phoneClicks": 0,
+    "contactPageViews": 0,
+    "galleryViews": 0,
+    "reviewsViews": 0,
+    "beforeAfterViews": 0,
+    "completedBookings": 0,
+    "conversionRate": "0%"
+  },
+  "trafficSources": [
+    { "source": "GOOGLE", "count": 0, "percent": 0 }
+  ],
+  "charts": {
+    "dailyVisitors": [{ "date": "2026-04-27", "count": 0 }],
+    "bookingAttempts": [{ "date": "2026-04-27", "count": 0 }],
+    "topPages": [{ "page": "/c/slug/book", "count": 0 }],
+    "topServices": [{ "name": "Laser Hair Removal", "count": 0 }]
+  }
+}
+```
+
+Rules:
+- `visitors` = distinct non-null `sessionId` values for `VIEW_CENTER_WEBSITE` events via `groupBy()`.
+- Daily chart deduplication uses in-memory `Map<date, Set<sessionId>>` to count unique visitors per day without raw SQL.
+- Top services are derived from `SELECT_SERVICE` events using `ev.extraData.serviceName`.
+- `conversionRate` = `completedBookings / visitors` as percentage; zero visitors returns `"0%"`.
+- All queries are scoped by the session `centerId`.
+- Requires `reports:view` permission check passed as the effective permissions array.
+
+## 34. Tenant Smart Follow-ups API
+
+Base path: `/api/v1/tenant/follow-ups`
+
+Endpoints:
+- `GET /api/v1/tenant/follow-ups?filter=TODAY|THIS_WEEK|OVERDUE|UPCOMING|CONTACTED|BOOKED|COMPLETED&patientId=<uuid>`
+- `GET /api/v1/tenant/follow-ups/analytics`
+- `PATCH /api/v1/tenant/follow-ups/:followUpId/status`
+- `PATCH /api/v1/tenant/follow-ups/:followUpId/notes`
+
+Rules:
+- Requires active center session cookie.
+- Reads require `appointments:view`.
+- Status and note updates require `appointments:update`.
+- Every query and mutation scopes by `session.center.id`; no client-provided `centerId` is accepted.
+
+List response:
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "patientId": "uuid",
+      "serviceId": "uuid",
+      "appointmentId": "uuid",
+      "sourceType": "APPOINTMENT_COMPLETED",
+      "title": "Laser",
+      "notes": null,
+      "sessionNumber": 2,
+      "dueDate": "2026-06-27",
+      "status": "UPCOMING",
+      "lastContactedAt": null,
+      "nextAppointmentId": null,
+      "overdueDays": 0,
+      "patient": { "id": "uuid", "fullName": "Patient", "phone": "059..." },
+      "service": { "id": "uuid", "nameAr": "ليزر", "nameEn": "Laser", "nameHe": "" },
+      "nextAppointment": null
+    }
+  ],
+  "total": 1
+}
+```
+
+Analytics response:
+```json
+{
+  "dueToday": 0,
+  "overdue": 0,
+  "contacted": 0,
+  "bookedFromFollowUps": 0,
+  "conversionRate": 0
+}
+```
+
+Related service API update:
+- `POST/PATCH /api/v1/tenant/services` accepts follow-up settings: `followUpEnabled`, `followUpType`, `defaultIntervalDays`, `totalRecommendedSessions`, `autoCreateNextReminder`, localized reminder messages, and `followUpRules`.
+- `GET /api/v1/tenant/services` and `GET /api/v1/tenant/services/:id` return those follow-up fields.
+
+Automatic creation:
+- `PATCH /api/v1/tenant/appointments/:appointmentId/status` creates a follow-up when status changes to `COMPLETED` and the service has follow-ups enabled.
+## Appointment Custom One-Time Services - 2026-05-28
+
+Existing tenant appointment endpoints accept custom service fields without adding new routes:
+- `POST /api/v1/tenant/appointments`
+- `PATCH /api/v1/tenant/appointments/:id`
+
+Additional request fields:
+- `customServiceName?: string | null`
+- `customServicePrice?: number | string | null`
+- `saveCustomService?: boolean`
+
+Rules:
+- Normal appointments require either `serviceId` or `customServiceName`.
+- `saveCustomService=true` creates a real center-scoped `Service` record and links it to the appointment.
+- Appointment responses include `customServiceName`, `customServicePrice`, and `customServiceSaved`.
+- Tenant billing endpoints can create invoices from custom appointments using `customServiceName` and the custom/manual amount.

@@ -1,7 +1,7 @@
 # RoyalCare - Next Tasks
 
-Last updated: 2026-04-30
-Status: Ready for Sessions after tenant login, patients, services, appointments, tenant staff management, tenant billing (manual invoices), and center default-language foundations
+Last updated: 2026-05-17
+Status: Subscription System MVP and Subscription Billing Phase 1 + 2 closed; Tenant Financial Reports module implemented in place for Center Admin
 
 ## 1. Immediate Confirmation Tasks
 
@@ -30,6 +30,32 @@ Product:
 - Confirm session data required for each industry.
 - Confirm page builder block types.
 - Confirm admin UI library/design system.
+
+Current closure status:
+- Subscription System MVP is closed: lifecycle automation, tenant access control, renewal request, manual WhatsApp flow, notifications, audit logs, timeline, dashboard KPIs, filters, actions, and QA regression are complete.
+- Subscription Billing Phase 1 + 2 is closed: manual subscription invoices, Super Admin invoice actions, tenant read-only invoices, race-safe invoice numbering, overdue sync, AR/EN/HE PDF invoices, audit logs, and subscription financial dashboard KPIs are complete. Final QA passed.
+- Tenant Financial Reports are implemented: Center Admin `/tenant/reports` has financial cards, period filters, revenue/status/service/top-patient charts, EN/AR/HE labels, RTL support, and a backend `GET /api/v1/tenant/reports/financial` endpoint that enforces `centerId` isolation and `reports:view`.
+- Schedule Management v1 is implemented: Center Admin `/tenant/schedule` manages center weekly hours, closed days, provider weekly hours, and provider leave using the existing schedule models and shared availability service.
+- Center Website Builder routing foundation is implemented: platform marketing pages stay separate from center website pages, and center websites now have `/c/[slug]`, `/c/[slug]/about`, `/c/[slug]/services`, and `/c/[slug]/contact` using public-safe center data and center-specific navigation.
+- Center Website Builder content modules now include gallery, reviews/testimonials, and before/after transformation cases. Before/after management is available at `/tenant/settings/before-after` and public pages at `/c/[slug]/before-after`, all centerId-scoped and hidden gracefully when empty.
+- Center Website Builder v1 controls are implemented in `/tenant/settings/website`: center admins can toggle section visibility and drag/drop homepage order for the current template. Future page-builder work should extend this foundation instead of adding page-specific hardcoded section logic.
+
+Subscription System production checklist:
+- Confirm database backup and restore procedure before deploy.
+- Verify all production environment variables, including database, API URLs, session secrets, notification defaults, and support WhatsApp number.
+- Verify the lifecycle cron runs daily at 02:00 server time in the production process.
+- Confirm Super Admin users have the required subscription/report/notification permissions.
+- Seed platform and tenant permissions before first production login.
+- Run the subscription lifecycle job once after deploy and review the persisted lifecycle job status card.
+- Monitor timezone/date-boundary behavior for expired and expiring-soon subscriptions during the first production week.
+- Verify Chrome/Chromium is installed and available to the API process through `CHROME_PATH` or a standard executable path before enabling subscription invoice PDF downloads.
+
+Recommended next module:
+- Appointment → Invoice → Payment final hardening.
+- Alternative next module: Tenant Financial Reports drilldowns/export after live usage feedback.
+- Keep online payment gateway work out of scope until manual billing reports and operational reconciliation are stable.
+- Future center website work: add optional custom domain/subdomain routing only after the center website route foundation has been QA-tested in production-like environments.
+- Future center website work: add richer block editing/custom pages only after the v1 section visibility/order controls are browser-QA tested with multiple centers and languages.
 
 ## 2. Recommended MVP Scope - Draft
 
@@ -278,7 +304,9 @@ Next:
 38. Build Appointments next. Completed with real PostgreSQL-backed CRUD, cancel, status changes, overlap prevention, permissions, i18n, RTL, and responsive UI.
 39. Build Tenant Staff Management. Completed with real tenant staff list/create/details/edit/status, permissions, hashed passwords, i18n, RTL, and appointment provider filtering.
 40. Build Tenant Billing Management (manual invoices + payments). Completed with real PostgreSQL-backed invoice list/create/view/status, manual payment recording, PARTIAL status, overpayment protection, reopen invoice, payment history table, payment summary bar, permission matrix, Decimal serialization, i18n, RTL, and responsive UI.
-41. Build Sessions next on top of the completed Patients, Services, Staff, Appointments, Billing, and Payments foundations.
+41. Build Patient Credit System. Completed: Prisma schema (Patient.creditBalance + CreditTransaction model), overpayment auto-credit, TenantCreditService (useCredit), PatientCreditService (addManualCredit), POST /tenant/billing/:invoiceId/use-credit, POST /patients/:patientId/credit, frontend API client (useTenantCredit), PaymentSummary with creditUsages + patientCreditBalance, billing-permissions canAddManualCredit, full EN/AR/HE i18n, Invoice Details page with credit balance card + Use Credit form + credit usage history + overpayment notice. TypeScript checks pass on both API and web.
+42. Build Subscription Lifecycle foundation (Phase 7). Completed: schema extended (notificationPhone + notificationLanguage on Subscription), audit actions SUBSCRIPTION_UPDATED + SUBSCRIPTION_STATUS_CHANGED, subscriptions.service lifecycle (daysRemaining/isExpiringSoon/isExpired) + owner info, analytics subscription KPIs + 3 new insights, tenant-dashboard subscription lifecycle in stats response, super-admin-subscriptions API client, dictionary updates (EN/AR/HE), SuperAdminSubscriptionsPage now API-connected with real filters + edit modal, center-admin subscriptionNotice banner on CenterDashboardPage, super-admin dashboard subscription KPI section. Prisma client regenerated. Both tsc checks pass. Requires `prisma db push` to sync new fields to DB.
+43. Build Sessions next on top of the completed Patients, Services, Staff, Appointments, Billing, Payments, and Patient Credit foundations.
 
 Needs Confirmation:
 - Whether Docker should be used locally.
@@ -461,3 +489,28 @@ Future agents must:
 - Add user-visible changes to `08_CHANGELOG.md`.
 - Keep API changes reflected in `04_API_MAP.md`.
 - Keep schema changes reflected in `02_DATABASE_SCHEMA.md`.
+- Keep backup and recovery operations reflected in `11_BACKUP_RECOVERY.md`.
+# 2026-05-12 Update
+
+Completed:
+- Tenant subscription access guard/middleware foundation now blocks expired/suspended tenant business writes server-side and exposes `subscriptionAccess` to the tenant UI.
+
+# 2026-05-18 Production Safety Follow-Up
+
+Next tasks:
+- Add scheduled backup monitoring/alerts in production infrastructure.
+- Run a monthly restore drill into staging and record the tested backup file, app commit, and Prisma schema version.
+- Before any future center hard-delete feature, review remaining cascade relations and prefer archive/deactivate flows.
+
+# 2026-05-20 Schedule Follow-Up
+
+Next tasks:
+- Resolve the existing failed local Prisma migration `20260516203000_subscription_billing_phase_2` before using `prisma migrate deploy` as a production readiness signal.
+- Add automated integration tests for provider-specific public availability, pending booking request blocking, provider leave, and service buffer overlap.
+
+# 2026-05-28 Follow-up Plans Follow-Up
+
+Next tasks:
+- Apply migration `20260528100000_add_patient_follow_ups` in staging/production before enabling follow-up reminders for real centers.
+- Add browser QA for Laser session-plan flow: sessions 1-4 at 30 days, sessions 5-8 at 40 days, completion creates correct due date, and duplicate completion saves do not duplicate reminders.
+- Add optional future automation for follow-up notifications only after WhatsApp/SMS automation rules are approved; v1 remains manual WhatsApp link only.

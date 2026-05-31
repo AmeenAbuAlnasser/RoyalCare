@@ -1,7 +1,7 @@
 # RoyalCare - Database Schema
 
-Last updated: 2026-04-30
-Status: Tenant auth, patients, services, appointments, staff management, and manual billing (invoices) foundations implemented
+Last updated: 2026-05-26
+Status: Tenant auth, patients, services, appointments, staff management, manual billing, patient credit, subscription lifecycle, subscription invoices, subscription invoice numbering, localized business name storage, tenant marketing settings, marketing tracking debug logs, center website builder settings, gallery, reviews, and before/after gallery implemented
 
 ## 1. Database Strategy
 
@@ -38,6 +38,14 @@ Rule:
 - Every query for tenant-owned data must be scoped by trusted `centerId`.
 - The database package exposes a tenant scope helper with `TENANT_ID_FIELD = 'centerId'`.
 
+Latest website settings update:
+- `BrandingSettings` is now the foundation for center website CMS settings.
+- Migration `20260525110000_add_center_website_settings` adds localized full descriptions, localized slogans, phone/email, Google Maps URL, localized working-hours text, and Facebook/Instagram/TikTok links.
+- Migration `20260526090000_add_website_builder_settings` adds `websiteSectionOrder` and `websiteSectionVisibility` JSON fields so each center can control homepage section order and visibility without code.
+- Existing logo, cover image, primary color, secondary color, short descriptions, WhatsApp, and localized address fields remain in `BrandingSettings`.
+- `CenterReview` stores center-scoped public testimonials with `customerName`, `rating`, localized comments, publish flag, and sort order. Public APIs expose only published reviews for the resolved center.
+- `CenterBeforeAfter` stores center-scoped transformation cases with localized titles/descriptions, `LASER`/`SKIN`/`DENTAL`/`HAIR`/`OTHER` category, before image URL, after image URL, publish flag, and sort order. Public APIs expose only published before/after items for the resolved center.
+
 ## 2. Global vs Tenant-Owned Data
 
 Global RoyalCare data:
@@ -73,6 +81,8 @@ Implemented models:
 - `RolePermission`
 - `Center`
 - `Subscription`
+- `SubscriptionInvoice`
+- `SubscriptionInvoiceNumberCounter`
 - `Domain`
 - `Customer`
 - `Patient`
@@ -84,6 +94,11 @@ Implemented models:
 - `BrandingSettings`
 - `CenterInternalNote`
 - `Invoice`
+- `SubscriptionLifecycleJobRun`
+- `TenantMarketingSettings`
+- `MarketingTrackingLog`
+- `CenterGalleryImage`
+- `CenterReview`
 
 Not implemented yet:
 - Online payment gateway/provider integration
@@ -120,6 +135,8 @@ Tenant strategy:
 - `Patient` is a tenant-owned clinical/customer record scoped by required `centerId`.
 - Patient phone numbers are unique per center through `@@unique([centerId, phone])`; the same phone can exist in another center.
 - Patient lookup indexes include `centerId`, `centerId/status`, `centerId/fullName`, and `centerId/createdAt`.
+- `Patient` stores localized business names as `fullNameAr`, `fullNameEn`, and `fullNameHe`; `fullName` remains the default fallback.
+- `Center` stores localized business names as nullable `nameAr`, `nameEn`, and `nameHe`; `name` remains the default fallback.
 
 RBAC strategy:
 - `Permission` defines atomic permission keys.
@@ -180,6 +197,9 @@ Fields:
 - `id`
 - `ownerUserId` nullable
 - `name`
+- `nameAr` nullable
+- `nameEn` nullable
+- `nameHe` nullable
 - `slug`
 - `type`
 - `status`
@@ -763,15 +783,58 @@ Purpose:
 Fields:
 - `id`
 - `centerId` nullable
-- `actorUserId` nullable
-- `scope`
+- `actorUserId` nullable; logs still persist when the Super Admin actor cannot be resolved
+- `targetUserId` nullable
 - `action`
-- `entityType`
-- `entityId`
 - `metadata`
-- `ipAddress`
-- `userAgent`
 - `createdAt`
+
+Relations:
+- Optional actor user
+- Optional target user
+- Optional center
+
+### 3.23 SubscriptionLifecycleJobRun
+
+Purpose:
+- Persists subscription lifecycle automation run status for Super Admin monitoring.
+
+Fields:
+- `id`
+- `startedAt`
+- `finishedAt`
+- `triggeredBy`
+- `scanned`
+- `updatedExpired`
+- `notificationsCreated`
+- `auditLogsCreated`
+- `skippedSuspended`
+- `duplicateNotificationsSkipped`
+- `success`
+- `errorMessage`
+
+### 3.24 CenterReview
+
+Purpose:
+- Stores public testimonials managed by each center for its independent center website.
+
+Fields:
+- `id`
+- `centerId`
+- `customerName`
+- `rating` from 1 to 5
+- `commentAr`
+- `commentEn`
+- `commentHe`
+- `isPublished`
+- `sortOrder`
+- `createdAt`
+- `updatedAt`
+
+Rules:
+- Tenant CRUD is scoped by authenticated session `centerId`.
+- Public center website APIs resolve slug to `centerId` and return only `isPublished = true` reviews.
+- Reviews must not expose phone, email, or private patient/customer identifiers publicly.
 
 ## 4. Translation Strategy
 
@@ -808,7 +871,9 @@ Recommended indexes:
 - Notification by `centerId`, `status`
 - Subscription by `centerId/status`, `centerId/currentPeriodEnd`, and `status/expiresAt`
 - BrandingSettings unique by `centerId`
+- CenterReview by `centerId`, `isPublished`, and `sortOrder`
 - AuditLog by `centerId`, `createdAt`
+- SubscriptionLifecycleJobRun by `startedAt` and `success`
 
 Needs Confirmation:
 - Whether customer email/phone uniqueness is required per center.
@@ -924,3 +989,188 @@ Rules:
 - Manual payments only; status transitions are recorded manually by authorized staff.
 - A cancelled invoice cannot be updated further.
 - A paid invoice can only be cancelled.
+
+## 11. Patient Credit System Models (2026-05-02)
+
+### Patient.creditBalance
+- Added `creditBalance Decimal @default(0) @db.Decimal(12,2)` to the `Patient` model.
+- Holds the running credit balance for each patient within their center.
+- Incremented by overpayments and manual credit additions; decremented when credit is applied to an invoice.
+
+### CreditTransaction model
+Fields:
+- `id` UUID PK
+- `centerId` UUID (tenant isolation — matches patient's center)
+- `patientId` UUID FK → Patient
+- `createdByUserId` UUID FK → User
+- `amount` Decimal 12,2
+- `type` CreditTransactionType enum (`CREDIT_ADD` | `CREDIT_USE`)
+- `source` CreditTransactionSource enum (`OVERPAYMENT` | `MANUAL` | `ADJUSTMENT`)
+- `relatedInvoiceId` UUID nullable FK → Invoice (set-null on delete)
+- `notes` String nullable
+- `createdAt` DateTime
+
+Indexes: `centerId`, `(centerId, patientId)`, `(patientId, createdAt)`, `relatedInvoiceId`, `(centerId, type)`.
+
+Rules:
+- Every credit transaction is scoped by `centerId` — no cross-center credit access.
+- `CREDIT_ADD` with `source: OVERPAYMENT` is created automatically when a cash payment exceeds the invoice balance due.
+- `CREDIT_ADD` with `source: MANUAL` requires a non-empty `notes` reason and `billing.mark_paid` permission.
+- `CREDIT_USE` with `source: OVERPAYMENT` is created when credit is applied to an unpaid invoice balance.
+- `Patient.creditBalance` is always updated atomically inside a `$transaction` alongside the `CreditTransaction` record.
+- Credit balance cannot go below 0.
+- Credit applied to an invoice cannot exceed min(patientCreditBalance, invoiceBalanceDue).
+- Credit cannot be applied to a `CANCELLED` invoice.
+- Credit cannot be applied to an already fully `PAID` invoice.
+
+## 12. Notification Targeting Update (2026-05-13)
+
+Notification lifecycle support now includes:
+- `NotificationTargetAudience` enum: `SUPER_ADMIN`, `CENTER_ADMIN`.
+- `Notification.targetAudience`, default `CENTER_ADMIN`.
+- Additional notification types: `SUBSCRIPTION_SUSPENDED`, `SUBSCRIPTION_RENEWED`, `TRIAL_ENDING_SOON`, `MISSING_WHATSAPP_PHONE`.
+
+Rules:
+- Tenant notification reads only return `CENTER_ADMIN` targeted notifications.
+- Super Admin notification center reads only return `SUPER_ADMIN` targeted notifications.
+- Read state is stored with existing `readAt` and `readByUserId` fields.
+
+## 13. Production Delete Safety Update (2026-05-18)
+
+Critical financial and clinical records must survive accidental parent deletes.
+
+Referential actions hardened from cascade to restrict for:
+- `Subscription.center`
+- `SubscriptionInvoice.center`
+- `SubscriptionInvoice.subscription`
+- `Patient.center`
+- `Appointment.center`
+- `Invoice.center`
+- `Payment.center`
+- `Payment.invoice`
+- `CreditTransaction.center`
+
+Business recovery rules:
+- Tenant invoices are cancelled/restored by status, not hard deleted.
+- Patients are archived/restored by status, not hard deleted.
+- Appointments are cancelled/restored by status and cancellation fields, not hard deleted.
+- Audit logs remain append-only evidence and are not part of normal delete flows.
+
+## 14. Schedule Provider Integration Update (2026-05-20)
+
+Schedule and public booking schema support:
+- `Service.bufferMinutes Int @default(0)` controls post-service blocking in availability calculations.
+- `BookingRequest.providerId` optionally stores the requested provider for public bookings.
+- `BookingRequest.provider` links to `User` with `onDelete: SetNull` so old booking requests survive provider removal.
+- `ProviderWorkingHours` stores center-scoped weekly provider hours by `centerId`, `staffUserId`, and `dayOfWeek`.
+- `ProviderLeaveDay` stores center-scoped provider leave days by `centerId`, `staffUserId`, and `date`.
+
+Rules:
+- Public booking may select a provider only when the provider has an active center role and active user account.
+- Accepted booking requests use the selected `providerId` as the created appointment `staffUserId`; if no provider was selected, the accepting staff user remains the provider fallback.
+- Availability uses provider hours and leave when `providerId` is supplied.
+
+## 15. Tenant Marketing Settings (2026-05-23)
+
+Added `TenantMarketingSettings` as a center-scoped one-to-one settings model.
+
+Fields:
+- `id` UUID primary key
+- `centerId` unique UUID, linked to `Center`
+- `metaPixelId`
+- `metaConversionApiToken`
+- `tiktokPixelId`
+- `snapPixelId`
+- `ga4Id`
+- `gtmId`
+- `customHeadScript`
+- `customBodyScript`
+- `createdAt`
+- `updatedAt`
+
+Rules:
+- Settings are tenant-owned and must always be scoped by authenticated session `centerId`.
+- Settings drive public center tracking injection, browser marketing events, backend-only Meta CAPI booking conversion tracking, and tenant test tracking.
+- Empty strings are normalized to `null`.
+- Short ID fields are capped at 120 characters; token/script fields are capped at 20000 characters.
+
+## 16. Marketing Tracking Log (2026-05-24)
+
+Added `MarketingTrackingLog` as a center-scoped operational debug log for tenant marketing events.
+
+Enums:
+- `MarketingTrackingProvider`: `META_PIXEL`, `META_CAPI`, `TIKTOK`, `GA4`, `SNAP`
+- `MarketingTrackingStatus`: `SUCCESS`, `FAILED`, `SKIPPED`
+
+Fields:
+- `id` UUID primary key
+- `centerId` UUID, linked to `Center`
+- `provider`
+- `eventName`
+- `status`
+- `message` nullable, capped at 500 characters
+- `eventId` nullable
+- `bookingRequestId` nullable
+- `createdAt`
+
+Indexes:
+- `centerId, createdAt`
+- `centerId, provider, createdAt`
+- `bookingRequestId`
+
+Rules:
+- Logs are tenant-owned and must always be scoped by authenticated session `centerId` for tenant reads.
+- Logs store safe operational data only: provider, event name, status, short message, event id, optional booking request id, and timestamp.
+- Logs must never store Meta CAPI tokens, raw phone numbers, raw emails, raw names, or full provider request payloads.
+- Server-side Meta CAPI `CompleteBooking` and `TestMarketingEvent` attempts write `SUCCESS`, `FAILED`, or `SKIPPED` rows.
+
+## 17. Smart Follow-up Treatment Plans (2026-05-28)
+
+Service follow-up configuration is stored directly on `Service`:
+- `followUpEnabled Boolean @default(false)`
+- `followUpType ServiceFollowUpType @default(FIXED_INTERVAL)`
+- `defaultIntervalDays Int?`
+- `totalRecommendedSessions Int?`
+- `autoCreateNextReminder Boolean @default(true)`
+- `reminderMessageAr`, `reminderMessageEn`, `reminderMessageHe`
+- `followUpRules Json?` for session-plan rules like `{ fromSessionNumber, toSessionNumber, intervalDays }`.
+
+Added enums:
+- `ServiceFollowUpType`: `FIXED_INTERVAL`, `SESSION_PLAN`
+- `PatientFollowUpSourceType`: `APPOINTMENT_COMPLETED`, `MANUAL`, `BOOKING_REQUEST`
+- `PatientFollowUpStatus`: `DUE`, `UPCOMING`, `CONTACTED`, `BOOKED`, `COMPLETED`, `MISSED`, `CANCELLED`
+
+Added `PatientFollowUp`:
+- `id`, `centerId`, `patientId`
+- optional `serviceId`, `appointmentId`, `nextAppointmentId`
+- `sourceType`, `title`, `notes`, `sessionNumber`, `dueDate`, `status`, `lastContactedAt`
+- timestamps
+
+Indexes:
+- unique `(centerId, appointmentId, sessionNumber)`
+- `(centerId, status, dueDate)`, `(centerId, dueDate)`, `(centerId, patientId, dueDate)`, `(centerId, serviceId)`
+
+Rules:
+- Follow-up records are tenant-owned and every query must scope by authenticated `centerId`.
+- Source appointments and next appointments are nullable set-null references so clinical history survives appointment cleanup.
+- Automatic creation is idempotent per source appointment.
+
+## 18. Appointment Custom One-Time Services (2026-05-28)
+
+Appointments can now represent a one-time service that is not part of the saved `Service` catalog.
+
+Added to `Appointment`:
+- `customServiceName String?`
+- `customServiceDuration Int?`
+- `customServicePrice Decimal?`
+- `customServiceCurrency String?`
+- `customServiceSaved Boolean @default(false)`
+
+Adjusted `Invoice`:
+- `serviceId` is nullable so an invoice can be linked to a custom appointment without creating a catalog service.
+- `customServiceName String?` stores the invoice service display name when no catalog service exists.
+
+Rules:
+- Every appointment must have either `serviceId` or `customServiceName`, except existing offer-backed appointments.
+- Custom appointment invoices use `customServicePrice` or a manually supplied invoice amount.
+- If staff choose “save as future service”, a real `Service` is created and linked while the appointment still keeps the custom-service snapshot and badge.

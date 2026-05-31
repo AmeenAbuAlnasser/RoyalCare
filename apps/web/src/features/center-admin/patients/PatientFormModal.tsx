@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { buttonClassName } from "@/components/ui/button-styles";
 import type { CenterAdminDictionary } from "@/i18n/dictionaries/center-admin";
 import type {
@@ -14,6 +14,9 @@ export type PatientFormState = {
   dateOfBirth: string;
   email: string;
   fullName: string;
+  fullNameAr: string;
+  fullNameHe: string;
+  fullNameEn: string;
   gender: PatientGender;
   nationalId: string;
   notes: string;
@@ -28,6 +31,9 @@ export function patientToForm(patient?: CenterPatient): PatientFormState {
     dateOfBirth: patient?.dateOfBirth?.slice(0, 10) ?? "",
     email: patient?.email ?? "",
     fullName: patient?.fullName ?? "",
+    fullNameAr: patient?.fullNameAr ?? "",
+    fullNameHe: patient?.fullNameHe ?? "",
+    fullNameEn: patient?.fullNameEn ?? "",
     gender: patient?.gender ?? "UNKNOWN",
     nationalId: patient?.nationalId ?? "",
     notes: patient?.notes ?? "",
@@ -41,6 +47,9 @@ export function formToPayload(form: PatientFormState): PatientPayload {
     dateOfBirth: form.dateOfBirth || null,
     email: form.email || null,
     fullName: form.fullName,
+    fullNameAr: form.fullNameAr || null,
+    fullNameHe: form.fullNameHe || null,
+    fullNameEn: form.fullNameEn || null,
     gender: form.gender,
     nationalId: form.nationalId || null,
     notes: form.notes || null,
@@ -68,6 +77,10 @@ export function PatientFormModal({
   onClose: () => void;
   onSubmit: () => void;
 }) {
+  const [showExtraNames, setShowExtraNames] = useState(
+    !!(form.fullNameAr || form.fullNameHe || form.fullNameEn),
+  );
+
   const title =
     mode === "create"
       ? dictionary.patients.addPatient
@@ -104,6 +117,56 @@ export function PatientFormModal({
               value={form.fullName}
             />
           </Field>
+
+          <div className="flex items-end md:col-span-2">
+            <button
+              className="text-xs font-medium text-[#1D4ED8] hover:underline"
+              onClick={() => setShowExtraNames((v) => !v)}
+              type="button"
+            >
+              {showExtraNames ? "▾" : "▸"}{" "}
+              {dictionary.patients.namesOptionalHint.split(":")[0]}
+            </button>
+          </div>
+
+          {showExtraNames && (
+            <>
+              <p className="text-xs text-[#6B7280] md:col-span-2">
+                {dictionary.patients.namesOptionalHint}
+              </p>
+              <Field error={errors.fullNameAr} label={dictionary.patients.fullNameAr}>
+                <input
+                  className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
+                  dir="rtl"
+                  onChange={(event) =>
+                    onChange({ ...form, fullNameAr: event.target.value })
+                  }
+                  value={form.fullNameAr}
+                />
+              </Field>
+              <Field error={errors.fullNameHe} label={dictionary.patients.fullNameHe}>
+                <input
+                  className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
+                  dir="rtl"
+                  onChange={(event) =>
+                    onChange({ ...form, fullNameHe: event.target.value })
+                  }
+                  value={form.fullNameHe}
+                />
+              </Field>
+              <Field error={errors.fullNameEn} label={dictionary.patients.fullNameEn}>
+                <input
+                  className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
+                  dir="ltr"
+                  onChange={(event) =>
+                    onChange({ ...form, fullNameEn: event.target.value })
+                  }
+                  value={form.fullNameEn}
+                />
+              </Field>
+            </>
+          )}
+
           <Field
             error={errors.phone}
             label={dictionary.patients.phone}

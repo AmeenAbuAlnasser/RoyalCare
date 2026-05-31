@@ -1,4 +1,4 @@
-import {
+﻿import {
   BadRequestException,
   Injectable,
   NotFoundException,
@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../../common/database/prisma.service';
 import { safeUserSelect } from '../../../common/database/safe-user-select';
-import type { Prisma } from '../../../../../../packages/database/node_modules/@prisma/client';
+import type { Prisma } from '@royalcare/db';
 import {
   platformPermissionKeys,
   platformRoleDefinitions,
@@ -117,6 +117,10 @@ export class PermissionsService implements OnModuleInit {
   ) {
     if (requiredPermissions.length === 0) {
       return true;
+    }
+
+    if (!userId) {
+      return false;
     }
 
     const { permissions } = await this.getUserPermissions(userId);

@@ -1,36 +1,14 @@
-import type { CenterRoleKey } from "@/i18n/dictionaries/center-admin";
-
 export type TenantServicePermission =
-  | "services.view"
-  | "services.create"
-  | "services.update"
-  | "services.archive"
-  | "services.activate";
-
-const permissionsByRole: Record<CenterRoleKey, TenantServicePermission[]> = {
-  CENTER_OWNER: [
-    "services.view",
-    "services.create",
-    "services.update",
-    "services.archive",
-    "services.activate",
-  ],
-  CENTER_MANAGER: [
-    "services.view",
-    "services.create",
-    "services.update",
-    "services.archive",
-    "services.activate",
-  ],
-  DOCTOR: ["services.view"],
-  RECEPTIONIST: ["services.view"],
-  ACCOUNTANT: ["services.view"],
-  STAFF: ["services.view"],
-};
+  | "services:view"
+  | "services:create"
+  | "services:update"
+  | "services:archive"
+  | "services:status"
+  | "services:delete";
 
 export function hasTenantServicePermission(
-  role: CenterRoleKey,
+  permissions: readonly string[] | undefined,
   permission: TenantServicePermission,
 ) {
-  return permissionsByRole[role].includes(permission);
+  return permissions?.includes(permission) ?? false;
 }

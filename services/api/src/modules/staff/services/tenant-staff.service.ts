@@ -1,4 +1,4 @@
-import {
+﻿import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -8,10 +8,12 @@ import {
 import type {
   Prisma,
   UserStatus,
-} from '../../../../../../packages/database/node_modules/@prisma/client';
+} from '@royalcare/db';
 import { PrismaService } from '../../../common/database/prisma.service';
 import { safeUserSelect } from '../../../common/database/safe-user-select';
+import { hasTenantPermission } from '../../../common/permissions/tenant-permissions';
 import { hashPassword } from '../../../common/security/password-hashing';
+import { AuditService } from '../../audit/audit.service';
 import type {
   CreateTenantStaffDto,
   TenantStaffRole,
@@ -21,10 +23,10 @@ import type { UpdateTenantStaffStatusDto } from '../dto/update-tenant-staff-stat
 import type { UpdateTenantStaffDto } from '../dto/update-tenant-staff.dto';
 
 type StaffPermission =
-  | 'staff.view'
-  | 'staff.create'
-  | 'staff.update'
-  | 'staff.activate';
+  | 'staff:view'
+  | 'staff:create'
+  | 'staff:update'
+  | 'staff:status';
 
 const staffRoles = [
   'CENTER_OWNER',
@@ -35,25 +37,6 @@ const staffRoles = [
   'STAFF',
 ] as const;
 const staffStatuses = ['ACTIVE', 'INACTIVE'] as const;
-
-const rolePermissions: Record<string, StaffPermission[]> = {
-  CENTER_OWNER: [
-    'staff.view',
-    'staff.create',
-    'staff.update',
-    'staff.activate',
-  ],
-  CENTER_MANAGER: [
-    'staff.view',
-    'staff.create',
-    'staff.update',
-    'staff.activate',
-  ],
-  DOCTOR: ['staff.view'],
-  RECEPTIONIST: ['staff.view'],
-  ACCOUNTANT: ['staff.view'],
-  STAFF: ['staff.view'],
-};
 
 const staffAssignmentSelect = {
   id: true,
@@ -110,6 +93,7 @@ function formatStaffAssignment(
     id: assignment.user.id,
     fullName: assignment.user.fullName,
     email: assignment.user.email,
+    phone: assignment.user.phone,
     role: assignment.role.key,
     roleName: assignment.role.name,
     status: assignment.user.status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE',
@@ -182,14 +166,17 @@ function getStaffValidation(
 
 @Injectable()
 export class TenantStaffService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   async list(
     centerId: string,
-    roleKey: string,
+    permissions: string[],
     query?: { role?: string; search?: string; status?: string },
   ) {
-    this.requirePermission(roleKey, 'staff.view');
+    this.requirePermission(permissions, 'staff:view');
 
     const prisma = await this.prisma.getClient();
     const role = optionalTrimmed(query?.role)?.toUpperCase();
@@ -236,8 +223,12 @@ export class TenantStaffService {
     };
   }
 
-  async create(centerId: string, roleKey: string, dto: CreateTenantStaffDto) {
-    this.requirePermission(roleKey, 'staff.create');
+  async create(
+    centerId: string,
+    permissions: string[],
+    dto: CreateTenantStaffDto,
+  ) {
+    this.requirePermission(permissions, 'staff:create');
     const validation = getStaffValidation(dto, true);
     const prisma = await this.prisma.getClient();
 
@@ -274,8 +265,8 @@ export class TenantStaffService {
     });
   }
 
-  async getById(centerId: string, roleKey: string, userId: string) {
-    this.requirePermission(roleKey, 'staff.view');
+  async getById(centerId: string, permissions: string[], userId: string) {
+    this.requirePermission(permissions, 'staff:view');
 
     const prisma = await this.prisma.getClient();
     const assignment = await this.getAssignment(prisma, centerId, userId);
@@ -285,11 +276,11 @@ export class TenantStaffService {
 
   async update(
     centerId: string,
-    roleKey: string,
+    permissions: string[],
     userId: string,
     dto: UpdateTenantStaffDto,
   ) {
-    this.requirePermission(roleKey, 'staff.update');
+    this.requirePermission(permissions, 'staff:update');
     const validation = getStaffValidation(dto, false);
     const prisma = await this.prisma.getClient();
 
@@ -340,11 +331,15 @@ export class TenantStaffService {
 
   async updateStatus(
     centerId: string,
-    roleKey: string,
+    centerName: string,
+    permissions: string[],
+    actorUserId: string,
+    actorName: string,
+    impersonatorUserId: string | undefined,
     userId: string,
     dto: UpdateTenantStaffStatusDto,
   ) {
-    this.requirePermission(roleKey, 'staff.activate');
+    this.requirePermission(permissions, 'staff:status');
     const status = optionalTrimmed(dto.status)?.toUpperCase();
 
     if (!isAllowedValue(status, staffStatuses)) {
@@ -352,9 +347,11 @@ export class TenantStaffService {
     }
 
     const prisma = await this.prisma.getClient();
+    let oldStatus: TenantStaffStatus = 'INACTIVE';
 
-    return prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const current = await this.getAssignment(tx, centerId, userId);
+      oldStatus = current.user.status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE';
       await tx.user.update({
         where: { id: userId },
         data: { status: status },
@@ -371,10 +368,42 @@ export class TenantStaffService {
 
       return formatStaffAssignment(assignment);
     });
+
+    try {
+      const isImpersonated = Boolean(impersonatorUserId);
+      await this.auditService.log({
+        action: 'STAFF_STATUS_CHANGED',
+        actorUserId: impersonatorUserId ?? actorUserId,
+        centerId,
+        targetUserId: userId,
+        metadata: {
+          actorName,
+          centerName,
+          impersonatedBySuperAdmin: isImpersonated,
+          ...(impersonatorUserId ? { impersonatorUserId } : {}),
+          newStatus: result.status,
+          oldStatus,
+          source: 'TENANT_STAFF',
+          targetEmail: result.email ?? null,
+          targetName: result.fullName,
+          tenantActorUserId: actorUserId,
+        },
+      });
+    } catch (error) {
+      console.error(
+        '[TenantStaffService] Failed to write staff status audit log:',
+        error,
+      );
+    }
+
+    return result;
   }
 
-  private requirePermission(roleKey: string, permission: StaffPermission) {
-    if (!rolePermissions[roleKey]?.includes(permission)) {
+  private requirePermission(
+    permissions: string[],
+    permission: StaffPermission,
+  ) {
+    if (!hasTenantPermission(permissions, permission)) {
       throw forbidden(permission);
     }
   }

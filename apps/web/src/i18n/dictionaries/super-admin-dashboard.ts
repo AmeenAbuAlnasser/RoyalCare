@@ -18,6 +18,7 @@ type DashboardDictionary = {
     plans: string;
     users: string;
     notifications: string;
+    auditLogs: string;
     settings: string;
   };
   header: {
@@ -29,16 +30,43 @@ type DashboardDictionary = {
   };
   overview: {
     activeCenters: string;
-    trialCenters: string;
+    centersNeedingFollowUp: string;
+    totalCenters: string;
+    totalUsers: string;
     monthlyRevenue: string;
-    openDomainTasks: string;
+  };
+  overviewHelper: {
+    activeCenters: string;
+    centersNeedingFollowUp: string;
+  };
+  centersAtRiskBreakdown: {
+    noSubscription: string;
+    expired: string;
+    suspended: string;
+    gracePeriod: string;
+  };
+  subscriptionHelper: {
+    activeSubscriptions: string;
   };
   sections: {
+    auditActivity: string;
+    billingOverview: string;
+    smartInsights: string;
     quickStats: string;
     recentCenters: string;
+    revenueByCenter: string;
     subscriptionOverview: string;
     domainManagement: string;
     notifications: string;
+    revenueTrend: string;
+    appointmentsTrend: string;
+    topCentersByRevenue: string;
+    topCentersByAppointments: string;
+    auditActivityTrend: string;
+    subscriptionFinancials: string;
+  };
+  charts: {
+    noData: string;
   };
   labels: {
     status: string;
@@ -53,14 +81,25 @@ type DashboardDictionary = {
     renewalsThisWeek: string;
     minutesAgo: string;
     hourAgo: string;
+    invoices: string;
+    loadError: string;
+    loading: string;
+    noData: string;
+    notAvailable: string;
   };
   actions: {
     viewAll: string;
     review: string;
     manage: string;
+    view: string;
   };
   statuses: {
     active: string;
+    archived: string;
+    cancelled: string;
+    paid: string;
+    partial: string;
+    suspended: string;
     trial: string;
     pastDue: string;
     pending: string;
@@ -70,8 +109,28 @@ type DashboardDictionary = {
   stats: {
     newCenters: string;
     appointmentsToday: string;
+    completedAppointments: string;
     pendingVerifications: string;
+    sensitiveActions: string;
     supportItems: string;
+  };
+  billing: {
+    paidInvoices: string;
+    pendingInvoices: string;
+    partialInvoices: string;
+  };
+  subscriptionBilling: {
+    totalRevenue: string;
+    paidInvoices: string;
+    pendingInvoices: string;
+    overdueInvoices: string;
+    mrr: string;
+    revenueByPlan: string;
+  };
+  insights: {
+    alerts: string;
+    highlights: string;
+    recommendations: string;
   };
   plans: {
     starter: string;
@@ -97,6 +156,19 @@ type DashboardDictionary = {
     subscriptionRenewalQueue: string;
     domainVerificationCompleted: string;
     pastDueCenterReview: string;
+  };
+  subscriptions: {
+    sectionTitle: string;
+    activeSubscriptions: string;
+    cancelled: string;
+    expiringSoon: string;
+    expired: string;
+    gracePeriod: string;
+    suspended: string;
+    total: string;
+    trialing: string;
+    unknown: string;
+    viewAll: string;
   };
 };
 
@@ -126,6 +198,7 @@ export const superAdminDashboardDictionaries: Record<
       plans: "Plans",
       users: "Users",
       notifications: "Notifications",
+      auditLogs: "Audit Logs",
       settings: "Settings",
     },
     header: {
@@ -137,17 +210,44 @@ export const superAdminDashboardDictionaries: Record<
       account: "Platform Admin",
     },
     overview: {
-      activeCenters: "Active centers",
-      trialCenters: "Trial centers",
+      totalCenters: "Total centers",
+      activeCenters: "Operational centers",
+      centersNeedingFollowUp: "Needs follow-up",
       monthlyRevenue: "Monthly revenue",
-      openDomainTasks: "Domain tasks",
+      totalUsers: "Users",
+    },
+    overviewHelper: {
+      activeCenters: "Centers that can currently use the system, regardless of subscription status.",
+      centersNeedingFollowUp: "Operational centers without an effective subscription.",
+    },
+    centersAtRiskBreakdown: {
+      noSubscription: "No subscription",
+      expired: "Expired",
+      suspended: "Suspended",
+      gracePeriod: "Grace period",
+    },
+    subscriptionHelper: {
+      activeSubscriptions: "Commercially active subscriptions not expiring within 7 days.",
     },
     sections: {
+      auditActivity: "Latest audit activity",
+      billingOverview: "Billing overview",
+      smartInsights: "Smart insights",
       quickStats: "Quick stats",
       recentCenters: "Recent centers",
+      revenueByCenter: "Revenue by center",
       subscriptionOverview: "Subscription overview",
       domainManagement: "Domain management",
       notifications: "Notifications",
+      revenueTrend: "Revenue Trend (30 Days)",
+      appointmentsTrend: "Appointments Trend (30 Days)",
+      topCentersByRevenue: "Top Centers by Revenue",
+      topCentersByAppointments: "Top Centers by Appointments",
+      auditActivityTrend: "Audit Activity (30 Days)",
+      subscriptionFinancials: "Subscription financials",
+    },
+    charts: {
+      noData: "No chart data available",
     },
     labels: {
       status: "Status",
@@ -162,14 +262,25 @@ export const superAdminDashboardDictionaries: Record<
       renewalsThisWeek: "renewals this week",
       minutesAgo: "min ago",
       hourAgo: "hr ago",
+      invoices: "invoices",
+      loadError: "Dashboard data could not be loaded. Please try again.",
+      loading: "Loading",
+      noData: "No data available",
+      notAvailable: "Not available",
     },
     actions: {
       viewAll: "View all",
       review: "Review",
       manage: "Manage",
+      view: "View",
     },
     statuses: {
       active: "Active",
+      archived: "Archived",
+      cancelled: "Cancelled",
+      paid: "Paid",
+      partial: "Partial",
+      suspended: "Suspended",
       trial: "Trial",
       pastDue: "Past due",
       pending: "Pending",
@@ -179,8 +290,28 @@ export const superAdminDashboardDictionaries: Record<
     stats: {
       newCenters: "New centers this week",
       appointmentsToday: "Appointments today",
+      completedAppointments: "Completed appointments",
       pendingVerifications: "Pending verifications",
+      sensitiveActions: "Sensitive actions",
       supportItems: "Support items",
+    },
+    billing: {
+      paidInvoices: "Paid invoices",
+      pendingInvoices: "Pending invoices",
+      partialInvoices: "Partial invoices",
+    },
+    subscriptionBilling: {
+      totalRevenue: "Total subscription revenue",
+      paidInvoices: "Paid subscription invoices",
+      pendingInvoices: "Pending subscription invoices",
+      overdueInvoices: "Overdue subscription invoices",
+      mrr: "MRR",
+      revenueByPlan: "Revenue by plan",
+    },
+    insights: {
+      alerts: "Alerts",
+      highlights: "Highlights",
+      recommendations: "Recommendations",
     },
     plans: {
       starter: "Starter",
@@ -207,6 +338,19 @@ export const superAdminDashboardDictionaries: Record<
       domainVerificationCompleted: "Domain verification completed",
       pastDueCenterReview: "Past due center requires review",
     },
+    subscriptions: {
+      sectionTitle: "Subscription Overview",
+      activeSubscriptions: "Effective",
+      cancelled: "Cancelled",
+      expiringSoon: "Expiring Soon",
+      expired: "Expired",
+      gracePeriod: "Grace Period",
+      suspended: "Suspended",
+      total: "Total",
+      trialing: "Trialing",
+      unknown: "Unknown",
+      viewAll: "View All Subscriptions",
+    },
   },
   ar: {
     brand: {
@@ -230,6 +374,7 @@ export const superAdminDashboardDictionaries: Record<
       plans: "الباقات",
       users: "المستخدمون",
       notifications: "الإشعارات",
+      auditLogs: "سجل التدقيق",
       settings: "الإعدادات",
     },
     header: {
@@ -240,17 +385,44 @@ export const superAdminDashboardDictionaries: Record<
       account: "مدير المنصة",
     },
     overview: {
-      activeCenters: "المراكز النشطة",
-      trialCenters: "مراكز التجربة",
+      totalCenters: "إجمالي المراكز",
+      activeCenters: "المراكز التشغيلية",
+      centersNeedingFollowUp: "تحتاج متابعة",
       monthlyRevenue: "الإيراد الشهري",
-      openDomainTasks: "مهام النطاقات",
+      totalUsers: "المستخدمون",
+    },
+    overviewHelper: {
+      activeCenters: "مراكز يمكنها استخدام النظام حالياً بغض النظر عن حالة الاشتراك.",
+      centersNeedingFollowUp: "مراكز تشغيلية بدون اشتراك فعال.",
+    },
+    centersAtRiskBreakdown: {
+      noSubscription: "بدون اشتراك",
+      expired: "منتهية",
+      suspended: "موقوفة",
+      gracePeriod: "فترة سماح",
+    },
+    subscriptionHelper: {
+      activeSubscriptions: "اشتراكات تجارية فعالة وغير منتهية.",
     },
     sections: {
+      auditActivity: "أحدث أنشطة التدقيق",
+      billingOverview: "نظرة على الفواتير",
+      smartInsights: "رؤى ذكية",
       quickStats: "إحصائيات سريعة",
       recentCenters: "أحدث المراكز",
+      revenueByCenter: "الإيراد حسب المركز",
       subscriptionOverview: "نظرة على الاشتراكات",
       domainManagement: "إدارة النطاقات",
       notifications: "الإشعارات",
+      revenueTrend: "اتجاه الإيرادات (30 يومًا)",
+      appointmentsTrend: "اتجاه المواعيد (30 يومًا)",
+      topCentersByRevenue: "أعلى المراكز إيرادًا",
+      topCentersByAppointments: "أعلى المراكز بالمواعيد",
+      auditActivityTrend: "نشاط التدقيق (30 يومًا)",
+      subscriptionFinancials: "المؤشرات المالية للاشتراكات",
+    },
+    charts: {
+      noData: "لا توجد بيانات للرسم البياني",
     },
     labels: {
       status: "الحالة",
@@ -265,14 +437,25 @@ export const superAdminDashboardDictionaries: Record<
       renewalsThisWeek: "تجديدات هذا الأسبوع",
       minutesAgo: "دقيقة",
       hourAgo: "ساعة",
+      invoices: "فواتير",
+      loadError: "تعذر تحميل بيانات لوحة التحكم. يرجى المحاولة مرة أخرى.",
+      loading: "جار التحميل",
+      noData: "لا توجد بيانات",
+      notAvailable: "غير متوفر",
     },
     actions: {
       viewAll: "عرض الكل",
       review: "مراجعة",
       manage: "إدارة",
+      view: "عرض",
     },
     statuses: {
       active: "نشط",
+      archived: "مؤرشف",
+      cancelled: "ملغى",
+      paid: "مدفوع",
+      partial: "جزئي",
+      suspended: "معلق",
       trial: "تجربة",
       pastDue: "متأخر",
       pending: "قيد الانتظار",
@@ -282,8 +465,28 @@ export const superAdminDashboardDictionaries: Record<
     stats: {
       newCenters: "مراكز جديدة هذا الأسبوع",
       appointmentsToday: "مواعيد اليوم",
+      completedAppointments: "المواعيد المكتملة",
       pendingVerifications: "توثيقات معلقة",
+      sensitiveActions: "إجراءات حساسة",
       supportItems: "طلبات دعم",
+    },
+    billing: {
+      paidInvoices: "فواتير مدفوعة",
+      pendingInvoices: "فواتير معلقة",
+      partialInvoices: "فواتير جزئية",
+    },
+    subscriptionBilling: {
+      totalRevenue: "إجمالي إيراد الاشتراكات",
+      paidInvoices: "فواتير اشتراك مدفوعة",
+      pendingInvoices: "فواتير اشتراك معلقة",
+      overdueInvoices: "فواتير اشتراك متأخرة",
+      mrr: "الإيراد الشهري المتكرر",
+      revenueByPlan: "الإيراد حسب الخطة",
+    },
+    insights: {
+      alerts: "تنبيهات",
+      highlights: "نقاط إيجابية",
+      recommendations: "توصيات",
     },
     plans: {
       starter: "البداية",
@@ -310,6 +513,19 @@ export const superAdminDashboardDictionaries: Record<
       domainVerificationCompleted: "اكتمل توثيق النطاق",
       pastDueCenterReview: "مركز متأخر يحتاج إلى مراجعة",
     },
+    subscriptions: {
+      sectionTitle: "نظرة على الاشتراكات",
+      activeSubscriptions: "فعالة",
+      cancelled: "ملغاة",
+      expiringSoon: "تنتهي قريبًا",
+      expired: "منتهية",
+      gracePeriod: "فترة السماح",
+      suspended: "موقوفة",
+      total: "المجموع",
+      trialing: "تجريبية",
+      unknown: "غير معروفة",
+      viewAll: "عرض جميع الاشتراكات",
+    },
   },
   he: {
     brand: {
@@ -333,6 +549,7 @@ export const superAdminDashboardDictionaries: Record<
       plans: "תוכניות",
       users: "משתמשים",
       notifications: "התראות",
+      auditLogs: "יומן ביקורת",
       settings: "הגדרות",
     },
     header: {
@@ -343,17 +560,44 @@ export const superAdminDashboardDictionaries: Record<
       account: "מנהל מערכת",
     },
     overview: {
-      activeCenters: "מרכזים פעילים",
-      trialCenters: "מרכזי ניסיון",
+      totalCenters: "סה״כ מרכזים",
+      activeCenters: "מרכזים תפעוליים",
+      centersNeedingFollowUp: "דורשים מעקב",
       monthlyRevenue: "הכנסה חודשית",
-      openDomainTasks: "משימות דומיין",
+      totalUsers: "משתמשים",
+    },
+    overviewHelper: {
+      activeCenters: "מרכזים שיכולים להשתמש במערכת כעת, ללא תלות בסטטוס המינוי.",
+      centersNeedingFollowUp: "מרכזים תפעוליים ללא מינוי אפקטיבי.",
+    },
+    centersAtRiskBreakdown: {
+      noSubscription: "ללא מינוי",
+      expired: "פג תוקף",
+      suspended: "מושהה",
+      gracePeriod: "תקופת חסד",
+    },
+    subscriptionHelper: {
+      activeSubscriptions: "מינויים מסחריים אפקטיביים שלא מסתיימים תוך 7 ימים.",
     },
     sections: {
+      auditActivity: "פעילות ביקורת אחרונה",
+      billingOverview: "סקירת חיוב",
+      smartInsights: "תובנות חכמות",
       quickStats: "נתונים מהירים",
       recentCenters: "מרכזים אחרונים",
+      revenueByCenter: "הכנסה לפי מרכז",
       subscriptionOverview: "סקירת מינויים",
       domainManagement: "ניהול דומיינים",
       notifications: "התראות",
+      revenueTrend: "מגמת הכנסות (30 יום)",
+      appointmentsTrend: "מגמת תורים (30 יום)",
+      topCentersByRevenue: "מרכזים מובילים לפי הכנסות",
+      topCentersByAppointments: "מרכזים מובילים לפי תורים",
+      auditActivityTrend: "פעילות ביקורת (30 יום)",
+      subscriptionFinancials: "מדדי כספים למינויים",
+    },
+    charts: {
+      noData: "אין נתוני גרף זמינים",
     },
     labels: {
       status: "סטטוס",
@@ -368,14 +612,25 @@ export const superAdminDashboardDictionaries: Record<
       renewalsThisWeek: "חידושים השבוע",
       minutesAgo: "דקות",
       hourAgo: "שעה",
+      invoices: "חשבוניות",
+      loadError: "לא ניתן לטעון את נתוני לוח הבקרה. נסה שוב.",
+      loading: "טוען",
+      noData: "אין נתונים",
+      notAvailable: "לא זמין",
     },
     actions: {
       viewAll: "הצג הכל",
       review: "בדיקה",
       manage: "ניהול",
+      view: "הצג",
     },
     statuses: {
       active: "פעיל",
+      archived: "בארכיון",
+      cancelled: "בוטל",
+      paid: "שולם",
+      partial: "חלקי",
+      suspended: "מושעה",
       trial: "ניסיון",
       pastDue: "באיחור",
       pending: "ממתין",
@@ -385,8 +640,28 @@ export const superAdminDashboardDictionaries: Record<
     stats: {
       newCenters: "מרכזים חדשים השבוע",
       appointmentsToday: "תורים היום",
+      completedAppointments: "תורים שהושלמו",
       pendingVerifications: "אימותים ממתינים",
+      sensitiveActions: "פעולות רגישות",
       supportItems: "פניות תמיכה",
+    },
+    billing: {
+      paidInvoices: "חשבוניות ששולמו",
+      pendingInvoices: "חשבוניות ממתינות",
+      partialInvoices: "חשבוניות חלקיות",
+    },
+    subscriptionBilling: {
+      totalRevenue: "סה\"כ הכנסות ממינויים",
+      paidInvoices: "חשבוניות מינוי ששולמו",
+      pendingInvoices: "חשבוניות מינוי ממתינות",
+      overdueInvoices: "חשבוניות מינוי באיחור",
+      mrr: "הכנסה חודשית חוזרת",
+      revenueByPlan: "הכנסה לפי תוכנית",
+    },
+    insights: {
+      alerts: "התראות",
+      highlights: "נקודות חיוביות",
+      recommendations: "המלצות",
     },
     plans: {
       starter: "מתחילים",
@@ -412,6 +687,19 @@ export const superAdminDashboardDictionaries: Record<
       subscriptionRenewalQueue: "תור חידוש מינויים",
       domainVerificationCompleted: "אימות הדומיין הושלם",
       pastDueCenterReview: "מרכז באיחור דורש בדיקה",
+    },
+    subscriptions: {
+      sectionTitle: "סקירת מינויים",
+      activeSubscriptions: "אפקטיביים",
+      cancelled: "בוטלו",
+      expiringSoon: "מסתיימים בקרוב",
+      expired: "פג תוקף",
+      gracePeriod: "תקופת חסד",
+      suspended: "מושהים",
+      total: "סך הכל",
+      trialing: "בניסיון",
+      unknown: "לא ידוע",
+      viewAll: "הצג את כל המינויים",
     },
   },
 };

@@ -12,6 +12,7 @@ type NotificationsDictionary = {
     plans: string;
     users: string;
     notifications: string;
+    auditLogs: string;
     settings: string;
   };
   header: {
@@ -28,8 +29,9 @@ type NotificationsDictionary = {
   };
   stats: {
     totalNotifications: string;
-    unread: string;
-    critical: string;
+    pending: string;
+    sent: string;
+    failed: string;
     sentToday: string;
   };
   filters: {
@@ -43,6 +45,12 @@ type NotificationsDictionary = {
     domain: string;
     payment: string;
     support: string;
+    statusAll: string;
+    statusPending: string;
+    statusSent: string;
+    statusFailed: string;
+    renewalRequests: string;
+    systemAlerts: string;
   };
   table: {
     notification: string;
@@ -58,6 +66,24 @@ type NotificationsDictionary = {
     markAsRead: string;
     archive: string;
     delete: string;
+    sendWhatsApp: string;
+    openSubscription: string;
+    markAsHandled: string;
+    markAllAsRead: string;
+  };
+  whatsapp: {
+    modalTitle: string;
+    phoneLabel: string;
+    messageLabel: string;
+    copyButton: string;
+    copiedHint: string;
+    logged: string;
+    openButton970: string;
+    openButton972: string;
+    tryBothHint: string;
+    noPhone: string;
+    cancel: string;
+    renewalRequestMessage: (centerName: string) => string;
   };
   types: {
     system: string;
@@ -65,6 +91,13 @@ type NotificationsDictionary = {
     domain: string;
     payment: string;
     support: string;
+    SUBSCRIPTION_EXPIRING: string;
+    SUBSCRIPTION_EXPIRED: string;
+    SUBSCRIPTION_RENEWAL_REQUEST: string;
+    SUBSCRIPTION_SUSPENDED: string;
+    SUBSCRIPTION_RENEWED: string;
+    TRIAL_ENDING_SOON: string;
+    MISSING_WHATSAPP_PHONE: string;
   };
   priorities: {
     critical: string;
@@ -74,7 +107,23 @@ type NotificationsDictionary = {
   statuses: {
     read: string;
     unread: string;
+    PENDING: string;
+    SENT: string;
+    FAILED: string;
+    CANCELLED: string;
   };
+  channels: {
+    IN_APP: string;
+    EMAIL: string;
+    SMS: string;
+    WHATSAPP: string;
+  };
+  empty: {
+    noNotifications: string;
+    noNotificationsHint: string;
+    markAllReadFailed: string;
+  };
+  loading: string;
   centers: {
     novaLaser: string;
     alNoorHijama: string;
@@ -106,6 +155,12 @@ type NotificationsDictionary = {
     mobileHint: string;
     templatesHint: string;
   };
+  whatsappAttempts: {
+    attempts: string;
+    copied: string;
+    lastAttempt: string;
+    opened: string;
+  };
 };
 
 export const superAdminNotificationsDictionaries: Record<SupportedLocale, NotificationsDictionary> = {
@@ -121,6 +176,7 @@ export const superAdminNotificationsDictionaries: Record<SupportedLocale, Notifi
       plans: "Plans",
       users: "Users",
       notifications: "Notifications",
+      auditLogs: "Audit Logs",
       settings: "Settings",
     },
     header: {
@@ -137,13 +193,14 @@ export const superAdminNotificationsDictionaries: Record<SupportedLocale, Notifi
     },
     stats: {
       totalNotifications: "Total Notifications",
-      unread: "Unread",
-      critical: "Critical",
+      pending: "Unread",
+      sent: "Sent",
+      failed: "Failed",
       sentToday: "Sent Today",
     },
     filters: {
       searchLabel: "Search",
-      searchPlaceholder: "Search by title, center, or message",
+      searchPlaceholder: "Search by center name",
       all: "All",
       unread: "Unread",
       critical: "Critical",
@@ -152,6 +209,12 @@ export const superAdminNotificationsDictionaries: Record<SupportedLocale, Notifi
       domain: "Domain",
       payment: "Payment",
       support: "Support",
+      statusAll: "All Statuses",
+      statusPending: "Pending",
+      statusSent: "Sent",
+      statusFailed: "Failed",
+      renewalRequests: "Renewal Requests",
+      systemAlerts: "System Alerts",
     },
     table: {
       notification: "Notification",
@@ -167,6 +230,25 @@ export const superAdminNotificationsDictionaries: Record<SupportedLocale, Notifi
       markAsRead: "Mark as Read",
       archive: "Archive",
       delete: "Delete",
+      sendWhatsApp: "Send WhatsApp",
+      openSubscription: "Open Subscription",
+      markAsHandled: "Mark as Handled",
+      markAllAsRead: "Mark All as Read",
+    },
+    whatsapp: {
+      modalTitle: "Send via WhatsApp",
+      phoneLabel: "Phone Number",
+      messageLabel: "Message (editable)",
+      copyButton: "Copy Message",
+      copiedHint: "Copied!",
+      logged: "Logged ✓",
+      openButton970: "Open WhatsApp +970",
+      openButton972: "Open WhatsApp +972",
+      tryBothHint: "Try +970 first; if the number doesn't open, try +972.",
+      noPhone: "No WhatsApp number for this center. Add a number to the center or set a support number in Settings.",
+      cancel: "Cancel",
+      renewalRequestMessage: (centerName: string) =>
+        `Hello ${centerName}, we have received your RoyalCare subscription renewal request and will follow up with you to complete the renewal.`,
     },
     types: {
       system: "System",
@@ -174,6 +256,13 @@ export const superAdminNotificationsDictionaries: Record<SupportedLocale, Notifi
       domain: "Domain",
       payment: "Payment",
       support: "Support",
+      SUBSCRIPTION_EXPIRING: "Expiring Soon",
+      SUBSCRIPTION_EXPIRED: "Expired",
+      SUBSCRIPTION_RENEWAL_REQUEST: "Renewal Request",
+      SUBSCRIPTION_SUSPENDED: "Suspended",
+      SUBSCRIPTION_RENEWED: "Renewed",
+      TRIAL_ENDING_SOON: "Trial Ending Soon",
+      MISSING_WHATSAPP_PHONE: "Missing WhatsApp Phone",
     },
     priorities: {
       critical: "Critical",
@@ -183,7 +272,23 @@ export const superAdminNotificationsDictionaries: Record<SupportedLocale, Notifi
     statuses: {
       read: "Read",
       unread: "Unread",
+      PENDING: "Pending",
+      SENT: "Sent",
+      FAILED: "Failed",
+      CANCELLED: "Cancelled",
     },
+    channels: {
+      IN_APP: "In-App",
+      EMAIL: "Email",
+      SMS: "SMS",
+      WHATSAPP: "WhatsApp",
+    },
+    empty: {
+      noNotifications: "No notifications found",
+      noNotificationsHint: "Subscription lifecycle notifications will appear here automatically.",
+      markAllReadFailed: "Notifications could not be marked as read. Please try again.",
+    },
+    loading: "Loading notifications…",
     centers: {
       novaLaser: "Nova Laser Center",
       alNoorHijama: "Al Noor Hijama",
@@ -213,6 +318,12 @@ export const superAdminNotificationsDictionaries: Record<SupportedLocale, Notifi
       mobileHint: "Mobile uses notification cards with the shared bottom-sheet action menu.",
       templatesHint: "Templates are UI-only previews until notification delivery settings are connected.",
     },
+    whatsappAttempts: {
+      attempts: "attempts",
+      copied: "copied",
+      lastAttempt: "Last attempt",
+      opened: "opened",
+    },
   },
   ar: {
     brand: { name: "رويال كير", console: "إدارة المنصة" },
@@ -226,6 +337,7 @@ export const superAdminNotificationsDictionaries: Record<SupportedLocale, Notifi
       plans: "الباقات",
       users: "المستخدمون",
       notifications: "الإشعارات",
+      auditLogs: "سجل التدقيق",
       settings: "الإعدادات",
     },
     header: {
@@ -242,13 +354,14 @@ export const superAdminNotificationsDictionaries: Record<SupportedLocale, Notifi
     },
     stats: {
       totalNotifications: "إجمالي الإشعارات",
-      unread: "غير مقروءة",
-      critical: "حرجة",
+      pending: "غير مقروء",
+      sent: "مرسل",
+      failed: "فشل",
       sentToday: "أرسلت اليوم",
     },
     filters: {
       searchLabel: "بحث",
-      searchPlaceholder: "ابحث حسب العنوان أو المركز أو الرسالة",
+      searchPlaceholder: "ابحث باسم المركز",
       all: "الكل",
       unread: "غير مقروء",
       critical: "حرج",
@@ -257,6 +370,12 @@ export const superAdminNotificationsDictionaries: Record<SupportedLocale, Notifi
       domain: "النطاق",
       payment: "الدفع",
       support: "الدعم",
+      statusAll: "كل الحالات",
+      statusPending: "معلق",
+      statusSent: "مرسل",
+      statusFailed: "فشل",
+      renewalRequests: "طلبات التجديد",
+      systemAlerts: "تنبيهات النظام",
     },
     table: {
       notification: "الإشعار",
@@ -272,6 +391,25 @@ export const superAdminNotificationsDictionaries: Record<SupportedLocale, Notifi
       markAsRead: "تحديد كمقروء",
       archive: "أرشفة",
       delete: "حذف",
+      sendWhatsApp: "إرسال واتساب",
+      openSubscription: "فتح الاشتراك",
+      markAsHandled: "تحديد كمعالج",
+      markAllAsRead: "تحديد الكل كمقروء",
+    },
+    whatsapp: {
+      modalTitle: "إرسال عبر واتساب",
+      phoneLabel: "رقم الهاتف",
+      messageLabel: "الرسالة (قابلة للتعديل)",
+      copyButton: "نسخ الرسالة",
+      copiedHint: "تم النسخ!",
+      logged: "تم تسجيل محاولة واتساب ✓",
+      openButton970: "فتح واتساب +970",
+      openButton972: "فتح واتساب +972",
+      tryBothHint: "جرّب +970 أولاً؛ إذا لم يفتح الرقم، جرّب +972.",
+      noPhone: "لا يوجد رقم واتساب. أضف رقم للمركز أو رقم دعم من الإعدادات.",
+      cancel: "إلغاء",
+      renewalRequestMessage: (centerName: string) =>
+        `مرحباً ${centerName}، وصلنا طلب تجديد اشتراككم في RoyalCare وسنتابع معكم لإتمام التجديد.`,
     },
     types: {
       system: "النظام",
@@ -279,6 +417,13 @@ export const superAdminNotificationsDictionaries: Record<SupportedLocale, Notifi
       domain: "النطاق",
       payment: "الدفع",
       support: "الدعم",
+      SUBSCRIPTION_EXPIRING: "ينتهي قريباً",
+      SUBSCRIPTION_EXPIRED: "منتهي",
+      SUBSCRIPTION_RENEWAL_REQUEST: "طلب تجديد",
+      SUBSCRIPTION_SUSPENDED: "موقوف",
+      SUBSCRIPTION_RENEWED: "تم التجديد",
+      TRIAL_ENDING_SOON: "الفترة التجريبية تنتهي قريباً",
+      MISSING_WHATSAPP_PHONE: "رقم واتساب غير متوفر",
     },
     priorities: {
       critical: "حرج",
@@ -288,7 +433,23 @@ export const superAdminNotificationsDictionaries: Record<SupportedLocale, Notifi
     statuses: {
       read: "مقروء",
       unread: "غير مقروء",
+      PENDING: "معلق",
+      SENT: "مرسل",
+      FAILED: "فشل",
+      CANCELLED: "ملغي",
     },
+    channels: {
+      IN_APP: "داخل التطبيق",
+      EMAIL: "البريد الإلكتروني",
+      SMS: "رسالة نصية",
+      WHATSAPP: "واتساب",
+    },
+    empty: {
+      noNotifications: "لا توجد إشعارات",
+      noNotificationsHint: "ستظهر هنا إشعارات دورة حياة الاشتراك تلقائياً.",
+      markAllReadFailed: "تعذر تحديد الإشعارات كمقروءة. يرجى المحاولة مرة أخرى.",
+    },
+    loading: "جارٍ تحميل الإشعارات…",
     centers: {
       novaLaser: "مركز نوفا ليزر",
       alNoorHijama: "مركز النور للحجامة",
@@ -318,6 +479,12 @@ export const superAdminNotificationsDictionaries: Record<SupportedLocale, Notifi
       mobileHint: "في الجوال تظهر الإشعارات كبطاقات مع قائمة إجراءات سفلية مشتركة.",
       templatesHint: "القوالب للمعاينة فقط إلى أن يتم ربط إعدادات إرسال الإشعارات.",
     },
+    whatsappAttempts: {
+      attempts: "محاولات",
+      copied: "نسخ",
+      lastAttempt: "آخر محاولة",
+      opened: "فتح",
+    },
   },
   he: {
     brand: { name: "RoyalCare", console: "ניהול מערכת" },
@@ -331,6 +498,7 @@ export const superAdminNotificationsDictionaries: Record<SupportedLocale, Notifi
       plans: "תוכניות",
       users: "משתמשים",
       notifications: "התראות",
+      auditLogs: "יומן ביקורת",
       settings: "הגדרות",
     },
     header: {
@@ -347,13 +515,14 @@ export const superAdminNotificationsDictionaries: Record<SupportedLocale, Notifi
     },
     stats: {
       totalNotifications: "סך התראות",
-      unread: "לא נקראו",
-      critical: "קריטיות",
+      pending: "לא נקרא",
+      sent: "נשלח",
+      failed: "נכשל",
       sentToday: "נשלחו היום",
     },
     filters: {
       searchLabel: "חיפוש",
-      searchPlaceholder: "חיפוש לפי כותרת, מרכז או הודעה",
+      searchPlaceholder: "חיפוש לפי שם מרכז",
       all: "הכל",
       unread: "לא נקרא",
       critical: "קריטי",
@@ -362,6 +531,12 @@ export const superAdminNotificationsDictionaries: Record<SupportedLocale, Notifi
       domain: "דומיין",
       payment: "תשלום",
       support: "תמיכה",
+      statusAll: "כל הסטטוסים",
+      statusPending: "ממתין",
+      statusSent: "נשלח",
+      statusFailed: "נכשל",
+      renewalRequests: "בקשות חידוש",
+      systemAlerts: "התראות מערכת",
     },
     table: {
       notification: "התראה",
@@ -377,6 +552,25 @@ export const superAdminNotificationsDictionaries: Record<SupportedLocale, Notifi
       markAsRead: "סימון כנקרא",
       archive: "ארכוב",
       delete: "מחיקה",
+      sendWhatsApp: "שליחת וואטסאפ",
+      openSubscription: "פתיחת מינוי",
+      markAsHandled: "סימון כטופל",
+      markAllAsRead: "סמן הכל כנקרא",
+    },
+    whatsapp: {
+      modalTitle: "שלח דרך וואטסאפ",
+      phoneLabel: "מספר טלפון",
+      messageLabel: "הודעה (ניתנת לעריכה)",
+      copyButton: "העתק הודעה",
+      copiedHint: "הועתק!",
+      logged: "נרשם ✓",
+      openButton970: "פתח וואטסאפ +970",
+      openButton972: "פתח וואטסאפ +972",
+      tryBothHint: "נסה +970 תחילה; אם המספר לא נפתח, נסה +972.",
+      noPhone: "אין מספר WhatsApp. הוסף מספר למרכז או הגדר מספר תמיכה בהגדרות.",
+      cancel: "ביטול",
+      renewalRequestMessage: (centerName: string) =>
+        `שלום ${centerName}, קיבלנו את בקשת חידוש המינוי שלכם ב-RoyalCare ונעקוב אחריכם להשלמת החידוש.`,
     },
     types: {
       system: "מערכת",
@@ -384,6 +578,13 @@ export const superAdminNotificationsDictionaries: Record<SupportedLocale, Notifi
       domain: "דומיין",
       payment: "תשלום",
       support: "תמיכה",
+      SUBSCRIPTION_EXPIRING: "עומד לפוג",
+      SUBSCRIPTION_EXPIRED: "פג תוקף",
+      SUBSCRIPTION_RENEWAL_REQUEST: "בקשת חידוש",
+      SUBSCRIPTION_SUSPENDED: "מושעה",
+      SUBSCRIPTION_RENEWED: "חודש",
+      TRIAL_ENDING_SOON: "תקופת הניסיון עומדת להסתיים",
+      MISSING_WHATSAPP_PHONE: "חסר מספר WhatsApp",
     },
     priorities: {
       critical: "קריטי",
@@ -393,7 +594,23 @@ export const superAdminNotificationsDictionaries: Record<SupportedLocale, Notifi
     statuses: {
       read: "נקרא",
       unread: "לא נקרא",
+      PENDING: "ממתין",
+      SENT: "נשלח",
+      FAILED: "נכשל",
+      CANCELLED: "בוטל",
     },
+    channels: {
+      IN_APP: "באפליקציה",
+      EMAIL: "אימייל",
+      SMS: "SMS",
+      WHATSAPP: "וואטסאפ",
+    },
+    empty: {
+      noNotifications: "לא נמצאו התראות",
+      noNotificationsHint: "התראות מחזור חיי המינוי יופיעו כאן באופן אוטומטי.",
+      markAllReadFailed: "לא ניתן לסמן את ההתראות כנקראו. נסה שוב.",
+    },
+    loading: "טוען התראות…",
     centers: {
       novaLaser: "מרכז נובה לייזר",
       alNoorHijama: "מרכז אל נור לחיג'אמה",
@@ -422,6 +639,12 @@ export const superAdminNotificationsDictionaries: Record<SupportedLocale, Notifi
     values: {
       mobileHint: "במובייל ההתראות מוצגות ככרטיסים עם תפריט פעולות תחתון משותף.",
       templatesHint: "התבניות הן תצוגה בלבד עד לחיבור הגדרות שליחת התראות.",
+    },
+    whatsappAttempts: {
+      attempts: "ניסיונות",
+      copied: "הועתק",
+      lastAttempt: "ניסיון אחרון",
+      opened: "נפתח",
     },
   },
 };

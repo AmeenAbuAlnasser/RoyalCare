@@ -5,6 +5,9 @@ export class CreatePatientDto {
   dateOfBirth?: string;
   email?: string;
   fullName!: string;
+  fullNameAr?: string;
+  fullNameHe?: string;
+  fullNameEn?: string;
   gender?: PatientGender;
   nationalId?: string;
   notes?: string;

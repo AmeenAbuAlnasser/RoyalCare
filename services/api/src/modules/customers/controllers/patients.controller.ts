@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -14,6 +15,7 @@ import {
   centerSessionCookieName,
   verifyCenterSessionToken,
 } from '../../auth/services/center-session.service';
+import { PatientPortalService } from '../../patient-portal/patient-portal.service';
 import { AddCreditDto } from '../dto/add-credit.dto';
 import { CreatePatientDto } from '../dto/create-patient.dto';
 import { UpdatePatientStatusDto } from '../dto/update-patient-status.dto';
@@ -41,20 +43,28 @@ export class PatientsController {
     private readonly centerAuthService: CenterAuthService,
     private readonly patientsService: PatientsService,
     private readonly patientCreditService: PatientCreditService,
+    private readonly patientPortalService: PatientPortalService,
   ) {}
 
   @Get()
   async list(@Req() request: Request, @Query('search') search?: string) {
     const session = await this.getSession(request);
 
-    return this.patientsService.list(session.center.id, { search });
+    return this.patientsService.list(session.center.id, session.permissions, {
+      search,
+    });
   }
 
   @Post()
   async create(@Req() request: Request, @Body() dto: CreatePatientDto) {
     const session = await this.getSession(request);
 
-    return this.patientsService.create(session.center.id, dto);
+    return this.patientsService.create(
+      session.center.id,
+      session.permissions,
+      session.user.id,
+      dto,
+    );
   }
 
   @Get(':patientId')
@@ -64,7 +74,11 @@ export class PatientsController {
   ) {
     const session = await this.getSession(request);
 
-    return this.patientsService.getById(session.center.id, patientId);
+    return this.patientsService.getById(
+      session.center.id,
+      session.permissions,
+      patientId,
+    );
   }
 
   @Patch(':patientId')
@@ -75,7 +89,13 @@ export class PatientsController {
   ) {
     const session = await this.getSession(request);
 
-    return this.patientsService.update(session.center.id, patientId, dto);
+    return this.patientsService.update(
+      session.center.id,
+      session.permissions,
+      session.user.id,
+      patientId,
+      dto,
+    );
   }
 
   @Patch(':patientId/status')
@@ -86,7 +106,13 @@ export class PatientsController {
   ) {
     const session = await this.getSession(request);
 
-    return this.patientsService.updateStatus(session.center.id, patientId, dto);
+    return this.patientsService.updateStatus(
+      session.center.id,
+      session.permissions,
+      session.user.id,
+      patientId,
+      dto,
+    );
   }
 
   @Post(':patientId/credit')
@@ -99,10 +125,37 @@ export class PatientsController {
 
     return this.patientCreditService.addManualCredit(
       session.center.id,
-      session.role.key,
+      session.permissions,
       patientId,
       session.user.id,
       dto,
+    );
+  }
+
+  @Delete(':patientId')
+  async deletePatient(
+    @Req() request: Request,
+    @Param('patientId') patientId: string,
+  ) {
+    const session = await this.getSession(request);
+
+    return this.patientsService.delete(
+      session.center.id,
+      session.permissions,
+      session.user.id,
+      patientId,
+    );
+  }
+
+  @Post(':patientId/portal-token')
+  async generatePortalToken(
+    @Req() request: Request,
+    @Param('patientId') patientId: string,
+  ) {
+    const session = await this.getSession(request);
+    return this.patientPortalService.generatePortalToken(
+      session.center.id,
+      patientId,
     );
   }
 

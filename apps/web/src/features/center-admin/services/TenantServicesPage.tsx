@@ -6,11 +6,16 @@ import { buttonClassName } from "@/components/ui/button-styles";
 import { useLanguage } from "@/i18n/LanguageProvider";
 import { formatDate } from "@/i18n/formatters";
 import {
+  deleteTenantService,
   listTenantServices,
   updateTenantServiceStatus,
   type TenantService,
 } from "@/lib/api/tenant-services";
 import { CenterAdminShell } from "../layout/CenterAdminShell";
+import {
+  getTenantSubscriptionRestrictionMessage,
+  isTenantWriteBlocked,
+} from "../subscription-access";
 import {
   formatServicePrice,
   getLocalizedServiceDescription,
@@ -57,6 +62,8 @@ export function TenantServicesPage() {
   const [loadError, setLoadError] = useState(false);
   const [notice, setNotice] = useState("");
   const [savingServiceId, setSavingServiceId] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<TenantService | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -100,22 +107,39 @@ export function TenantServicesPage() {
       title={(dictionary) => dictionary.services.title}
     >
       {({ dictionary, session }) => {
-        const canCreate = hasTenantServicePermission(
-          session.role.key,
-          "services.create",
-        );
-        const canUpdate = hasTenantServicePermission(
-          session.role.key,
-          "services.update",
-        );
-        const canArchive = hasTenantServicePermission(
-          session.role.key,
-          "services.archive",
-        );
-        const canActivate = hasTenantServicePermission(
-          session.role.key,
-          "services.activate",
-        );
+        const isWriteBlocked = isTenantWriteBlocked(session);
+        const restrictionMessage =
+          getTenantSubscriptionRestrictionMessage(session, dictionary);
+        const canArchive =
+          hasTenantServicePermission(
+          session.permissions,
+          "services:archive",
+        ) && !isWriteBlocked;
+        const canActivate =
+          hasTenantServicePermission(
+          session.permissions,
+          "services:status",
+        ) && !isWriteBlocked;
+        const canDelete = hasTenantServicePermission(
+          session.permissions,
+          "services:delete",
+        ) && !isWriteBlocked;
+
+        const handleDelete = async () => {
+          if (!deleteTarget) return;
+          setIsDeleting(true);
+          setNotice("");
+          try {
+            await deleteTenantService(deleteTarget.id);
+            setServices((current) =>
+              current.filter((s) => s.id !== deleteTarget.id),
+            );
+            setNotice(dictionary.services.deleted);
+            setDeleteTarget(null);
+          } finally {
+            setIsDeleting(false);
+          }
+        };
         const filteredServices = services.filter(
           (service) =>
             matchesFilter(service, filter) && matchesSearch(service, search),
@@ -181,13 +205,24 @@ export function TenantServicesPage() {
                     ))}
                   </div>
                 </div>
-                {canCreate ? (
-                  <Link
-                    className={buttonClassName("primary", "md")}
-                    href="/tenant/services/new"
-                  >
-                    {dictionary.services.addService}
-                  </Link>
+                {session.permissions.includes("services:create") ? (
+                  isWriteBlocked ? (
+                    <button
+                      className={buttonClassName("primary", "md")}
+                      disabled
+                      title={restrictionMessage || undefined}
+                      type="button"
+                    >
+                      {dictionary.services.addService}
+                    </button>
+                  ) : (
+                    <Link
+                      className={buttonClassName("primary", "md")}
+                      href="/tenant/services/new"
+                    >
+                      {dictionary.services.addService}
+                    </Link>
+                  )
                 ) : null}
               </div>
             </section>
@@ -235,12 +270,45 @@ export function TenantServicesPage() {
               </section>
             ) : null}
 
+            {deleteTarget ? (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                <div className="w-full max-w-md rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-xl">
+                  <h3 className="text-base font-semibold text-[#0B2D5C]">
+                    {dictionary.services.deleteServiceConfirmTitle}
+                  </h3>
+                  <p className="mt-2 text-sm text-[#66758a]">
+                    {dictionary.services.deleteServiceConfirmBody}
+                  </p>
+                  <div className="mt-6 flex flex-wrap justify-end gap-3">
+                    <button
+                      className={buttonClassName("secondary", "md")}
+                      disabled={isDeleting}
+                      onClick={() => setDeleteTarget(null)}
+                      type="button"
+                    >
+                      {dictionary.common.cancel}
+                    </button>
+                    <button
+                      className={buttonClassName("danger", "md")}
+                      disabled={isDeleting}
+                      onClick={handleDelete}
+                      type="button"
+                    >
+                      {isDeleting
+                        ? dictionary.common.saving
+                        : dictionary.services.deleteServiceConfirmButton}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             <section className="mt-5 grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
               {filteredServices.map((service) => {
                 const statusKey = service.isActive ? "ACTIVE" : "ARCHIVED";
                 const canChangeStatus = service.isActive
-                  ? canArchive
-                  : canActivate;
+                  ? session.permissions.includes("services:archive")
+                  : session.permissions.includes("services:status");
                 const description = getLocalizedServiceDescription(
                   service,
                   locale,
@@ -288,13 +356,24 @@ export function TenantServicesPage() {
                       >
                         {dictionary.common.view}
                       </Link>
-                      {canUpdate ? (
-                        <Link
-                          className={buttonClassName("secondary", "sm")}
-                          href={`/tenant/services/${service.id}/edit`}
-                        >
-                          {dictionary.common.edit}
-                        </Link>
+                      {session.permissions.includes("services:update") ? (
+                        isWriteBlocked ? (
+                          <button
+                            className={buttonClassName("secondary", "sm")}
+                            disabled
+                            title={restrictionMessage || undefined}
+                            type="button"
+                          >
+                            {dictionary.common.edit}
+                          </button>
+                        ) : (
+                          <Link
+                            className={buttonClassName("secondary", "sm")}
+                            href={`/tenant/services/${service.id}/edit`}
+                          >
+                            {dictionary.common.edit}
+                          </Link>
+                        )
                       ) : null}
                       {canChangeStatus ? (
                         <button
@@ -302,14 +381,39 @@ export function TenantServicesPage() {
                             service.isActive ? "warning" : "success",
                             "sm",
                           )}
-                          disabled={savingServiceId === service.id}
+                          disabled={
+                            savingServiceId === service.id ||
+                            (service.isActive ? !canArchive : !canActivate)
+                          }
                           onClick={() => changeStatus(service)}
+                          title={restrictionMessage || undefined}
                           type="button"
                         >
                           {service.isActive
                             ? dictionary.common.archive
                             : dictionary.common.activate}
                         </button>
+                      ) : null}
+                      {canDelete ? (
+                        service.safeDeleteAllowed ? (
+                          <button
+                            className={buttonClassName("danger", "sm")}
+                            disabled={savingServiceId === service.id}
+                            onClick={() => setDeleteTarget(service)}
+                            type="button"
+                          >
+                            {dictionary.services.deleteService}
+                          </button>
+                        ) : (
+                          <button
+                            className={buttonClassName("danger", "sm")}
+                            disabled
+                            title={dictionary.services.deleteServiceBlockedTooltip}
+                            type="button"
+                          >
+                            {dictionary.services.deleteService}
+                          </button>
+                        )
                       ) : null}
                     </div>
                   </article>

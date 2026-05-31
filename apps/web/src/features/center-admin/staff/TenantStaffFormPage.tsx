@@ -131,6 +131,7 @@ export function TenantStaffFormPage({ mode }: { mode: "create" | "edit" }) {
   return (
     <CenterAdminShell
       activeNav="staff"
+      requiredPermission={mode === "create" ? "staff:create" : "staff:update"}
       subtitle={(dictionary) => dictionary.staff.subtitle}
       title={(dictionary) =>
         mode === "create" ? dictionary.staff.addStaff : dictionary.staff.editStaff

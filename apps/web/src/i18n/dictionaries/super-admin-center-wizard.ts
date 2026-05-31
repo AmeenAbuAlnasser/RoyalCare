@@ -18,6 +18,7 @@ export type CenterWizardDictionary = {
     plans: string;
     users: string;
     notifications: string;
+    auditLogs: string;
     settings: string;
   };
   header: {
@@ -81,6 +82,9 @@ export type CenterWizardDictionary = {
   };
   fields: {
     centerName: string;
+    centerNameAr: string;
+    centerNameEn: string;
+    centerNameHe: string;
     ownerName: string;
     phone: string;
     email: string;
@@ -124,6 +128,9 @@ export type CenterWizardDictionary = {
   };
   placeholders: {
     centerName: string;
+    centerNameAr: string;
+    centerNameEn: string;
+    centerNameHe: string;
     ownerName: string;
     phone: string;
     email: string;
@@ -211,6 +218,7 @@ export const superAdminCenterWizardDictionaries: Record<
       plans: "Plans",
       users: "Users",
       notifications: "Notifications",
+      auditLogs: "Audit Logs",
       settings: "Settings",
     },
     header: {
@@ -274,6 +282,9 @@ export const superAdminCenterWizardDictionaries: Record<
     },
     fields: {
       centerName: "Center Name",
+      centerNameAr: "Arabic center name",
+      centerNameEn: "English center name",
+      centerNameHe: "Hebrew center name",
       ownerName: "Owner Name",
       phone: "Phone",
       email: "Email",
@@ -317,6 +328,9 @@ export const superAdminCenterWizardDictionaries: Record<
     },
     placeholders: {
       centerName: "Nova Laser Center",
+      centerNameAr: "مركز نوفا ليزر",
+      centerNameEn: "Nova Laser Center",
+      centerNameHe: "מרכז נובה לייזר",
       ownerName: "Maya Cohen",
       phone: "+972 50 000 0000",
       email: "owner@example.com",
@@ -403,6 +417,7 @@ export const superAdminCenterWizardDictionaries: Record<
       plans: "الباقات",
       users: "المستخدمون",
       notifications: "الإشعارات",
+      auditLogs: "سجل التدقيق",
       settings: "الإعدادات",
     },
     header: {
@@ -466,6 +481,9 @@ export const superAdminCenterWizardDictionaries: Record<
     },
     fields: {
       centerName: "اسم المركز",
+      centerNameAr: "اسم المركز بالعربية",
+      centerNameEn: "اسم المركز بالإنجليزية",
+      centerNameHe: "اسم المركز بالعبرية",
       ownerName: "اسم المالك",
       phone: "الهاتف",
       email: "البريد الإلكتروني",
@@ -509,6 +527,9 @@ export const superAdminCenterWizardDictionaries: Record<
     },
     placeholders: {
       centerName: "مركز نوفا ليزر",
+      centerNameAr: "مركز نوفا ليزر",
+      centerNameEn: "Nova Laser Center",
+      centerNameHe: "מרכז נובה לייזר",
       ownerName: "مايا كوهين",
       phone: "+972 50 000 0000",
       email: "owner@example.com",
@@ -595,6 +616,7 @@ export const superAdminCenterWizardDictionaries: Record<
       plans: "תוכניות",
       users: "משתמשים",
       notifications: "התראות",
+      auditLogs: "יומן ביקורת",
       settings: "הגדרות",
     },
     header: {
@@ -658,6 +680,9 @@ export const superAdminCenterWizardDictionaries: Record<
     },
     fields: {
       centerName: "שם המרכז",
+      centerNameAr: "שם המרכז בערבית",
+      centerNameEn: "שם המרכז באנגלית",
+      centerNameHe: "שם המרכז בעברית",
       ownerName: "שם הבעלים",
       phone: "טלפון",
       email: "אימייל",
@@ -701,6 +726,9 @@ export const superAdminCenterWizardDictionaries: Record<
     },
     placeholders: {
       centerName: "מרכז נובה לייזר",
+      centerNameAr: "مركز نوفا ليزر",
+      centerNameEn: "Nova Laser Center",
+      centerNameHe: "מרכז נובה לייזר",
       ownerName: "מאיה כהן",
       phone: "+972 50 000 0000",
       email: "owner@example.com",

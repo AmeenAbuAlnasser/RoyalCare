@@ -12,6 +12,7 @@ type SettingsDictionary = {
     plans: string;
     users: string;
     notifications: string;
+    auditLogs: string;
     settings: string;
   };
   header: {
@@ -29,6 +30,7 @@ type SettingsDictionary = {
     subscriptionDefaults: string;
     domainDefaults: string;
     backupHealth: string;
+    whatsapp: string;
   };
   fields: {
     platformName: string;
@@ -62,6 +64,8 @@ type SettingsDictionary = {
     backupFrequency: string;
     systemStatus: string;
     databaseHealth: string;
+    whatsappCountryCode: string;
+    whatsappSupportPhone: string;
   };
   actions: {
     saveSettings: string;
@@ -81,6 +85,14 @@ type SettingsDictionary = {
     minutes: string;
     days: string;
     uiOnly: string;
+    whatsapp970: string;
+    whatsapp972: string;
+    whatsappDescription: string;
+    whatsappSaveSuccess: string;
+    whatsappSaveError: string;
+    whatsappSupportPhonePlaceholder: string;
+    whatsappPhoneError: string;
+    whatsappPhoneHelper: string;
   };
 };
 
@@ -97,6 +109,7 @@ export const superAdminSettingsDictionaries: Record<SupportedLocale, SettingsDic
       plans: "Plans",
       users: "Users",
       notifications: "Notifications",
+      auditLogs: "Audit Logs",
       settings: "Settings",
     },
     header: {
@@ -114,6 +127,7 @@ export const superAdminSettingsDictionaries: Record<SupportedLocale, SettingsDic
       subscriptionDefaults: "Subscription Defaults",
       domainDefaults: "Domain Defaults",
       backupHealth: "Backup & System Health",
+      whatsapp: "WhatsApp Settings",
     },
     fields: {
       platformName: "Platform Name",
@@ -147,6 +161,8 @@ export const superAdminSettingsDictionaries: Record<SupportedLocale, SettingsDic
       backupFrequency: "Backup Frequency",
       systemStatus: "System Status",
       databaseHealth: "Database Health",
+      whatsappCountryCode: "Default WhatsApp Country Code",
+      whatsappSupportPhone: "WhatsApp Support Number",
     },
     actions: {
       saveSettings: "Save Settings",
@@ -166,6 +182,14 @@ export const superAdminSettingsDictionaries: Record<SupportedLocale, SettingsDic
       minutes: "minutes",
       days: "days",
       uiOnly: "UI-only settings until backend configuration APIs are connected.",
+      whatsapp970: "+970 — Palestine",
+      whatsapp972: "+972 — Israel",
+      whatsappDescription: "Applied when a stored phone number has no country code prefix.",
+      whatsappSaveSuccess: "WhatsApp settings saved.",
+      whatsappSaveError: "Failed to save. Please try again.",
+      whatsappSupportPhonePlaceholder: "e.g. 0598397660",
+      whatsappPhoneError: "Enter 7–10 digits (digits only).",
+      whatsappPhoneHelper: "Combined with the country code when opening WhatsApp. A leading 0 will be removed automatically.",
     },
   },
   ar: {
@@ -180,6 +204,7 @@ export const superAdminSettingsDictionaries: Record<SupportedLocale, SettingsDic
       plans: "الباقات",
       users: "المستخدمون",
       notifications: "الإشعارات",
+      auditLogs: "سجل التدقيق",
       settings: "الإعدادات",
     },
     header: {
@@ -197,6 +222,7 @@ export const superAdminSettingsDictionaries: Record<SupportedLocale, SettingsDic
       subscriptionDefaults: "افتراضيات الاشتراك",
       domainDefaults: "افتراضيات النطاقات",
       backupHealth: "النسخ الاحتياطي وصحة النظام",
+      whatsapp: "إعدادات واتساب",
     },
     fields: {
       platformName: "اسم المنصة",
@@ -230,6 +256,8 @@ export const superAdminSettingsDictionaries: Record<SupportedLocale, SettingsDic
       backupFrequency: "تكرار النسخ الاحتياطي",
       systemStatus: "حالة النظام",
       databaseHealth: "صحة قاعدة البيانات",
+      whatsappCountryCode: "مفتاح الدولة الافتراضي لواتساب",
+      whatsappSupportPhone: "رقم واتساب الدعم",
     },
     actions: {
       saveSettings: "حفظ الإعدادات",
@@ -249,6 +277,14 @@ export const superAdminSettingsDictionaries: Record<SupportedLocale, SettingsDic
       minutes: "دقائق",
       days: "أيام",
       uiOnly: "الإعدادات واجهة فقط إلى أن يتم ربط واجهات إعدادات الخادم.",
+      whatsapp970: "+970 — فلسطين",
+      whatsapp972: "+972 — إسرائيل",
+      whatsappDescription: "يُطبّق عند غياب مفتاح الدولة في رقم الهاتف المخزّن.",
+      whatsappSaveSuccess: "تم حفظ إعدادات واتساب.",
+      whatsappSaveError: "فشل الحفظ. يرجى المحاولة مرة أخرى.",
+      whatsappSupportPhonePlaceholder: "مثال: 0598397660",
+      whatsappPhoneError: "أدخل 7–10 أرقام فقط.",
+      whatsappPhoneHelper: "سيتم دمج هذا الرقم مع مفتاح الدولة عند فتح واتساب. إذا كان الرقم يبدأ بـ 0 سيتم حذفه تلقائيًا.",
     },
   },
   he: {
@@ -263,6 +299,7 @@ export const superAdminSettingsDictionaries: Record<SupportedLocale, SettingsDic
       plans: "תוכניות",
       users: "משתמשים",
       notifications: "התראות",
+      auditLogs: "יומן ביקורת",
       settings: "הגדרות",
     },
     header: {
@@ -280,6 +317,7 @@ export const superAdminSettingsDictionaries: Record<SupportedLocale, SettingsDic
       subscriptionDefaults: "ברירות מחדל למינויים",
       domainDefaults: "ברירות מחדל לדומיינים",
       backupHealth: "גיבוי ובריאות מערכת",
+      whatsapp: "הגדרות WhatsApp",
     },
     fields: {
       platformName: "שם הפלטפורמה",
@@ -313,6 +351,8 @@ export const superAdminSettingsDictionaries: Record<SupportedLocale, SettingsDic
       backupFrequency: "תדירות גיבוי",
       systemStatus: "סטטוס מערכת",
       databaseHealth: "בריאות מסד נתונים",
+      whatsappCountryCode: "קידומת ברירת מחדל ל-WhatsApp",
+      whatsappSupportPhone: "מספר WhatsApp תמיכה",
     },
     actions: {
       saveSettings: "שמירת הגדרות",
@@ -332,6 +372,14 @@ export const superAdminSettingsDictionaries: Record<SupportedLocale, SettingsDic
       minutes: "דקות",
       days: "ימים",
       uiOnly: "ההגדרות הן ממשק בלבד עד לחיבור API של הגדרות השרת.",
+      whatsapp970: "+970 — פלסטין",
+      whatsapp972: "+972 — ישראל",
+      whatsappDescription: "מוחל כאשר למספר הטלפון המאוחסן אין קידומת מדינה.",
+      whatsappSaveSuccess: "הגדרות WhatsApp נשמרו.",
+      whatsappSaveError: "שמירה נכשלה. אנא נסה שוב.",
+      whatsappSupportPhonePlaceholder: "לדוגמה: 0598397660",
+      whatsappPhoneError: "יש להזין 7–10 ספרות בלבד.",
+      whatsappPhoneHelper: "ישולב עם קידומת המדינה בעת פתיחת WhatsApp. ספרת 0 בתחילה תוסר אוטומטית.",
     },
   },
 };

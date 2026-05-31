@@ -1,6 +1,17 @@
 import { API_BASE_URL, ApiRequestError } from "./super-admin-centers";
 import type { CenterRoleKey } from "@/i18n/dictionaries/center-admin";
 
+export type AppointmentInvoiceStatus = "PENDING" | "PARTIAL" | "PAID" | "CANCELLED";
+
+export type AppointmentInvoiceSummary = {
+  id: string;
+  status: AppointmentInvoiceStatus;
+  currency: string;
+  totalAmount: string;
+  paidAmount: string;
+  remainingAmount: string;
+};
+
 export type AppointmentStatus =
   | "SCHEDULED"
   | "CONFIRMED"
@@ -19,6 +30,12 @@ export type AppointmentPatient = {
 
 export type AppointmentService = {
   durationMinutes: number | null;
+  followUpEnabled?: boolean;
+  followUpType?: "FIXED_INTERVAL" | "SESSION_PLAN";
+  defaultIntervalDays?: number | null;
+  totalRecommendedSessions?: number | null;
+  autoCreateNextReminder?: boolean;
+  followUpRules?: unknown;
   id: string;
   isActive: boolean;
   nameAr: string;
@@ -39,6 +56,12 @@ export type AppointmentProvider = {
   status?: string;
 };
 
+export type AppointmentBookingSource = {
+  fullName: string;
+  notes: string | null;
+  phone: string;
+};
+
 export type TenantAppointment = {
   appointmentDate: string;
   cancellationReason: string | null;
@@ -48,6 +71,11 @@ export type TenantAppointment = {
   createdByUser: AppointmentProvider;
   createdByUserId: string;
   centerId: string;
+  customServiceName: string | null;
+  customServiceDuration: number | null;
+  customServicePrice: string | null;
+  customServiceCurrency: string | null;
+  customServiceSaved: boolean;
   durationMinutes: number;
   endTime: string;
   id: string;
@@ -57,26 +85,64 @@ export type TenantAppointment = {
   patient: AppointmentPatient;
   patientId: string;
   reminderSent: boolean;
-  service: AppointmentService;
-  serviceId: string;
+  lastReminderSentAt: string | null;
+  reminderCount: number;
+  reminder24hSent: boolean;
+  reminder2hSent: boolean;
+  service: AppointmentService | null;
+  serviceId: string | null;
+  offerTitle: string | null;
+  offerPrice: string | null;
+  offerCurrency: string | null;
   staffUser: AppointmentProvider;
   staffUserId: string;
   startTime: string;
   status: AppointmentStatus;
   updatedAt: string;
+  invoice: AppointmentInvoiceSummary | null;
+  bookingSource: AppointmentBookingSource | null;
+  followUp: {
+    id: string;
+    dueDate: string;
+    status: string;
+    sessionNumber: number | null;
+  } | null;
 };
 
 export type TenantAppointmentPayload = {
   appointmentDate: string;
+  autoCreateNextReminder?: boolean;
+  customServiceCurrency?: string | null;
+  customServiceDuration?: number | string | null;
+  customServiceName?: string | null;
+  customServicePrice?: number | string | null;
+  defaultIntervalDays?: string | number | null;
   durationMinutes: number | string;
   endTime?: string;
+  followUpEnabled?: boolean;
+  followUpRules?: Array<{
+    fromSessionNumber: string;
+    toSessionNumber: string;
+    intervalDays: string;
+  }> | null;
+  followUpSessionRules?: Array<{
+    fromSessionNumber: string;
+    toSessionNumber: string;
+    intervalDays: string;
+  }> | null;
+  followUpType?: "FIXED_INTERVAL" | "SESSION_PLAN";
   internalNotes?: string | null;
   notes?: string | null;
   patientId: string;
-  serviceId: string;
+  reminderMessageAr?: string | null;
+  reminderMessageEn?: string | null;
+  reminderMessageHe?: string | null;
+  saveCustomService?: boolean;
+  serviceId?: string | null;
   staffUserId: string;
   startTime: string;
   status?: AppointmentStatus;
+  totalRecommendedSessions?: string | number | null;
 };
 
 export type TenantAppointmentsListResponse = {
@@ -85,6 +151,7 @@ export type TenantAppointmentsListResponse = {
 };
 
 export type AppointmentConflictDetails = {
+  appointmentId?: string;
   appointmentDate: string;
   endTime: string;
   patientName: string;
@@ -101,6 +168,18 @@ export type TenantAppointmentOptions = {
   services: AppointmentService[];
 };
 
+export type TenantAvailabilitySlot = {
+  available: boolean;
+  reason?: string;
+  time: string;
+};
+
+export type TenantAvailabilityResponse = {
+  date: string;
+  serviceId: string;
+  slots: TenantAvailabilitySlot[];
+};
+
 function safelyParseJson(rawBody: string) {
   if (!rawBody.trim()) {
     return null;
@@ -114,7 +193,13 @@ function safelyParseJson(rawBody: string) {
 }
 
 async function request<T>(path: string, init?: RequestInit) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const t0 = performance.now();
+  const url = `${API_BASE_URL}${path}`;
+  const method = init?.method ?? "GET";
+  console.debug("[api:request]", method, url);
+
+  const response = await fetch(url, {
+    cache: "no-store",
     ...init,
     credentials: "include",
     headers: {
@@ -125,6 +210,7 @@ async function request<T>(path: string, init?: RequestInit) {
 
   if (!response.ok) {
     const rawResponseBody = await response.text();
+    console.debug("[api:error]", method, url, response.status, `${(performance.now() - t0).toFixed(0)}ms`);
 
     throw new ApiRequestError({
       details: safelyParseJson(rawResponseBody),
@@ -134,7 +220,23 @@ async function request<T>(path: string, init?: RequestInit) {
     });
   }
 
-  return (await response.json()) as T;
+  const data = (await response.json()) as T;
+  console.debug("[api:response]", method, url, response.status, `${(performance.now() - t0).toFixed(0)}ms`);
+  return data;
+}
+
+export function getTenantAvailability(
+  serviceId: string,
+  date: string,
+  providerId?: string,
+  excludeAppointmentId?: string,
+): Promise<TenantAvailabilityResponse> {
+  const params = new URLSearchParams({ serviceId, date });
+  if (providerId) params.set("providerId", providerId);
+  if (excludeAppointmentId) params.set("excludeAppointmentId", excludeAppointmentId);
+  return request<TenantAvailabilityResponse>(
+    `/tenant/appointments/availability?${params.toString()}`,
+  );
 }
 
 export function listTenantAppointments(filters?: {
@@ -216,5 +318,31 @@ export function cancelTenantAppointment(
       body: JSON.stringify({ reason }),
       method: "PATCH",
     },
+  );
+}
+
+export type AppointmentReminderResponse = {
+  appointment: {
+    id: string;
+    reminderSent: boolean;
+    lastReminderSentAt: string | null;
+    reminderCount: number;
+    reminder24hSent: boolean;
+    reminder2hSent: boolean;
+  } | null;
+  whatsApp: {
+    phone: string;
+    message: string;
+    waLink: string;
+  };
+};
+
+export function sendTenantAppointmentReminder(
+  appointmentId: string,
+  locale: string,
+): Promise<AppointmentReminderResponse> {
+  return request<AppointmentReminderResponse>(
+    `/tenant/appointments/${appointmentId}/reminder?locale=${encodeURIComponent(locale)}`,
+    { method: "POST" },
   );
 }

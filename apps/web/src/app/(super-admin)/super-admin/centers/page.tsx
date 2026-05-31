@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { SuperAdminCentersPage } from "@/features/super-admin/centers/SuperAdminCentersPage";
 
@@ -7,5 +8,9 @@ export const metadata: Metadata = {
 };
 
 export default function SuperAdminCentersRoute() {
-  return <SuperAdminCentersPage />;
+  return (
+    <Suspense>
+      <SuperAdminCentersPage />
+    </Suspense>
+  );
 }

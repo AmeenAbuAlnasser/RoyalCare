@@ -138,7 +138,7 @@ Implemented backend enforcement:
 - Internal notes list requires `view:internal_notes`.
 - Internal note creation requires `manage:internal_notes`.
 - Super Admin users list/details require `view:users`.
-- Super Admin user creation and role assignment require `manage:users`.
+- Super Admin user create, update, status change, password reset, platform role assignment, and center role assignment require `manage:users`.
 - Center staff listing from Super Admin Center Details requires `view:users`.
 - Center staff create/edit/status/reset actions require `manage:users`.
 - Center staff membership is tenant-scoped through `UserRole.centerId`; staff users must not be managed through another center's route.
@@ -377,37 +377,35 @@ Center Owner:
 Center Manager:
 - Most operational permissions except subscription/domain/platform settings
 
+Implemented tenant permission key standard:
+- Use colon keys only for canonical tenant RBAC storage and checks.
+- Legacy dot keys are read through a compatibility normalizer only.
+- Final canonical keys: `patients:view`, `patients:create`, `patients:update`, `patients:status`, `appointments:view`, `appointments:create`, `appointments:update`, `appointments:status`, `appointments:cancel`, `services:view`, `services:create`, `services:update`, `services:archive`, `services:status`, `staff:view`, `staff:create`, `staff:update`, `staff:status`, `billing:view`, `billing:create`, `billing:update`, `billing:cancel`, `payments:view`, `payments:create`, `reports:view`, `settings:view`, `permissions:view`, `permissions:update`.
+
 Implemented Tenant Services defaults:
-- `CENTER_OWNER`: `services.view`, `services.create`, `services.update`, `services.archive`, `services.activate`
-- `CENTER_MANAGER`: `services.view`, `services.create`, `services.update`, `services.archive`, `services.activate`
-- `DOCTOR`: `services.view`
-- `RECEPTIONIST`: `services.view`
-- `ACCOUNTANT`: `services.view`
-- `STAFF`: `services.view`
+- `CENTER_OWNER`: all tenant permissions
+- `CENTER_MANAGER`: all tenant permissions
+- `DOCTOR`, `RECEPTIONIST`, `ACCOUNTANT`, `STAFF`: `services:view`
 
 Implemented Tenant Appointments defaults:
-- `CENTER_OWNER`: `appointments.view`, `appointments.create`, `appointments.update`, `appointments.cancel`, `appointments.status.update`
-- `CENTER_MANAGER`: `appointments.view`, `appointments.create`, `appointments.update`, `appointments.cancel`, `appointments.status.update`
-- `DOCTOR`: `appointments.view`, `appointments.update`, `appointments.status.update`
-- `RECEPTIONIST`: `appointments.view`, `appointments.create`, `appointments.update`, `appointments.cancel`, `appointments.status.update`
-- `ACCOUNTANT`: `appointments.view`
-- `STAFF`: `appointments.view`
+- `CENTER_OWNER`: all tenant permissions
+- `CENTER_MANAGER`: all tenant permissions
+- `DOCTOR`: `appointments:view`, `appointments:update`, `appointments:status`
+- `RECEPTIONIST`: `appointments:view`, `appointments:create`, `appointments:update`, `appointments:cancel`, `appointments:status`
+- `ACCOUNTANT`: `appointments:view`
+- `STAFF`: `appointments:view`
 
 Implemented Tenant Staff defaults:
-- `CENTER_OWNER`: `staff.view`, `staff.create`, `staff.update`, `staff.activate`
-- `CENTER_MANAGER`: `staff.view`, `staff.create`, `staff.update`, `staff.activate`
-- `DOCTOR`: `staff.view`
-- `RECEPTIONIST`: `staff.view`
-- `ACCOUNTANT`: `staff.view`
-- `STAFF`: `staff.view`
+- `CENTER_OWNER`: all tenant permissions
+- `CENTER_MANAGER`: all tenant permissions
+- `DOCTOR`, `RECEPTIONIST`, `ACCOUNTANT`, `STAFF`: `staff:view`
 
-Implemented Tenant Billing defaults:
-- `CENTER_OWNER`: `billing.view`, `billing.create`, `billing.update`, `billing.mark_paid`
-- `CENTER_MANAGER`: `billing.view`, `billing.create`, `billing.update`, `billing.mark_paid`
-- `ACCOUNTANT`: `billing.view`, `billing.create`, `billing.update`, `billing.mark_paid`
-- `RECEPTIONIST`: `billing.view`, `billing.create`
-- `DOCTOR`: `billing.view`
-- `STAFF`: `billing.view`
+Implemented Tenant Billing/Payments defaults:
+- `CENTER_OWNER`: all tenant permissions
+- `CENTER_MANAGER`: all tenant permissions
+- `ACCOUNTANT`: `billing:view`, `billing:create`, `billing:update`, `payments:view`, `payments:create`
+- `RECEPTIONIST`: `billing:view`, `billing:create`, `payments:view`, `payments:create`
+- `DOCTOR`, `STAFF`: `billing:view`, `payments:view`
 
 Receptionist:
 - Customers, appointments, basic dashboard
@@ -448,6 +446,11 @@ Rules:
 - Suspended centers should have limited or blocked admin functionality.
 - Super Admin can always access center records.
 - Center users should see clear messages when access is restricted.
+- Tenant subscription state is enforced server-side before tenant business writes.
+- `EXPIRED` subscriptions block `POST`, `PATCH`, `PUT`, and `DELETE` for patients, appointments, services, staff, billing, payments, credits, and role-permission management while keeping read access available.
+- `SUSPENDED` subscriptions block tenant business writes with a suspension error; dashboard, notifications, logout, and renewal request remain available.
+- Frontend action buttons use the same `subscriptionAccess` state from `/permissions/me` to disable write actions and show localized banners/tooltips, but backend middleware remains authoritative.
+- Tenant marketing settings read/write endpoints require `settings:view`, are scoped by the authenticated `centerId`, and are included in the tenant subscription write-block middleware for expired/suspended centers.
 
 ## 11. Tenant Isolation Enforcement
 
@@ -456,11 +459,13 @@ Backend enforcement:
 - Permission guard checks user role.
 - Repository/service layer scopes tenant-owned queries by `centerId`.
 - Tests should cover cross-tenant access attempts.
+- Protected Super Admin endpoints require an explicit `x-royalcare-super-admin-user-id` header; tenant center sessions alone do not satisfy platform permissions.
 
 Frontend enforcement:
 - Hide inaccessible navigation items.
 - Hide or disable inaccessible actions.
 - Never rely on frontend checks as the only protection.
+- 2026-05-18 RBAC UI pass: Center Admin appointment list/details hide unauthorized appointment edit/status and billing payment/credit controls; expired/suspended subscription blocks keep permitted write controls disabled with localized messages while API checks remain authoritative.
 
 ## 12. Audit Requirements
 

@@ -2,19 +2,27 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { AdminCard, AdminState } from "@/components/ui/admin-surfaces";
 import { buttonClassName } from "@/components/ui/button-styles";
+import { ButtonTooltip } from "@/components/ui/ButtonTooltip";
 import { useLanguage } from "@/i18n/LanguageProvider";
 import type { CenterAdminDictionary } from "@/i18n/dictionaries/center-admin";
 import { formatDate } from "@/i18n/formatters";
 import { ApiRequestError } from "@/lib/api/super-admin-centers";
 import {
   createPatient,
+  deleteTenantPatient,
   listPatients,
   updatePatient,
   updatePatientStatus,
   type CenterPatient,
 } from "@/lib/api/center-patients";
 import { CenterAdminShell } from "../layout/CenterAdminShell";
+import {
+  canUseTenantAction,
+  getTenantSubscriptionRestrictionMessage,
+  isTenantWriteBlocked,
+} from "../subscription-access";
 import {
   formToPayload,
   PatientFormModal,
@@ -86,6 +94,21 @@ function matchesSearch(patient: CenterPatient, search: string) {
   );
 }
 
+function patientStatusBadgeClass(status: CenterPatient["status"]) {
+  const base =
+    "inline-flex w-fit items-center rounded-full border px-3 py-1 text-xs font-semibold";
+
+  if (status === "ACTIVE") {
+    return `${base} border-emerald-200 bg-emerald-50 text-emerald-700`;
+  }
+
+  if (status === "ARCHIVED") {
+    return `${base} border-slate-200 bg-slate-50 text-slate-600`;
+  }
+
+  return `${base} border-amber-200 bg-amber-50 text-amber-700`;
+}
+
 export function CenterPatientsPage() {
   const { locale } = useLanguage();
   const [patients, setPatients] = useState<CenterPatient[]>([]);
@@ -98,6 +121,8 @@ export function CenterPatientsPage() {
   const [formErrors, setFormErrors] = useState<PatientFormErrors>({});
   const [isSaving, setIsSaving] = useState(false);
   const [notice, setNotice] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<CenterPatient | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -159,16 +184,37 @@ export function CenterPatientsPage() {
       subtitle={(dictionary) => dictionary.patients.subtitle}
       title={(dictionary) => dictionary.patients.title}
     >
-      {({ dictionary }) => {
+      {({ dictionary, session }) => {
+        const isWriteBlocked = isTenantWriteBlocked(session);
+        const restrictionMessage =
+          getTenantSubscriptionRestrictionMessage(session, dictionary);
+        const canCreate = canUseTenantAction(session, "patients:create");
+        const canUpdateStatus = canUseTenantAction(session, "patients:status");
+        const canDeletePatients = session.permissions.includes("patients:delete");
+
+        const handleDeleteConfirm = async () => {
+          if (!deleteTarget) return;
+          setIsDeleting(true);
+          try {
+            await deleteTenantPatient(deleteTarget.id);
+            setPatients((current) =>
+              current.filter((item) => item.id !== deleteTarget.id),
+            );
+            setDeleteTarget(null);
+            setNotice(dictionary.patients.deleted);
+          } catch {
+            setDeleteTarget(null);
+            setNotice(dictionary.patients.deleteBlocked);
+          } finally {
+            setIsDeleting(false);
+          }
+        };
         const filteredPatients = patients.filter((patient) =>
           matchesSearch(patient, search),
         );
 
         const patientCards = filteredPatients.map((patient) => (
-          <article
-            className="rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-[0_12px_30px_rgba(11,45,92,0.04)]"
-            key={patient.id}
-          >
+          <AdminCard className="p-4" key={patient.id}>
             <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <h2 className="break-words text-base font-semibold text-[#0B2D5C]">
@@ -181,7 +227,7 @@ export function CenterPatientsPage() {
                   {patient.email || dictionary.common.notAvailable}
                 </p>
               </div>
-              <span className="w-fit rounded-full bg-[#EAF1FA] px-3 py-1 text-xs font-semibold text-[#0B2D5C]">
+              <span className={patientStatusBadgeClass(patient.status)}>
                 {dictionary.patientStatuses[patient.status]}
               </span>
             </div>
@@ -202,44 +248,82 @@ export function CenterPatientsPage() {
               >
                 {dictionary.common.view}
               </Link>
-              <button
-                className={buttonClassName("secondary", "sm")}
-                onClick={() => openEdit(patient)}
-                type="button"
-              >
-                {dictionary.common.edit}
-              </button>
-              <button
-                className={buttonClassName(
-                  patient.status === "ARCHIVED" ? "success" : "warning",
-                  "sm",
-                )}
-                onClick={async () => {
-                  const nextStatus =
-                    patient.status === "ARCHIVED" ? "ACTIVE" : "ARCHIVED";
-                  const updated = await updatePatientStatus(
-                    patient.id,
-                    nextStatus,
-                  );
-                  setPatients((current) =>
-                    current.map((item) =>
-                      item.id === updated.id ? updated : item,
-                    ),
-                  );
-                  setNotice(
-                    nextStatus === "ARCHIVED"
-                      ? dictionary.patients.archived
-                      : dictionary.patients.activated,
-                  );
-                }}
-                type="button"
-              >
-                {patient.status === "ARCHIVED"
-                  ? dictionary.common.activate
-                  : dictionary.common.archive}
-              </button>
+              {session.permissions.includes("patients:update") ? (
+                <button
+                  className={buttonClassName("secondary", "sm")}
+                  disabled={isWriteBlocked}
+                  onClick={() => openEdit(patient)}
+                  title={restrictionMessage || undefined}
+                  type="button"
+                >
+                  {dictionary.common.edit}
+                </button>
+              ) : null}
+              {session.permissions.includes("patients:status") ? (
+                <button
+                  className={buttonClassName(
+                    patient.status === "ARCHIVED" ? "success" : "warning",
+                    "sm",
+                  )}
+                  disabled={isWriteBlocked}
+                  onClick={async () => {
+                    if (!canUpdateStatus) return;
+                    const nextStatus =
+                      patient.status === "ARCHIVED" ? "ACTIVE" : "ARCHIVED";
+                    const updated = await updatePatientStatus(
+                      patient.id,
+                      nextStatus,
+                    );
+                    setPatients((current) =>
+                      current.map((item) =>
+                        item.id === updated.id ? updated : item,
+                      ),
+                    );
+                    setNotice(
+                      nextStatus === "ARCHIVED"
+                        ? dictionary.patients.archived
+                        : dictionary.patients.activated,
+                    );
+                  }}
+                  title={restrictionMessage || undefined}
+                  type="button"
+                >
+                  {patient.status === "ARCHIVED"
+                    ? dictionary.common.activate
+                    : dictionary.common.archive}
+                </button>
+              ) : null}
+              {canDeletePatients ? (
+                patient.canDelete ? (
+                  <button
+                    className={buttonClassName("danger", "sm")}
+                    onClick={() => setDeleteTarget(patient)}
+                    type="button"
+                  >
+                    {dictionary.patients.deletePatient}
+                  </button>
+                ) : (
+                  <ButtonTooltip
+                    text={(() => {
+                      const c = patient.linkedRecordCounts;
+                      const hasAny = c.appointments > 0 || c.invoices > 0 || c.payments > 0 || c.followUps > 0 || c.creditTransactions > 0;
+                      return hasAny
+                        ? dictionary.patients.deleteBlockedWithCounts(c)
+                        : dictionary.patients.deleteBlockedTooltip;
+                    })()}
+                  >
+                    <button
+                      className={buttonClassName("danger", "sm")}
+                      disabled
+                      type="button"
+                    >
+                      {dictionary.patients.deletePatient}
+                    </button>
+                  </ButtonTooltip>
+                )
+              ) : null}
             </div>
-          </article>
+          </AdminCard>
         ));
 
         const submit = async () => {
@@ -266,7 +350,7 @@ export function CenterPatientsPage() {
 
         return (
           <>
-            <section className="mt-5 rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-[0_12px_30px_rgba(11,45,92,0.04)]">
+            <AdminCard className="mt-5 p-4">
               <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row">
                   <input
@@ -276,15 +360,19 @@ export function CenterPatientsPage() {
                     value={search}
                   />
                 </div>
-                <button
-                  className={buttonClassName("primary", "md")}
-                  onClick={openCreate}
-                  type="button"
-                >
-                  {dictionary.patients.addPatient}
-                </button>
+                {session.permissions.includes("patients:create") ? (
+                  <button
+                    className={buttonClassName("primary", "md")}
+                    disabled={!canCreate}
+                    onClick={openCreate}
+                    title={restrictionMessage || undefined}
+                    type="button"
+                  >
+                    {dictionary.patients.addPatient}
+                  </button>
+                ) : null}
               </div>
-            </section>
+            </AdminCard>
 
             {notice ? (
               <p className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
@@ -293,40 +381,38 @@ export function CenterPatientsPage() {
             ) : null}
 
             {isLoading ? (
-              <p className="mt-5 rounded-lg border border-[#E5E7EB] bg-white px-4 py-5 text-sm font-semibold text-[#0B2D5C]">
-                {dictionary.patients.loading}
-              </p>
+              <AdminState
+                className="mt-5"
+                loading
+                title={dictionary.patients.loading}
+              />
             ) : null}
 
             {loadError ? (
-              <p className="mt-5 rounded-lg border border-[#F3B8B8] bg-[#FFF7F7] px-4 py-5 text-sm font-semibold text-[#B42318]">
-                {dictionary.patients.loadError}
-              </p>
+              <AdminState
+                className="mt-5"
+                title={dictionary.patients.loadError}
+                tone="error"
+              />
             ) : null}
 
             {!isLoading && !loadError && patients.length === 0 ? (
-              <section className="mt-5 rounded-lg border border-dashed border-[#C8A45D] bg-white px-4 py-8 text-center">
-                <h2 className="text-base font-semibold text-[#0B2D5C]">
-                  {dictionary.patients.emptyTitle}
-                </h2>
-                <p className="mt-2 text-sm text-[#66758a]">
-                  {dictionary.patients.emptyBody}
-                </p>
-              </section>
+              <AdminState
+                body={dictionary.patients.emptyBody}
+                className="mt-5 border-dashed"
+                title={dictionary.patients.emptyTitle}
+              />
             ) : null}
 
             {!isLoading &&
             !loadError &&
             patients.length > 0 &&
             filteredPatients.length === 0 ? (
-              <section className="mt-5 rounded-lg border border-dashed border-[#C8A45D] bg-white px-4 py-8 text-center">
-                <h2 className="text-base font-semibold text-[#0B2D5C]">
-                  {dictionary.patients.noResultsTitle}
-                </h2>
-                <p className="mt-2 text-sm text-[#66758a]">
-                  {dictionary.patients.noResultsBody}
-                </p>
-              </section>
+              <AdminState
+                body={dictionary.patients.noResultsBody}
+                className="mt-5 border-dashed"
+                title={dictionary.patients.noResultsTitle}
+              />
             ) : null}
 
             <section className="mt-5 grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
@@ -344,6 +430,37 @@ export function CenterPatientsPage() {
                 onClose={() => setModalMode(null)}
                 onSubmit={submit}
               />
+            ) : null}
+
+            {deleteTarget ? (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl">
+                  <h3 className="text-base font-bold text-[#0B2D5C]">
+                    {dictionary.patients.deleteConfirmTitle}
+                  </h3>
+                  <p className="mt-2 text-sm text-[#66758a]">
+                    {dictionary.patients.deleteConfirmBody}
+                  </p>
+                  <div className="mt-5 flex gap-2">
+                    <button
+                      className={buttonClassName("danger", "md")}
+                      disabled={isDeleting}
+                      onClick={handleDeleteConfirm}
+                      type="button"
+                    >
+                      {dictionary.patients.deleteConfirmButton}
+                    </button>
+                    <button
+                      className={buttonClassName("secondary", "md")}
+                      disabled={isDeleting}
+                      onClick={() => setDeleteTarget(null)}
+                      type="button"
+                    >
+                      {dictionary.common.cancel}
+                    </button>
+                  </div>
+                </div>
+              </div>
             ) : null}
           </>
         );

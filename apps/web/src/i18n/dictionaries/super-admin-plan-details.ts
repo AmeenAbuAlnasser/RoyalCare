@@ -8,6 +8,7 @@ type LayoutNav = {
   plans: string;
   users: string;
   notifications: string;
+  auditLogs: string;
   settings: string;
 };
 
@@ -139,6 +140,7 @@ export const superAdminPlanDetailsDictionaries: Record<SupportedLocale, PlanDeta
       plans: "Plans",
       users: "Users",
       notifications: "Notifications",
+      auditLogs: "Audit Logs",
       settings: "Settings",
     },
     header: {
@@ -259,6 +261,7 @@ export const superAdminPlanDetailsDictionaries: Record<SupportedLocale, PlanDeta
       plans: "الباقات",
       users: "المستخدمون",
       notifications: "الإشعارات",
+      auditLogs: "سجل التدقيق",
       settings: "الإعدادات",
     },
     header: {
@@ -379,6 +382,7 @@ export const superAdminPlanDetailsDictionaries: Record<SupportedLocale, PlanDeta
       plans: "תוכניות",
       users: "משתמשים",
       notifications: "התראות",
+      auditLogs: "יומן ביקורת",
       settings: "הגדרות",
     },
     header: {

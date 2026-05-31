@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { CenterAuthService } from '../../auth/services/center-auth.service';
 import {
@@ -35,7 +35,10 @@ export class TenantServicesController {
   async list(@Req() request: Request) {
     const session = await this.getSession(request);
 
-    return this.tenantServicesService.list(session.center.id, session.role.key);
+    return this.tenantServicesService.list(
+      session.center.id,
+      session.permissions,
+    );
   }
 
   @Post()
@@ -44,7 +47,7 @@ export class TenantServicesController {
 
     return this.tenantServicesService.create(
       session.center.id,
-      session.role.key,
+      session.permissions,
       session.center.primaryLanguage,
       dto,
     );
@@ -59,7 +62,7 @@ export class TenantServicesController {
 
     return this.tenantServicesService.getById(
       session.center.id,
-      session.role.key,
+      session.permissions,
       serviceId,
     );
   }
@@ -74,7 +77,7 @@ export class TenantServicesController {
 
     return this.tenantServicesService.update(
       session.center.id,
-      session.role.key,
+      session.permissions,
       session.center.primaryLanguage,
       serviceId,
       dto,
@@ -91,9 +94,23 @@ export class TenantServicesController {
 
     return this.tenantServicesService.updateStatus(
       session.center.id,
-      session.role.key,
+      session.permissions,
       serviceId,
       dto,
+    );
+  }
+
+  @Delete(':serviceId')
+  async safeDelete(
+    @Req() request: Request,
+    @Param('serviceId') serviceId: string,
+  ) {
+    const session = await this.getSession(request);
+
+    return this.tenantServicesService.safeDelete(
+      session.center.id,
+      session.permissions,
+      serviceId,
     );
   }
 

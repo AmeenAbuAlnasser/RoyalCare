@@ -7,8 +7,10 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { RequirePermissions } from '../permissions/decorators/require-permissions.decorator';
 import { PermissionGuard } from '../permissions/guards/permission.guard';
 import { CentersService } from './centers.service';
@@ -71,8 +73,14 @@ export class CentersController {
     @Param('centerId') centerId: string,
     @Param('userId') userId: string,
     @Body() dto: UpdateCenterStaffStatusDto,
+    @Headers('x-royalcare-super-admin-user-id') authorId?: string,
   ) {
-    return this.centersService.updateStaffStatus(centerId, userId, dto);
+    return this.centersService.updateStaffStatus(
+      centerId,
+      userId,
+      dto,
+      authorId,
+    );
   }
 
   @Post(':centerId/staff/:userId/reset-password')
@@ -81,8 +89,14 @@ export class CentersController {
     @Param('centerId') centerId: string,
     @Param('userId') userId: string,
     @Body() dto: ResetCenterStaffPasswordDto,
+    @Headers('x-royalcare-super-admin-user-id') authorId?: string,
   ) {
-    return this.centersService.resetStaffPassword(centerId, userId, dto);
+    return this.centersService.resetStaffPassword(
+      centerId,
+      userId,
+      dto,
+      authorId,
+    );
   }
 
   @Get(':centerId')
@@ -97,8 +111,12 @@ export class CentersController {
     @Param('centerId') centerId: string,
     @Body() dto: UpdateCenterStatusDto,
     @Headers('x-royalcare-super-admin-user-id') authorId?: string,
+    @Req() request?: Request,
   ) {
-    return this.centersService.updateStatus(centerId, dto, authorId);
+    return this.centersService.updateStatus(centerId, dto, authorId, {
+      ip: request?.ip,
+      userAgent: request?.headers['user-agent'],
+    });
   }
 
   @Patch(':centerId/subscription')
@@ -107,8 +125,12 @@ export class CentersController {
     @Param('centerId') centerId: string,
     @Body() dto: UpdateCenterSubscriptionDto,
     @Headers('x-royalcare-super-admin-user-id') authorId?: string,
+    @Req() request?: Request,
   ) {
-    return this.centersService.updateSubscription(centerId, dto, authorId);
+    return this.centersService.updateSubscription(centerId, dto, authorId, {
+      ip: request?.ip,
+      userAgent: request?.headers['user-agent'],
+    });
   }
 
   @Patch(':centerId')
@@ -182,8 +204,14 @@ export class CentersAliasController {
     @Param('centerId') centerId: string,
     @Param('userId') userId: string,
     @Body() dto: UpdateCenterStaffStatusDto,
+    @Headers('x-royalcare-super-admin-user-id') authorId?: string,
   ) {
-    return this.centersService.updateStaffStatus(centerId, userId, dto);
+    return this.centersService.updateStaffStatus(
+      centerId,
+      userId,
+      dto,
+      authorId,
+    );
   }
 
   @Post(':centerId/staff/:userId/reset-password')
@@ -192,8 +220,14 @@ export class CentersAliasController {
     @Param('centerId') centerId: string,
     @Param('userId') userId: string,
     @Body() dto: ResetCenterStaffPasswordDto,
+    @Headers('x-royalcare-super-admin-user-id') authorId?: string,
   ) {
-    return this.centersService.resetStaffPassword(centerId, userId, dto);
+    return this.centersService.resetStaffPassword(
+      centerId,
+      userId,
+      dto,
+      authorId,
+    );
   }
 
   @Get(':centerId')
@@ -208,8 +242,12 @@ export class CentersAliasController {
     @Param('centerId') centerId: string,
     @Body() dto: UpdateCenterStatusDto,
     @Headers('x-royalcare-super-admin-user-id') authorId?: string,
+    @Req() request?: Request,
   ) {
-    return this.centersService.updateStatus(centerId, dto, authorId);
+    return this.centersService.updateStatus(centerId, dto, authorId, {
+      ip: request?.ip,
+      userAgent: request?.headers['user-agent'],
+    });
   }
 
   @Patch(':centerId/subscription')
@@ -218,8 +256,12 @@ export class CentersAliasController {
     @Param('centerId') centerId: string,
     @Body() dto: UpdateCenterSubscriptionDto,
     @Headers('x-royalcare-super-admin-user-id') authorId?: string,
+    @Req() request?: Request,
   ) {
-    return this.centersService.updateSubscription(centerId, dto, authorId);
+    return this.centersService.updateSubscription(centerId, dto, authorId, {
+      ip: request?.ip,
+      userAgent: request?.headers['user-agent'],
+    });
   }
 
   @Patch(':centerId')

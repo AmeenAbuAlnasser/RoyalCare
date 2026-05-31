@@ -6,18 +6,19 @@ import type {
 } from "@/lib/api/tenant-appointments";
 
 export function getLocalizedAppointmentServiceName(
-  service: AppointmentService,
+  service: AppointmentService | null | undefined,
   locale: SupportedLocale,
-) {
-  if (locale === "ar") {
-    return service.nameAr || service.nameEn || service.nameHe;
+  offerTitle?: string | null,
+  customServiceName?: string | null,
+): string {
+  if (service) {
+    if (locale === "ar") return service.nameAr || service.nameEn || service.nameHe;
+    if (locale === "he") return service.nameHe || service.nameEn || service.nameAr;
+    return service.nameEn || service.nameAr || service.nameHe;
   }
-
-  if (locale === "he") {
-    return service.nameHe || service.nameEn || service.nameAr;
-  }
-
-  return service.nameEn || service.nameAr || service.nameHe;
+  if (customServiceName) return customServiceName;
+  if (offerTitle) return offerTitle;
+  return locale === "ar" ? "عرض / باقة" : locale === "he" ? "מבצע / חבילה" : "Offer / Package";
 }
 
 export function formatAppointmentTime(appointment: TenantAppointment) {

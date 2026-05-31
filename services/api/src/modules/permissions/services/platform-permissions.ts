@@ -10,6 +10,7 @@ export const platformPermissionKeys = [
   'manage:users',
   'manage:plans',
   'view:reports',
+  'view:audit_logs',
 ] as const;
 
 export type PlatformPermissionKey = (typeof platformPermissionKeys)[number];

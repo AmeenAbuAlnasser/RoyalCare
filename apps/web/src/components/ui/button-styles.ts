@@ -9,7 +9,7 @@ type ButtonVariant =
 type ButtonSize = "sm" | "md" | "lg" | "icon";
 
 const base =
-  "inline-flex items-center justify-center rounded-md border font-semibold leading-5 transition focus:outline-none focus:ring-3 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex max-w-full items-center justify-center gap-2 rounded-md border font-semibold leading-5 transition focus:outline-none focus:ring-3 disabled:cursor-not-allowed disabled:opacity-50";
 
 const variants: Record<ButtonVariant, string> = {
   primary:

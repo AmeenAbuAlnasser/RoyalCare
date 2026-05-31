@@ -1,4 +1,5 @@
 export class AssignCenterRoleDto {
   centerId!: string;
-  roleId!: string;
+  roleId?: string;
+  roleKey?: string;
 }

@@ -49,11 +49,15 @@ export class TenantStaffController {
   ) {
     const session = await this.getSession(request);
 
-    return this.tenantStaffService.list(session.center.id, session.role.key, {
-      role,
-      search,
-      status,
-    });
+    return this.tenantStaffService.list(
+      session.center.id,
+      session.permissions,
+      {
+        role,
+        search,
+        status,
+      },
+    );
   }
 
   @Post()
@@ -62,7 +66,7 @@ export class TenantStaffController {
 
     return this.tenantStaffService.create(
       session.center.id,
-      session.role.key,
+      session.permissions,
       dto,
     );
   }
@@ -73,7 +77,7 @@ export class TenantStaffController {
 
     return this.tenantStaffService.getById(
       session.center.id,
-      session.role.key,
+      session.permissions,
       staffId,
     );
   }
@@ -88,7 +92,7 @@ export class TenantStaffController {
 
     return this.tenantStaffService.update(
       session.center.id,
-      session.role.key,
+      session.permissions,
       staffId,
       dto,
     );
@@ -104,7 +108,11 @@ export class TenantStaffController {
 
     return this.tenantStaffService.updateStatus(
       session.center.id,
-      session.role.key,
+      session.center.name,
+      session.permissions,
+      session.user.id,
+      session.user.fullName,
+      session.impersonation?.impersonatorUserId,
       staffId,
       dto,
     );

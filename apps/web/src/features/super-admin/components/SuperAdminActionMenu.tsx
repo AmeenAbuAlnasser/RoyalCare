@@ -1,7 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 
 export type SuperAdminActionIcon =
   | "activate"
@@ -17,7 +25,8 @@ export type SuperAdminActionIcon =
   | "suspend"
   | "upgrade"
   | "verify"
-  | "view";
+  | "view"
+  | "whatsapp";
 
 export type SuperAdminActionMenuItem = {
   href?: string;
@@ -133,6 +142,9 @@ function ActionIcon({ icon }: { icon: SuperAdminActionIcon }) {
         <circle cx="12" cy="12" r="3" />
       </>
     ),
+    whatsapp: (
+      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+    ),
   };
 
   return <svg aria-hidden="true" {...common}>{paths[icon]}</svg>;
@@ -246,6 +258,55 @@ function MenuItems({
   );
 }
 
+// Minimum margin from viewport edges (px)
+const EDGE = 8;
+// Fallback menu width matching w-56 (224px) used in className
+const FALLBACK_MENU_WIDTH = 224;
+
+function calcPosition(
+  buttonRect: DOMRect,
+  menuW: number,
+  menuH: number,
+): { top: number; left: number } {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const isRTL = document.documentElement.dir === "rtl";
+
+  // --- Vertical ---
+  // Prefer opening below the button
+  let top = buttonRect.bottom + 8;
+  if (top + menuH > vh - EDGE) {
+    // Not enough room below — try above
+    const topAbove = buttonRect.top - menuH - 8;
+    if (topAbove >= EDGE) {
+      top = topAbove;
+    } else {
+      // Constrained both sides — use whichever side has more space and clamp
+      top =
+        buttonRect.top > vh - buttonRect.bottom
+          ? Math.max(EDGE, buttonRect.top - menuH - 8)
+          : Math.min(buttonRect.bottom + 8, vh - menuH - EDGE);
+    }
+  }
+  top = Math.max(EDGE, top);
+
+  // --- Horizontal ---
+  // LTR: right-edge of menu aligns with right-edge of button
+  // RTL: left-edge of menu aligns with left-edge of button
+  let left: number;
+  if (isRTL) {
+    left = buttonRect.left;
+  } else {
+    left = buttonRect.right - menuW;
+  }
+  // Clamp so menu stays inside viewport
+  left = Math.max(EDGE, Math.min(left, vw - menuW - EDGE));
+
+  return { left, top };
+}
+
+type DropPos = { left: number; top: number; visible: boolean } | null;
+
 export function SuperAdminActionMenu({
   isOpen,
   items,
@@ -259,9 +320,135 @@ export function SuperAdminActionMenu({
   onToggle: () => void;
   triggerLabel: string;
 }) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const mobileSheetRef = useRef<HTMLDivElement>(null);
+  // null means "don't render portal yet"
+  const [dropPos, setDropPos] = useState<DropPos>(null);
+  // Prevents SSR mismatch — portal only rendered after hydration
+  const [mounted, setMounted] = useState(false);
+  // Signal for Phase 2 measurement (ref avoids extra renders)
+  const needsMeasure = useRef(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setMounted(true), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  // ── Phase 1 ──────────────────────────────────────────────────────────────
+  // When the menu opens, compute an initial position using approximate height
+  // so the portal element enters the DOM. visibility:hidden keeps it invisible
+  // until Phase 2 finalises the position.
+  useEffect(() => {
+    if (!isOpen || !buttonRef.current) {
+      setDropPos(null);
+      needsMeasure.current = false;
+      return;
+    }
+    const rect = buttonRef.current.getBoundingClientRect();
+    // Guard: button is inside a display:none ancestor (e.g. the md:hidden mobile
+    // card row on desktop). getBoundingClientRect() returns all-zeros in that
+    // case. Rendering a portal from a hidden button would place it at {0,0} —
+    // the "ghost menu at top-left" bug. Bail out entirely.
+    if (rect.width === 0 && rect.height === 0) {
+      setDropPos(null);
+      needsMeasure.current = false;
+      return;
+    }
+    // Approximate height: items are ~44px each plus 12px padding
+    const approxH = items.length * 44 + 12;
+    const pos = calcPosition(rect, FALLBACK_MENU_WIDTH, approxH);
+    setDropPos({ ...pos, visible: false });
+    needsMeasure.current = true;
+  }, [isOpen, items.length]);
+
+  // ── Phase 2 ──────────────────────────────────────────────────────────────
+  // After Phase 1 causes a render, measure the real menu dimensions and
+  // compute the final clamped position before the browser paints.
+  // Runs after every render; the needsMeasure guard limits real work to once
+  // per open event.
+  useLayoutEffect(() => {
+    if (!needsMeasure.current || !menuRef.current || !buttonRef.current) return;
+    needsMeasure.current = false;
+
+    const mw = menuRef.current.offsetWidth || FALLBACK_MENU_WIDTH;
+    const mh = menuRef.current.offsetHeight || items.length * 44 + 12;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const pos = calcPosition(rect, mw, mh);
+    setDropPos({ ...pos, visible: true });
+  }, [dropPos, items.length]);
+
+  // ── Recalculate on scroll / resize ───────────────────────────────────────
+  useEffect(() => {
+    if (!isOpen) return;
+
+    function recalculate() {
+      if (!buttonRef.current || !menuRef.current) return;
+      const rect = buttonRef.current.getBoundingClientRect();
+      // Button scrolled out of view — close rather than chase it
+      if (rect.bottom < 0 || rect.top > window.innerHeight) {
+        onClose?.();
+        return;
+      }
+      const mw = menuRef.current.offsetWidth || FALLBACK_MENU_WIDTH;
+      const mh = menuRef.current.offsetHeight || items.length * 44 + 12;
+      const pos = calcPosition(rect, mw, mh);
+      // Keep current visibility so we don't flash hidden during recalc
+      setDropPos((prev) => (prev ? { ...pos, visible: prev.visible } : null));
+    }
+
+    window.addEventListener("scroll", recalculate, { capture: true, passive: true });
+    window.addEventListener("resize", recalculate);
+    return () => {
+      window.removeEventListener("scroll", recalculate, true);
+      window.removeEventListener("resize", recalculate);
+    };
+  }, [isOpen, onClose, items.length]);
+
+  // ── Outside click + Escape ────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isOpen) return;
+
+    function handlePointerDown(e: PointerEvent) {
+      const t = e.target as Node;
+      if (
+        !buttonRef.current?.contains(t) &&
+        !menuRef.current?.contains(t) &&
+        !mobileSheetRef.current?.contains(t)
+      ) {
+        onClose?.();
+      }
+    }
+
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose?.();
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
+  // Build the inline style for the portal panel.
+  // While position is being measured (visible:false) use visibility:hidden so
+  // the element is laid out (needed for offsetWidth/Height) but not painted.
+  const portalStyle: CSSProperties = dropPos
+    ? {
+        left: dropPos.left,
+        position: "fixed",
+        top: dropPos.top,
+        visibility: dropPos.visible ? "visible" : "hidden",
+        zIndex: 9999,
+      }
+    : { display: "none" };
+
   return (
     <div className="relative inline-flex justify-end">
       <button
+        ref={buttonRef}
         aria-expanded={isOpen}
         aria-haspopup="menu"
         aria-label={triggerLabel}
@@ -272,29 +459,38 @@ export function SuperAdminActionMenu({
         <MoreVerticalIcon />
       </button>
 
-      {isOpen ? (
-        <>
+      {/* Desktop: portal dropdown — lives in document.body, escapes
+          overflow:hidden / overflow:auto table containers entirely */}
+      {mounted && isOpen && dropPos !== null && createPortal(
+        <div
+          ref={menuRef}
+          className="hidden w-56 min-w-[180px] rounded-xl border border-[#E5E7EB] bg-white p-1.5 shadow-lg md:block"
+          role="menu"
+          style={portalStyle}
+        >
+          <MenuItems items={items} onClose={onClose} size="desktop" />
+        </div>,
+        document.body,
+      )}
+
+      {/* Mobile: full-screen bottom sheet — position:fixed already escapes
+          overflow constraints */}
+      {isOpen && (
+        <div className="fixed inset-0 z-50 md:hidden" role="presentation">
+          <button
+            aria-label={triggerLabel}
+            className="absolute inset-0 h-full w-full bg-[#071B35]/45"
+            onClick={onClose}
+            type="button"
+          />
           <div
-            className="absolute end-0 top-10 z-30 hidden w-56 overflow-hidden rounded-lg border border-[#E5E7EB] bg-white p-1.5 shadow-[0_18px_45px_rgba(11,45,92,0.16)] md:block"
+            ref={mobileSheetRef}
+            className="absolute inset-x-0 bottom-0 max-h-[85dvh] overflow-y-auto rounded-t-2xl border border-[#E5E7EB] bg-white px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-18px_50px_rgba(11,45,92,0.22)]"
             role="menu"
           >
-            <MenuItems items={items} onClose={onClose} size="desktop" />
-          </div>
-
-          <div className="fixed inset-0 z-50 md:hidden" role="presentation">
-            <button
-              aria-label={triggerLabel}
-              className="absolute inset-0 h-full w-full bg-[#071B35]/45"
-              onClick={onClose}
-              type="button"
-            />
-            <div
-              className="absolute inset-x-0 bottom-0 max-h-[85dvh] overflow-y-auto rounded-t-2xl border border-[#E5E7EB] bg-white px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-18px_50px_rgba(11,45,92,0.22)]"
-              role="menu"
-            >
-              <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[#CBD5E1]" />
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-[#0B2D5C]">{triggerLabel}</p>
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[#CBD5E1]" />
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-[#0B2D5C]">{triggerLabel}</p>
               <button
                 aria-label={triggerLabel}
                 className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#E5E7EB] bg-[#F8FAFC] text-[#526176] transition hover:border-[#C8A45D]/65 hover:text-[#0B2D5C] focus:outline-none focus:ring-3 focus:ring-[#0B2D5C]/12"
@@ -303,14 +499,13 @@ export function SuperAdminActionMenu({
               >
                 <CloseIcon />
               </button>
-              </div>
-              <div className="grid gap-1.5">
-                <MenuItems items={items} onClose={onClose} size="mobile" />
-              </div>
+            </div>
+            <div className="grid gap-1.5">
+              <MenuItems items={items} onClose={onClose} size="mobile" />
             </div>
           </div>
-        </>
-      ) : null}
+        </div>
+      )}
     </div>
   );
 }
