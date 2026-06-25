@@ -354,6 +354,7 @@ const publicAppearanceKeys = [
   "public_footer_logo_url",
   "public_support_phone",
   "public_support_whatsapp",
+  "public_sales_whatsapp",
   "public_support_email",
   "public_facebook_url",
   "public_instagram_url",
@@ -412,6 +413,7 @@ const publicAppearanceCopy = {
       public_footer_logo_url: "Footer logo",
       public_support_phone: "Support phone",
       public_support_whatsapp: "Support WhatsApp",
+      public_sales_whatsapp: "Sales WhatsApp for Pricing",
       public_support_email: "Support email",
       public_facebook_url: "Facebook URL",
       public_instagram_url: "Instagram URL",
@@ -455,6 +457,7 @@ const publicAppearanceCopy = {
       public_footer_logo_url: "شعار الفوتر",
       public_support_phone: "هاتف الدعم",
       public_support_whatsapp: "واتساب الدعم",
+      public_sales_whatsapp: "واتساب المبيعات للأسعار",
       public_support_email: "بريد الدعم",
       public_facebook_url: "رابط فيسبوك",
       public_instagram_url: "رابط إنستغرام",
@@ -498,6 +501,7 @@ const publicAppearanceCopy = {
       public_footer_logo_url: "לוגו תחתון",
       public_support_phone: "טלפון תמיכה",
       public_support_whatsapp: "WhatsApp תמיכה",
+      public_sales_whatsapp: "וואטסאפ מכירות למחירים",
       public_support_email: "אימייל תמיכה",
       public_facebook_url: "קישור Facebook",
       public_instagram_url: "קישור Instagram",
@@ -638,6 +642,28 @@ const imageFieldHints: Record<string, Record<string, string>> = {
   },
 };
 
+const publicAppearanceFieldHelp: Partial<
+  Record<
+    PublicAppearanceKey,
+    Record<"en" | "ar" | "he", { helper: string; hint: string }>
+  >
+> = {
+  public_sales_whatsapp: {
+    en: {
+      helper: "Used by pricing plan WhatsApp CTA buttons.",
+      hint: "Enter international format without + or spaces, e.g. 972593667773",
+    },
+    ar: {
+      helper: "يستخدم هذا الرقم في أزرار طلب الباقات في صفحة الأسعار.",
+      hint: "أدخل الرقم بصيغة دولية بدون + أو مسافات، مثال: 972593667773",
+    },
+    he: {
+      helper: "משמש בכפתורי וואטסאפ של חבילות המחירים.",
+      hint: "הזן מספר בינלאומי ללא + או רווחים, לדוגמה: 972593667773",
+    },
+  },
+};
+
 const imageActionCopy = {
   en: {
     uploading: "Uploading...",
@@ -693,7 +719,15 @@ const publicAppearanceSaveCopy = {
   { uploadSuccess: string; cancelChanges: string }
 >;
 
-function PublicAppearanceSection() {
+type PublicAppearanceCard = "brand" | "contact" | "social" | "landing" | "seo";
+
+function PublicAppearanceSection({
+  cards = ["brand", "contact", "social", "landing"],
+  showPreview = true,
+}: {
+  cards?: PublicAppearanceCard[];
+  showPreview?: boolean;
+}) {
   const { locale } = useLanguage();
   const copy = publicAppearanceCopy[locale];
   const ux = publicAppearanceUxCopy[locale];
@@ -834,6 +868,7 @@ function PublicAppearanceSection() {
     label: string,
     type: "text" | "url" | "email" | "tel" = "text",
   ) {
+    const help = publicAppearanceFieldHelp[key]?.[locale];
     return (
       <FieldShell label={label}>
         <input
@@ -844,6 +879,12 @@ function PublicAppearanceSection() {
           type={type}
           value={values[key]}
         />
+        {help ? (
+          <div className="mt-2 space-y-1">
+            <p className="text-xs leading-5 text-[#66758a]">{help.helper}</p>
+            <p className="text-xs font-semibold leading-5 text-[#0B2D5C]">{help.hint}</p>
+          </div>
+        ) : null}
       </FieldShell>
     );
   }
@@ -971,6 +1012,11 @@ function PublicAppearanceSection() {
     );
   }
 
+  const hasCard = (card: PublicAppearanceCard) => cards.includes(card);
+  const formColumnClass = showPreview
+    ? "grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(280px,3fr)]"
+    : "grid min-w-0 grid-cols-1 gap-4";
+
   return (
     <section className="min-w-0 rounded-lg border border-[#E5E7EB] bg-white shadow-[0_12px_30px_rgba(11,45,92,0.04)] xl:col-span-2">
       <div className="border-b border-[#E5E7EB] px-5 py-4">
@@ -987,9 +1033,9 @@ function PublicAppearanceSection() {
           </div>
         ) : null}
 
-        <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(280px,3fr)]">
+        <div className={formColumnClass}>
           <div className="space-y-4">
-            {accordion(
+            {hasCard("brand") ? accordion(
               copy.cards.brand,
               <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
                 {input("public_site_name", copy.fields.public_site_name)}
@@ -999,39 +1045,60 @@ function PublicAppearanceSection() {
                 {imageField("public_footer_logo_url", copy.fields.public_footer_logo_url)}
               </div>,
               true,
-            )}
+            ) : null}
 
-            {accordion(
+            {hasCard("contact") ? accordion(
               copy.cards.contact,
-              <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-3">
+              <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
                 {input("public_support_phone", copy.fields.public_support_phone, "tel")}
                 {input("public_support_whatsapp", copy.fields.public_support_whatsapp, "tel")}
+                {input("public_sales_whatsapp", copy.fields.public_sales_whatsapp, "tel")}
                 {input("public_support_email", copy.fields.public_support_email, "email")}
+                {input("public_whatsapp_url", copy.fields.public_whatsapp_url, "url")}
               </div>,
-            )}
+              true,
+            ) : null}
 
-            {accordion(
+            {hasCard("social") ? accordion(
               copy.cards.social,
               <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
                 {input("public_facebook_url", copy.fields.public_facebook_url, "url")}
                 {input("public_instagram_url", copy.fields.public_instagram_url, "url")}
-                {input("public_whatsapp_url", copy.fields.public_whatsapp_url, "url")}
                 {input("public_youtube_url", copy.fields.public_youtube_url, "url")}
                 {input("public_tiktok_url", copy.fields.public_tiktok_url, "url")}
               </div>,
-            )}
+              true,
+            ) : null}
 
-            {accordion(
+            {hasCard("landing") ? accordion(
               copy.cards.landing,
               <div className="space-y-4">
                 {languageFields("ar")}
                 {languageFields("en")}
                 {languageFields("he")}
               </div>,
-            )}
+              true,
+            ) : null}
+
+            {hasCard("seo") ? accordion(
+              "SEO",
+              <div className="space-y-4">
+                <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
+                  {imageField("public_favicon_url", copy.fields.public_favicon_url)}
+                </div>
+                <div className="rounded-lg border border-dashed border-[#C8A45D]/50 bg-[#FDFAF5] px-4 py-3 text-sm leading-6 text-[#66758a]">
+                  {locale === "ar"
+                    ? "لا توجد حقول بيانات وصفية عامة متصلة حالياً. سيتم عرضها هنا عند إضافتها إلى إعدادات المنصة."
+                    : locale === "he"
+                      ? "אין כרגע שדות מטא ציבוריים מחוברים. הם יוצגו כאן לאחר הוספתם להגדרות המערכת."
+                      : "No public metadata fields are connected yet. They will appear here when added to platform settings."}
+                </div>
+              </div>,
+              true,
+            ) : null}
           </div>
 
-          <aside className="min-w-0 rounded-lg border border-[#E5E7EB] bg-[#F8FAFC] p-4 xl:sticky xl:top-24 xl:self-start">
+          {showPreview ? <aside className="min-w-0 rounded-lg border border-[#E5E7EB] bg-[#F8FAFC] p-4 xl:sticky xl:top-24 xl:self-start">
             <h4 className="text-sm font-black text-[#0B2D5C]">{ux.livePreview}</h4>
             <div className="mt-4 space-y-4">
               <div>
@@ -1069,7 +1136,7 @@ function PublicAppearanceSection() {
                 </div>
               </div>
             </div>
-          </aside>
+          </aside> : null}
         </div>
 
         <div className="sticky bottom-0 z-20 -mx-4 -mb-4 border-t border-[#E5E7EB] bg-white/95 px-4 py-3 shadow-[0_-12px_30px_rgba(11,45,92,0.08)] backdrop-blur sm:-mx-5 sm:-mb-5 sm:px-5">
@@ -1111,9 +1178,95 @@ function PublicAppearanceSection() {
   );
 }
 
+const settingsTabs = [
+  "publicWebsite",
+  "contactSales",
+  "socialMedia",
+  "seo",
+  "notifications",
+  "system",
+] as const;
+
+type SettingsTab = (typeof settingsTabs)[number];
+
+const settingsTabCopy = {
+  en: {
+    publicWebsite: { label: "Public Website", subtitle: "Branding, homepage assets, and public content." },
+    contactSales: { label: "Contact & Sales", subtitle: "Support, sales WhatsApp, and public contact links." },
+    socialMedia: { label: "Social Media", subtitle: "Public social profile links." },
+    seo: { label: "SEO", subtitle: "Favicon and public metadata settings." },
+    notifications: { label: "Notifications", subtitle: "Email, WhatsApp, and alert defaults." },
+    system: { label: "System", subtitle: "Platform defaults, security, domains, and maintenance." },
+  },
+  ar: {
+    publicWebsite: { label: "الموقع العام", subtitle: "الهوية والصور ونصوص الصفحة العامة." },
+    contactSales: { label: "التواصل والمبيعات", subtitle: "الدعم وواتساب المبيعات وروابط التواصل العامة." },
+    socialMedia: { label: "التواصل الاجتماعي", subtitle: "روابط الحسابات العامة." },
+    seo: { label: "SEO", subtitle: "الأيقونة وبيانات الظهور العامة." },
+    notifications: { label: "الإشعارات", subtitle: "إعدادات البريد وواتساب والتنبيهات." },
+    system: { label: "النظام", subtitle: "افتراضيات المنصة والأمان والنطاقات والصيانة." },
+  },
+  he: {
+    publicWebsite: { label: "אתר ציבורי", subtitle: "מיתוג, תמונות וטקסטים ציבוריים." },
+    contactSales: { label: "קשר ומכירות", subtitle: "תמיכה, וואטסאפ מכירות וקישורי קשר." },
+    socialMedia: { label: "רשתות חברתיות", subtitle: "קישורים לפרופילים ציבוריים." },
+    seo: { label: "SEO", subtitle: "אייקון והגדרות מטא ציבוריות." },
+    notifications: { label: "התראות", subtitle: "ברירות מחדל לאימייל, WhatsApp והתראות." },
+    system: { label: "מערכת", subtitle: "ברירות מחדל, אבטחה, דומיינים ותחזוקה." },
+  },
+} satisfies Record<
+  "en" | "ar" | "he",
+  Record<SettingsTab, { label: string; subtitle: string }>
+>;
+
+function SettingsTabNavigation({
+  activeTab,
+  labels,
+  onChange,
+}: {
+  activeTab: SettingsTab;
+  labels: Record<SettingsTab, { label: string; subtitle: string }>;
+  onChange: (tab: SettingsTab) => void;
+}) {
+  return (
+    <div className="rounded-lg border border-[#E5E7EB] bg-white p-2 shadow-[0_12px_30px_rgba(11,45,92,0.04)]">
+      <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-6" role="tablist">
+        {settingsTabs.map((tab) => {
+          const isActive = activeTab === tab;
+          return (
+            <button
+              aria-selected={isActive}
+              className={`min-w-0 rounded-md border px-3 py-3 text-start transition ${
+                isActive
+                  ? "border-[#0B2D5C] bg-[#0B2D5C] text-white shadow-sm"
+                  : "border-transparent bg-white text-[#24364f] hover:border-[#E5E7EB] hover:bg-[#F8FAFC]"
+              }`}
+              key={tab}
+              onClick={() => onChange(tab)}
+              role="tab"
+              type="button"
+            >
+              <span className="block truncate text-sm font-black">{labels[tab].label}</span>
+              <span
+                className={`mt-1 block line-clamp-2 text-xs leading-5 ${
+                  isActive ? "text-white/80" : "text-[#66758a]"
+                }`}
+              >
+                {labels[tab].subtitle}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function SuperAdminSettingsPage() {
   const { locale } = useLanguage();
   const dictionary = superAdminSettingsDictionaries[locale];
+  const tabLabels = settingsTabCopy[locale];
+  const [activeTab, setActiveTab] = useState<SettingsTab>("publicWebsite");
   const [toggles, setToggles] = useState(initialToggleSettings);
 
   function setToggle(key: ToggleKey, value: boolean) {
@@ -1123,127 +1276,154 @@ export function SuperAdminSettingsPage() {
   return (
     <SuperAdminLayout activeNav="settings" dictionary={dictionary}>
       <div className="min-w-0 max-w-full space-y-6">
-        <section className="flex min-w-0 flex-col gap-4 rounded-lg border border-[#E5E7EB] bg-white px-5 py-4 shadow-[0_12px_30px_rgba(11,45,92,0.04)] xl:flex-row xl:items-center xl:justify-between">
-          <p className="max-w-3xl text-sm leading-6 text-[#66758a]">{dictionary.values.uiOnly}</p>
-          <div className="flex min-w-0 flex-col gap-3 sm:flex-row">
-            <button className={primaryButtonClassName("w-full sm:w-auto")} type="button">
-              {dictionary.actions.saveSettings}
-            </button>
-            <button className={buttonClassName("secondary", "md", "w-full sm:w-auto")} type="button">
-              {dictionary.actions.resetToDefault}
-            </button>
-            <button
-              className={buttonClassName("warning", "md", "w-full sm:w-auto")}
-              onClick={() => setToggle("backupNowRequested", true)}
-              type="button"
-            >
-              {dictionary.actions.backupNow}
-            </button>
+        <SettingsTabNavigation activeTab={activeTab} labels={tabLabels} onChange={setActiveTab} />
+
+        {activeTab === "publicWebsite" ? (
+          <div className="grid min-w-0 grid-cols-1 gap-5">
+            <PublicAppearanceSection cards={["brand", "landing"]} showPreview />
+            <FeaturedServicesSection />
           </div>
-        </section>
+        ) : null}
 
-        <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-2">
-          <Section title={dictionary.sections.general}>
-            <TextField label={dictionary.fields.platformName} value={platformSettings.platformName} />
-            <SelectField
-              label={dictionary.fields.defaultLanguage}
-              options={languageOptions}
-              renderOption={(option) => dictionary.languages[option as keyof typeof dictionary.languages]}
-              value={platformSettings.defaultLanguage}
-            />
-            <SupportedLanguages dictionary={dictionary} />
-            <SelectField label={dictionary.fields.defaultCurrency} options={currencyOptions} value={platformSettings.defaultCurrency} />
-            <SelectField label={dictionary.fields.timezone} options={timezoneOptions} value={platformSettings.timezone} />
-            <SelectField label={dictionary.fields.dateFormat} options={dateFormatOptions} value={platformSettings.dateFormat} />
-          </Section>
+        {activeTab === "contactSales" ? (
+          <PublicAppearanceSection cards={["contact"]} showPreview={false} />
+        ) : null}
 
-          <Section title={dictionary.sections.branding}>
-            <div className="min-w-0 rounded-md border border-[#E5E7EB] bg-[#F8FAFC] px-3 py-3">
-              <p className="text-xs font-medium text-[#66758a]">{dictionary.fields.platformLogo}</p>
-              <div className="mt-3 flex min-w-0 items-center gap-3">
-                <RoyalCareLogo className="h-14 w-14 shrink-0 rounded-md border border-[#E5E7EB] bg-white" variant="mark" />
-                <p className="min-w-0 break-words text-sm font-semibold text-[#24364f]">{dictionary.values.logoPreview}</p>
+        {activeTab === "socialMedia" ? (
+          <PublicAppearanceSection cards={["social"]} showPreview={false} />
+        ) : null}
+
+        {activeTab === "seo" ? (
+          <PublicAppearanceSection cards={["seo"]} showPreview={false} />
+        ) : null}
+
+        {activeTab === "notifications" ? (
+          <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-2">
+            <Section title={dictionary.sections.notifications}>
+              {([
+                ["emailNotifications", dictionary.fields.emailNotifications],
+                ["whatsappNotifications", dictionary.fields.whatsappNotifications],
+                ["systemAlerts", dictionary.fields.systemAlerts],
+                ["paymentAlerts", dictionary.fields.paymentAlerts],
+                ["subscriptionAlerts", dictionary.fields.subscriptionAlerts],
+              ] as const).map(([key, label]) => (
+                <ToggleField
+                  dictionary={dictionary}
+                  key={key}
+                  label={label}
+                  onChange={(value) => setToggle(key, value)}
+                  value={toggles[key]}
+                />
+              ))}
+            </Section>
+
+            <WhatsAppSettingsSection dictionary={dictionary} />
+          </div>
+        ) : null}
+
+        {activeTab === "system" ? (
+          <div className="space-y-5">
+            <section className="flex min-w-0 flex-col gap-4 rounded-lg border border-[#E5E7EB] bg-white px-5 py-4 shadow-[0_12px_30px_rgba(11,45,92,0.04)] xl:flex-row xl:items-center xl:justify-between">
+              <p className="max-w-3xl text-sm leading-6 text-[#66758a]">{dictionary.values.uiOnly}</p>
+              <div className="flex min-w-0 flex-col gap-3 sm:flex-row">
+                <button className={primaryButtonClassName("w-full sm:w-auto")} type="button">
+                  {dictionary.actions.saveSettings}
+                </button>
+                <button className={buttonClassName("secondary", "md", "w-full sm:w-auto")} type="button">
+                  {dictionary.actions.resetToDefault}
+                </button>
+                <button
+                  className={buttonClassName("warning", "md", "w-full sm:w-auto")}
+                  onClick={() => setToggle("backupNowRequested", true)}
+                  type="button"
+                >
+                  {dictionary.actions.backupNow}
+                </button>
               </div>
+            </section>
+
+            <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-2">
+              <Section title={dictionary.sections.general}>
+                <TextField label={dictionary.fields.platformName} value={platformSettings.platformName} />
+                <SelectField
+                  label={dictionary.fields.defaultLanguage}
+                  options={languageOptions}
+                  renderOption={(option) => dictionary.languages[option as keyof typeof dictionary.languages]}
+                  value={platformSettings.defaultLanguage}
+                />
+                <SupportedLanguages dictionary={dictionary} />
+                <SelectField label={dictionary.fields.defaultCurrency} options={currencyOptions} value={platformSettings.defaultCurrency} />
+                <SelectField label={dictionary.fields.timezone} options={timezoneOptions} value={platformSettings.timezone} />
+                <SelectField label={dictionary.fields.dateFormat} options={dateFormatOptions} value={platformSettings.dateFormat} />
+              </Section>
+
+              <Section title={dictionary.sections.branding}>
+                <div className="min-w-0 rounded-md border border-[#E5E7EB] bg-[#F8FAFC] px-3 py-3">
+                  <p className="text-xs font-medium text-[#66758a]">{dictionary.fields.platformLogo}</p>
+                  <div className="mt-3 flex min-w-0 items-center gap-3">
+                    <RoyalCareLogo className="h-14 w-14 shrink-0 rounded-md border border-[#E5E7EB] bg-white" variant="mark" />
+                    <p className="min-w-0 break-words text-sm font-semibold text-[#24364f]">{dictionary.values.logoPreview}</p>
+                  </div>
+                </div>
+                <ColorField label={dictionary.fields.primaryColor} value={platformSettings.primaryColor} />
+                <ColorField label={dictionary.fields.secondaryColor} value={platformSettings.secondaryColor} />
+                <TextField label={dictionary.fields.emailBranding} value={platformSettings.emailBranding} />
+                <ToggleField
+                  dictionary={dictionary}
+                  label={dictionary.fields.loginPageBranding}
+                  onChange={(value) => setToggle("loginPageBranding", value)}
+                  value={toggles.loginPageBranding}
+                />
+              </Section>
+
+              <Section title={dictionary.sections.security}>
+                <ToggleField
+                  dictionary={dictionary}
+                  label={dictionary.fields.twoFactorDefault}
+                  onChange={(value) => setToggle("twoFactorDefault", value)}
+                  value={toggles.twoFactorDefault}
+                />
+                <ReadOnlyField label={dictionary.fields.passwordPolicy} value={dictionary.values.strongPasswordPolicy} />
+                <TextField label={dictionary.fields.sessionTimeout} suffix={dictionary.values.minutes} type="number" value={platformSettings.sessionTimeout} />
+                <TextField label={dictionary.fields.loginAttemptLimit} type="number" value={platformSettings.loginAttemptLimit} />
+                <ToggleField
+                  dictionary={dictionary}
+                  label={dictionary.fields.forcePasswordReset}
+                  onChange={(value) => setToggle("forcePasswordReset", value)}
+                  value={toggles.forcePasswordReset}
+                />
+              </Section>
+
+              <Section title={dictionary.sections.subscriptionDefaults}>
+                <TextField label={dictionary.fields.defaultTrialDuration} suffix={dictionary.values.days} type="number" value={platformSettings.defaultTrialDuration} />
+                <TextField label={dictionary.fields.gracePeriod} suffix={dictionary.values.days} type="number" value={platformSettings.gracePeriod} />
+                <ReadOnlyField label={dictionary.fields.autoSuspensionRules} value={dictionary.values.afterGracePeriod} />
+              </Section>
+
+              <Section title={dictionary.sections.domainDefaults}>
+                <TextField label={dictionary.fields.defaultSubdomainPattern} value={platformSettings.defaultSubdomainPattern} />
+                <ToggleField
+                  dictionary={dictionary}
+                  label={dictionary.fields.sslAutoRenewal}
+                  onChange={(value) => setToggle("sslAutoRenewal", value)}
+                  value={toggles.sslAutoRenewal}
+                />
+                <ReadOnlyField label={dictionary.fields.dnsVerificationRules} value={dictionary.values.aCnameTxt} />
+              </Section>
+
+              <Section title={dictionary.sections.backupHealth}>
+                <ReadOnlyField label={dictionary.fields.lastBackup} value={formatDate(platformSettings.lastBackup, locale)} />
+                <ReadOnlyField label={dictionary.fields.backupFrequency} value={dictionary.values.daily} />
+                <ReadOnlyField label={dictionary.fields.systemStatus} value={dictionary.values.operational} />
+                <ReadOnlyField label={dictionary.fields.databaseHealth} value={dictionary.values.healthy} />
+                <ReadOnlyField
+                  label={dictionary.actions.backupNow}
+                  value={toggles.backupNowRequested ? dictionary.values.enabled : dictionary.values.disabled}
+                />
+              </Section>
             </div>
-            <ColorField label={dictionary.fields.primaryColor} value={platformSettings.primaryColor} />
-            <ColorField label={dictionary.fields.secondaryColor} value={platformSettings.secondaryColor} />
-            <TextField label={dictionary.fields.emailBranding} value={platformSettings.emailBranding} />
-            <ToggleField
-              dictionary={dictionary}
-              label={dictionary.fields.loginPageBranding}
-              onChange={(value) => setToggle("loginPageBranding", value)}
-              value={toggles.loginPageBranding}
-            />
-          </Section>
-
-          <Section title={dictionary.sections.security}>
-            <ToggleField
-              dictionary={dictionary}
-              label={dictionary.fields.twoFactorDefault}
-              onChange={(value) => setToggle("twoFactorDefault", value)}
-              value={toggles.twoFactorDefault}
-            />
-            <ReadOnlyField label={dictionary.fields.passwordPolicy} value={dictionary.values.strongPasswordPolicy} />
-            <TextField label={dictionary.fields.sessionTimeout} suffix={dictionary.values.minutes} type="number" value={platformSettings.sessionTimeout} />
-            <TextField label={dictionary.fields.loginAttemptLimit} type="number" value={platformSettings.loginAttemptLimit} />
-            <ToggleField
-              dictionary={dictionary}
-              label={dictionary.fields.forcePasswordReset}
-              onChange={(value) => setToggle("forcePasswordReset", value)}
-              value={toggles.forcePasswordReset}
-            />
-          </Section>
-
-          <Section title={dictionary.sections.notifications}>
-            {([
-              ["emailNotifications", dictionary.fields.emailNotifications],
-              ["whatsappNotifications", dictionary.fields.whatsappNotifications],
-              ["systemAlerts", dictionary.fields.systemAlerts],
-              ["paymentAlerts", dictionary.fields.paymentAlerts],
-              ["subscriptionAlerts", dictionary.fields.subscriptionAlerts],
-            ] as const).map(([key, label]) => (
-              <ToggleField
-                dictionary={dictionary}
-                key={key}
-                label={label}
-                onChange={(value) => setToggle(key, value)}
-                value={toggles[key]}
-              />
-            ))}
-          </Section>
-
-          <Section title={dictionary.sections.subscriptionDefaults}>
-            <TextField label={dictionary.fields.defaultTrialDuration} suffix={dictionary.values.days} type="number" value={platformSettings.defaultTrialDuration} />
-            <TextField label={dictionary.fields.gracePeriod} suffix={dictionary.values.days} type="number" value={platformSettings.gracePeriod} />
-            <ReadOnlyField label={dictionary.fields.autoSuspensionRules} value={dictionary.values.afterGracePeriod} />
-          </Section>
-
-          <Section title={dictionary.sections.domainDefaults}>
-            <TextField label={dictionary.fields.defaultSubdomainPattern} value={platformSettings.defaultSubdomainPattern} />
-            <ToggleField
-              dictionary={dictionary}
-              label={dictionary.fields.sslAutoRenewal}
-              onChange={(value) => setToggle("sslAutoRenewal", value)}
-              value={toggles.sslAutoRenewal}
-            />
-            <ReadOnlyField label={dictionary.fields.dnsVerificationRules} value={dictionary.values.aCnameTxt} />
-          </Section>
-
-          <Section title={dictionary.sections.backupHealth}>
-            <ReadOnlyField label={dictionary.fields.lastBackup} value={formatDate(platformSettings.lastBackup, locale)} />
-            <ReadOnlyField label={dictionary.fields.backupFrequency} value={dictionary.values.daily} />
-            <ReadOnlyField label={dictionary.fields.systemStatus} value={dictionary.values.operational} />
-            <ReadOnlyField label={dictionary.fields.databaseHealth} value={dictionary.values.healthy} />
-            <ReadOnlyField
-              label={dictionary.actions.backupNow}
-              value={toggles.backupNowRequested ? dictionary.values.enabled : dictionary.values.disabled}
-            />
-          </Section>
-
-          <WhatsAppSettingsSection dictionary={dictionary} />
-          <FeaturedServicesSection />
-          <PublicAppearanceSection />
-        </div>
+          </div>
+        ) : null}
       </div>
     </SuperAdminLayout>
   );

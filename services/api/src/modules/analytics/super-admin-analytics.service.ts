@@ -169,6 +169,7 @@ export class SuperAdminAnalyticsService {
       chartTrends,
       subscriptions,
       subscriptionBilling,
+      platformUsage,
     ] = await Promise.all([
       this.getCenterStats(prisma, recentCenterStart, sevenDaysAgo),
       this.getUserStats(prisma),
@@ -192,6 +193,7 @@ export class SuperAdminAnalyticsService {
         thisMonthStart,
         todayStart,
       }),
+      this.getPlatformUsageStats(prisma, thirtyDaysAgo),
     ]);
 
     const charts: ChartsData = {
@@ -218,6 +220,7 @@ export class SuperAdminAnalyticsService {
       centers,
       charts,
       insights,
+      platformUsage,
       subscriptionBilling,
       subscriptions,
       users,
@@ -336,6 +339,38 @@ export class SuperAdminAnalyticsService {
       centerAdminsCount: centerAdminAssignments.length,
       inactiveUsers: Math.max(totalUsers - activeUsers, 0),
       superAdminsCount,
+      totalUsers,
+    };
+  }
+
+  private async getPlatformUsageStats(
+    prisma: Awaited<ReturnType<PrismaService['getClient']>>,
+    thirtyDaysAgo: Date,
+  ) {
+    const [
+      totalPatients,
+      totalAppointments,
+      appointmentsLast30Days,
+      totalInvoices,
+      totalUsers,
+      activeCenters,
+    ] = await Promise.all([
+      prisma.patient.count({ where: { status: { not: 'ARCHIVED' } } }),
+      prisma.appointment.count(),
+      prisma.appointment.count({
+        where: { appointmentDate: { gte: thirtyDaysAgo } },
+      }),
+      prisma.invoice.count(),
+      prisma.user.count({ where: { deletedAt: null } }),
+      prisma.center.count({ where: { status: 'ACTIVE' } }),
+    ]);
+
+    return {
+      activeCenters,
+      appointmentsLast30Days,
+      totalAppointments,
+      totalInvoices,
+      totalPatients,
       totalUsers,
     };
   }

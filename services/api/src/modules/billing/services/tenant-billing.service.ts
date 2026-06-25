@@ -35,6 +35,7 @@ const invoiceSelect = {
   amount: true,
   currency: true,
   status: true,
+  source: true,
   notes: true,
   createdAt: true,
   updatedAt: true,
@@ -131,6 +132,7 @@ function formatInvoice(invoice: {
   amount: { toString(): string };
   currency: string;
   status: string;
+  source: string;
   notes: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -171,6 +173,7 @@ function formatInvoice(invoice: {
     amount: invoice.amount.toString(),
     currency: invoice.currency,
     status: invoice.status,
+    source: invoice.source,
     notes: invoice.notes,
     createdAt: invoice.createdAt,
     updatedAt: invoice.updatedAt,
@@ -198,7 +201,12 @@ export class TenantBillingService {
   async list(
     centerId: string,
     permissions: string[],
-    query?: { search?: string; status?: string; appointmentId?: string },
+    query?: {
+      search?: string;
+      status?: string;
+      appointmentId?: string;
+      branchId?: string;
+    },
   ) {
     this.requirePermission(permissions, 'billing:view');
 
@@ -208,6 +216,7 @@ export class TenantBillingService {
     const appointmentId = isValidUuid(query?.appointmentId)
       ? query.appointmentId
       : undefined;
+    const branchId = isValidUuid(query?.branchId) ? query.branchId : undefined;
 
     const listStatuses = ['PENDING', 'PARTIAL', 'PAID', 'CANCELLED'] as const;
     type ListFilterStatus = (typeof listStatuses)[number];
@@ -225,6 +234,10 @@ export class TenantBillingService {
       centerId,
       ...statusWhere,
       ...(appointmentId ? { appointmentId } : {}),
+      // Invoices have no direct branch; scope through the linked appointment's
+      // branch. Manual invoices without an appointment are excluded from a
+      // specific-branch view (they still appear under "All Branches").
+      ...(branchId ? { appointment: { is: { branchId } } } : {}),
       ...(search
         ? {
             patient: {
@@ -457,6 +470,10 @@ export class TenantBillingService {
       typeof dto.notes === 'string' && dto.notes.trim()
         ? dto.notes.trim()
         : null;
+    const invoiceSource = 'MANUAL';
+    const createdByFlow = appointmentId
+      ? 'APPOINTMENT_EXPLICIT_INVOICE_CREATE'
+      : 'BILLING_MANUAL_FORM';
 
     const [patient, service, staffCheck] = await Promise.all([
       prisma.patient.findFirst({
@@ -512,6 +529,7 @@ export class TenantBillingService {
           currency,
           notes,
           status: 'PENDING',
+          source: invoiceSource,
         },
         select: invoiceSelect,
       });
@@ -539,7 +557,9 @@ export class TenantBillingService {
         centerNameHe: invoice.center.nameHe ?? undefined,
         serviceId: resolvedServiceId,
         customServiceName: resolvedCustomServiceName ?? undefined,
-        source: 'TENANT_BILLING',
+        source: invoiceSource,
+        triggerAction: 'CREATE_INVOICE',
+        createdByFlow,
         status: invoice.status,
       },
     });
@@ -743,6 +763,99 @@ export class TenantBillingService {
     }
 
     return invoice;
+  }
+
+  async autoCreateForAppointmentCompletion(
+    centerId: string,
+    appointmentId: string,
+  ): Promise<void> {
+    const prisma = await this.prisma.getClient();
+
+    const appt = await prisma.appointment.findFirst({
+      where: { id: appointmentId, centerId },
+      select: {
+        id: true,
+        patientId: true,
+        serviceId: true,
+        customServiceName: true,
+        customServicePrice: true,
+        staffUserId: true,
+        service: { select: { price: true, currency: true } },
+      },
+    });
+
+    if (!appt) return;
+
+    const amount =
+      appt.service?.price?.toString() ??
+      appt.customServicePrice?.toString() ??
+      null;
+    if (!amount) return;
+
+    const currency = appt.service?.currency ?? 'ILS';
+
+    const existing = await prisma.invoice.findFirst({
+      where: { appointmentId, centerId },
+      select: { id: true, status: true },
+    });
+
+    if (existing && existing.status !== 'CANCELLED') return;
+
+    if (existing && existing.status === 'CANCELLED') {
+      await prisma.invoice.update({
+        where: { id: existing.id },
+        data: { appointmentId: null },
+      });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const invoiceNumber = await this.generateInvoiceNumber(
+        tx,
+        new Date().getFullYear(),
+      );
+      await tx.invoice.create({
+        data: {
+          invoiceNumber,
+          centerId,
+          patientId: appt.patientId,
+          serviceId: appt.serviceId,
+          customServiceName: appt.serviceId
+            ? null
+            : (appt.customServiceName ?? null),
+          staffUserId: appt.staffUserId,
+          appointmentId,
+          amount,
+          currency,
+          status: 'PENDING',
+          source: 'AUTO_APPOINTMENT_COMPLETION',
+        },
+      });
+    });
+  }
+
+  async cancelAutoInvoiceForAppointment(
+    centerId: string,
+    appointmentId: string,
+  ): Promise<void> {
+    const prisma = await this.prisma.getClient();
+
+    const invoice = await prisma.invoice.findFirst({
+      where: { centerId, appointmentId, source: 'AUTO_APPOINTMENT_COMPLETION', status: 'PENDING' },
+      select: { id: true },
+    });
+
+    if (!invoice) return;
+
+    const paymentCount = await prisma.payment.count({
+      where: { invoiceId: invoice.id },
+    });
+
+    if (paymentCount > 0) return;
+
+    await prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { status: 'CANCELLED' },
+    });
   }
 
   private async generateInvoiceNumber(

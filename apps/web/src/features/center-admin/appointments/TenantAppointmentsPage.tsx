@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AdminCard, AdminState } from "@/components/ui/admin-surfaces";
 import { buttonClassName } from "@/components/ui/button-styles";
@@ -17,6 +18,8 @@ import {
   type TenantAppointmentOptions,
 } from "@/lib/api/tenant-appointments";
 import { createTenantInvoiceFromAppointment } from "@/lib/api/tenant-billing";
+import { BranchFilter } from "@/components/branch/BranchFilter";
+import { useBranchFilter } from "@/lib/use-branch-filter";
 import { hasBillingPermission } from "../billing/billing-permissions";
 import { CenterAdminShell } from "../layout/CenterAdminShell";
 import {
@@ -27,7 +30,10 @@ import {
   formatAppointmentTime,
   getAppointmentProviderName,
   getAppointmentDateInputValue,
+  getBranchLabel,
   getLocalizedAppointmentServiceName,
+  getAppointmentSessionLabel,
+  type AppointmentSessionLabel,
 } from "./appointment-display";
 import { hasTenantAppointmentPermission } from "./appointment-permissions";
 import { AppointmentCalendarView } from "./AppointmentCalendarView";
@@ -136,14 +142,37 @@ function getAppointmentUrgency(
   return { level: "normal", minutesUntilStart };
 }
 
+function todayDateString(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function timeStringToMinutes(time: string): number {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+}
+
 export function TenantAppointmentsPage() {
   const { locale } = useLanguage();
+  const searchParams = useSearchParams();
   const [appointments, setAppointments] = useState<TenantAppointment[]>([]);
   const [options, setOptions] = useState<TenantAppointmentOptions | null>(null);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
-  const [dateFilter, setDateFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => {
+    const s = searchParams.get("status");
+    return s && (appointmentStatusKeys as string[]).includes(s)
+      ? (s as AppointmentStatus)
+      : "ALL";
+  });
+  const [dateFilter, setDateFilter] = useState(() => {
+    const d = searchParams.get("date");
+    if (!d) return "";
+    if (d === "today") return todayDateString();
+    return d;
+  });
   const [providerFilter, setProviderFilter] = useState("");
+  const { branchId: branchFilter, setBranchId: setBranchFilter } =
+    useBranchFilter();
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [notice, setNotice] = useState("");
@@ -151,32 +180,52 @@ export function TenantAppointmentsPage() {
   const [creatingInvoiceId, setCreatingInvoiceId] = useState("");
   const [now, setNow] = useState(() => new Date());
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
+  const [specialFilter] = useState<"missed" | "next2h" | null>(() => {
+    const f = searchParams.get("filter");
+    if (f === "missed") return "missed";
+    if (f === "next2h" || searchParams.get("range") === "next2h") return "next2h";
+    return null;
+  });
 
+  // Filter options load once on mount.
   useEffect(() => {
     let isMounted = true;
-
-    Promise.all([listTenantAppointments(), getTenantAppointmentOptions()])
-      .then(([appointmentsResponse, optionsResponse]) => {
-        if (isMounted) {
-          setAppointments(appointmentsResponse.items);
-          setOptions(optionsResponse);
-        }
+    getTenantAppointmentOptions()
+      .then((optionsResponse) => {
+        if (isMounted) setOptions(optionsResponse);
       })
       .catch(() => {
-        if (isMounted) {
-          setLoadError(true);
-        }
-      })
-      .finally(() => {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+        if (isMounted) setLoadError(true);
       });
-
     return () => {
       isMounted = false;
     };
   }, []);
+
+  // Appointments refetch whenever the status filter changes. The backend hides
+  // CANCELLED by default (statusFilter = ALL); selecting the CANCELLED filter
+  // requests them explicitly. This keeps the active list cancelled-free without
+  // pulling cancelled rows the client would otherwise have to carry.
+  useEffect(() => {
+    let isMounted = true;
+    setIsLoading(true);
+    listTenantAppointments({
+      status: statusFilter,
+      branch: branchFilter || undefined,
+    })
+      .then((appointmentsResponse) => {
+        if (isMounted) setAppointments(appointmentsResponse.items);
+      })
+      .catch(() => {
+        if (isMounted) setLoadError(true);
+      })
+      .finally(() => {
+        if (isMounted) setIsLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [statusFilter, branchFilter]);
 
   useEffect(() => {
     if (!notice) {
@@ -193,33 +242,51 @@ export function TenantAppointmentsPage() {
     return () => window.clearInterval(id);
   }, []);
 
-  const filteredAppointments = useMemo(
-    () =>
-      appointments.filter((appointment) => {
-        if (!matchesSearch(appointment, search)) {
-          return false;
-        }
+  const filteredAppointments = useMemo(() => {
+    const todayStr = todayDateString();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const twoHoursFromNow = currentMinutes + 120;
 
-        if (statusFilter !== "ALL" && appointment.status !== statusFilter) {
-          return false;
-        }
+    return appointments.filter((appointment) => {
+      if (!matchesSearch(appointment, search)) return false;
+      // Hard guard: cancelled appointments are hidden from the active list and only
+      // appear when the status filter is explicitly CANCELLED.
+      if (statusFilter !== "CANCELLED" && appointment.status === "CANCELLED") return false;
+      if (statusFilter !== "ALL" && appointment.status !== statusFilter) return false;
+      if (
+        dateFilter &&
+        getAppointmentDateInputValue(appointment.appointmentDate) !== dateFilter
+      ) return false;
+      if (providerFilter && appointment.staffUserId !== providerFilter) return false;
 
-        if (
-          dateFilter &&
-          getAppointmentDateInputValue(appointment.appointmentDate) !==
-            dateFilter
-        ) {
-          return false;
-        }
+      if (specialFilter === "missed") {
+        const apptDate = getAppointmentDateInputValue(appointment.appointmentDate);
+        const isToday = apptDate === todayStr;
+        if (!isToday) return false;
+        const isNoShow = appointment.status === "NO_SHOW";
+        const isPastUnfinished =
+          ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"].includes(appointment.status) &&
+          timeStringToMinutes(appointment.endTime) < currentMinutes;
+        return isNoShow || isPastUnfinished;
+      }
 
-        if (providerFilter && appointment.staffUserId !== providerFilter) {
-          return false;
-        }
+      if (specialFilter === "next2h") {
+        const apptDate = getAppointmentDateInputValue(appointment.appointmentDate);
+        const isToday = apptDate === todayStr;
+        if (!isToday) return false;
+        if (["CANCELLED", "COMPLETED", "NO_SHOW"].includes(appointment.status)) return false;
+        const startMin = timeStringToMinutes(appointment.startTime);
+        const endMin = timeStringToMinutes(appointment.endTime);
+        // Overlap: appointment hasn't finished AND starts within the 2-hour window
+        return endMin >= currentMinutes && startMin <= twoHoursFromNow;
+      }
 
-        return true;
-      }),
-    [appointments, dateFilter, providerFilter, search, statusFilter],
+      return true;
+    });
+  }, [appointments, dateFilter, now, providerFilter, search, specialFilter, statusFilter],
   );
+
+  const showBranchFilter = (options?.branches.length ?? 0) > 1;
 
   return (
     <CenterAdminShell
@@ -249,7 +316,8 @@ export function TenantAppointmentsPage() {
         const today = todayInputValue();
         const todayCount = appointments.filter(
           (appointment) =>
-            getAppointmentDateInputValue(appointment.appointmentDate) === today,
+            getAppointmentDateInputValue(appointment.appointmentDate) === today &&
+            appointment.status !== "CANCELLED",
         ).length;
         const upcomingCount = appointments.filter(
           (appointment) =>
@@ -277,25 +345,7 @@ export function TenantAppointmentsPage() {
               status,
             );
 
-            // Preserve or auto-create invoice
-            let invoiceForState = appointment.invoice;
-
-            if (status === "COMPLETED" && !appointment.invoice && canCreateBilling) {
-              try {
-                const inv = await createTenantInvoiceFromAppointment(appointment.id);
-                invoiceForState = {
-                  id: inv.id,
-                  status: inv.status,
-                  currency: inv.currency,
-                  totalAmount: inv.amount,
-                  paidAmount: "0.00",
-                  remainingAmount: inv.amount,
-                };
-              } catch {
-                // Service may have no price — user can create manually from details page
-              }
-            }
-
+            const invoiceForState = appointment.invoice;
             setAppointments((current) =>
               current.map((item) =>
                 item.id === updated.id
@@ -377,7 +427,13 @@ export function TenantAppointmentsPage() {
             </section>
 
             <AdminCard className="mt-5 p-4">
-              <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_180px_180px_220px_auto_auto] lg:items-center">
+              <div
+                className={`grid min-w-0 grid-cols-1 gap-3 lg:items-center ${
+                  showBranchFilter
+                    ? "lg:grid-cols-[minmax(0,1fr)_160px_150px_180px_180px_auto_auto]"
+                    : "lg:grid-cols-[minmax(0,1fr)_180px_180px_220px_auto_auto]"
+                }`}
+              >
                 <input
                   className="min-h-11 min-w-0 rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
                   onChange={(event) => setSearch(event.target.value)}
@@ -418,6 +474,7 @@ export function TenantAppointmentsPage() {
                     </option>
                   ))}
                 </select>
+                <BranchFilter onChange={setBranchFilter} value={branchFilter} />
                 {session.permissions.includes("appointments:create") ? (
                   isWriteBlocked ? (
                     <button
@@ -508,6 +565,7 @@ export function TenantAppointmentsPage() {
             <section className={`mt-5 grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2 ${viewMode === "calendar" ? "hidden" : ""}`}>
               {filteredAppointments.map((appointment) => {
                 const urgency = getAppointmentUrgency(appointment, now);
+                const sessionLabel = getAppointmentSessionLabel(appointment, locale);
                 const isCancelled = appointment.status === "CANCELLED";
                 const baseCard = "rounded-lg border p-4 shadow-[0_12px_30px_rgba(11,45,92,0.04)] transition-shadow duration-150 hover:shadow-[0_16px_36px_rgba(11,45,92,0.09)]";
                 const cardClass = isCancelled
@@ -570,15 +628,21 @@ export function TenantAppointmentsPage() {
                           appointment.customServiceName,
                         )}
                         badge={
-                          appointment.serviceId && appointment.service?.followUpEnabled ? (
+                          appointment.hasFollowUpPlan &&
+                          appointment.followUpPlanSummary?.type === "RECURRING_CONTINUOUS" ? (
                             <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
                               {dictionary.appointments.followUpPlanExists}
                             </span>
-                          ) : (
-                            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
-                              {dictionary.appointments.followUpPlanNone}
+                          ) : sessionLabel ? (
+                            <SessionBadge
+                              label={sessionLabel.label}
+                              variant={sessionLabel.variant}
+                            />
+                          ) : appointment.hasFollowUpPlan ? (
+                            <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+                              {dictionary.appointments.followUpPlanExists}
                             </span>
-                          )
+                          ) : null
                         }
                       />
                       <Detail
@@ -588,6 +652,12 @@ export function TenantAppointmentsPage() {
                           dictionary.common.notAvailable
                         }
                       />
+                      {showBranchFilter && appointment.branch ? (
+                        <Detail
+                          label={dictionary.appointments.branch}
+                          value={getBranchLabel(appointment.branch, locale)}
+                        />
+                      ) : null}
                       <Detail
                         label={dictionary.appointments.durationMinutes}
                         value={appointment.durationMinutes.toString()}
@@ -614,6 +684,12 @@ export function TenantAppointmentsPage() {
                             <> · {dictionary.billing.balanceDue}{" "}
                             {appointment.invoice.remainingAmount}</>
                           ) : null}
+                        </span>
+                      </div>
+                    ) : appointment.status === "COMPLETED" ? (
+                      <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2">
+                        <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+                          {dictionary.appointments.needsInvoiceBadge}
                         </span>
                       </div>
                     ) : null}
@@ -746,5 +822,28 @@ function Detail({
       </dd>
       {badge != null ? <div className="mt-2 min-w-0">{badge}</div> : null}
     </div>
+  );
+}
+
+const SESSION_BADGE_STYLE: Record<AppointmentSessionLabel["variant"], string> = {
+  blue:   "border-blue-200   bg-blue-50   text-blue-700",
+  green:  "border-emerald-200 bg-emerald-50 text-emerald-700",
+  gold:   "border-amber-200  bg-amber-50  text-amber-700",
+  purple: "border-purple-200 bg-purple-50 text-purple-700",
+};
+
+function SessionBadge({
+  label,
+  variant,
+}: {
+  label: string;
+  variant: AppointmentSessionLabel["variant"];
+}) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${SESSION_BADGE_STYLE[variant]}`}
+    >
+      {label}
+    </span>
   );
 }

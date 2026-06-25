@@ -1,14 +1,12 @@
 import type { CenterAdminDictionary } from "@/i18n/dictionaries/center-admin";
-import { formatDate } from "@/i18n/formatters";
+import { formatDate, formatTime12h } from "@/i18n/formatters";
 import type { AppointmentConflictDetails } from "@/lib/api/tenant-appointments";
 import type { SupportedLocale } from "@/i18n/locales";
 
 function localizedServiceName(
   details: AppointmentConflictDetails,
-  locale: SupportedLocale,
+  _locale: SupportedLocale,
 ): string {
-  if (locale === "ar") return details.serviceNameAr || details.serviceNameEn || details.serviceNameHe;
-  if (locale === "he") return details.serviceNameHe || details.serviceNameEn || details.serviceNameAr;
   return details.serviceNameEn || details.serviceNameAr || details.serviceNameHe;
 }
 
@@ -68,8 +66,8 @@ export function AppointmentConflictAlert({
               value={formatConflictDate(details.appointmentDate, locale, na)}
               fallback={na}
             />
-            <ConflictRow label={d.conflictStart} value={details.startTime} fallback={na} />
-            <ConflictRow label={d.conflictEnd} value={details.endTime} fallback={na} />
+            <ConflictRow label={d.conflictStart} value={formatTime12h(details.startTime)} fallback={na} />
+            <ConflictRow label={d.conflictEnd} value={formatTime12h(details.endTime)} fallback={na} />
           </dl>
 
           <p className="mt-4 text-sm font-semibold text-[#7D1B1B]">

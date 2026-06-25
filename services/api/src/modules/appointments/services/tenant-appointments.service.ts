@@ -1,4 +1,4 @@
-﻿import {
+import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -8,13 +8,15 @@
 import {
   Prisma,
   type AppointmentStatus,
-  type ServiceFollowUpType,
+  type RecurringIntervalUnit,
+  type ServiceFollowUpMode,
 } from '@royalcare/db';
 import { PrismaService } from '../../../common/database/prisma.service';
 import { safeUserSelect } from '../../../common/database/safe-user-select';
 import { hasTenantPermission } from '../../../common/permissions/tenant-permissions';
 import { ScheduleService } from '../../../common/schedule/schedule.service';
 import { AuditService } from '../../audit/audit.service';
+import { TenantBillingService } from '../../billing/services/tenant-billing.service';
 import { PatientFollowUpsService } from '../../patient-follow-ups/services/patient-follow-ups.service';
 import type { CancelTenantAppointmentDto } from '../dto/cancel-tenant-appointment.dto';
 import type { CreateTenantAppointmentDto } from '../dto/create-tenant-appointment.dto';
@@ -37,13 +39,12 @@ const appointmentStatuses = [
   'NO_SHOW',
 ] as const;
 
-const providerCapableRoles = ['CENTER_MANAGER', 'DOCTOR', 'STAFF'] as const;
-
 const appointmentSelect = {
   id: true,
   centerId: true,
   patientId: true,
   serviceId: true,
+  branchId: true,
   customServiceName: true,
   customServiceDuration: true,
   customServicePrice: true,
@@ -52,6 +53,13 @@ const appointmentSelect = {
   offerTitle: true,
   offerPrice: true,
   offerCurrency: true,
+  treatmentTemplateId: true,
+  treatmentTemplateNameAr: true,
+  treatmentTemplateNameEn: true,
+  treatmentTemplateNameHe: true,
+  treatmentTemplateTotalSessions: true,
+  treatmentTemplateDefaultIntervalDays: true,
+  treatmentTemplatePhases: true,
   staffUserId: true,
   createdByUserId: true,
   appointmentDate: true,
@@ -81,6 +89,18 @@ const appointmentSelect = {
       status: true,
     },
   },
+  branch: {
+    select: {
+      id: true,
+      name: true,
+      cityAr: true,
+      cityEn: true,
+      cityHe: true,
+      addressAr: true,
+      addressEn: true,
+      addressHe: true,
+    },
+  },
   service: {
     select: {
       id: true,
@@ -90,11 +110,29 @@ const appointmentSelect = {
       durationMinutes: true,
       isActive: true,
       followUpEnabled: true,
-      followUpType: true,
+      followUpMode: true,
       defaultIntervalDays: true,
       totalRecommendedSessions: true,
+      recurringIntervalValue: true,
+      recurringIntervalUnit: true,
       autoCreateNextReminder: true,
       followUpRules: true,
+      treatmentTemplates: {
+        where: { isActive: true },
+        orderBy: [{ isDefault: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
+        select: {
+          id: true,
+          nameAr: true,
+          nameEn: true,
+          nameHe: true,
+          totalSessions: true,
+          defaultIntervalDays: true,
+          phases: true,
+          isDefault: true,
+          isActive: true,
+          sortOrder: true,
+        },
+      },
     },
   },
   staffUser: {
@@ -113,24 +151,178 @@ const appointmentSelect = {
   followUpsCreated: {
     select: {
       id: true,
+      appointmentId: true,
+      nextAppointmentId: true,
+      patientId: true,
+      serviceId: true,
       dueDate: true,
       status: true,
       sessionNumber: true,
+      isRecurring: true,
+      recurringIntervalValue: true,
+      recurringIntervalUnit: true,
+      planTotalSessions: true,
+    },
+    orderBy: { dueDate: 'asc' as const },
+    take: 1,
+  },
+  followUpsNext: {
+    select: {
+      id: true,
+      appointmentId: true,
+      nextAppointmentId: true,
+      patientId: true,
+      serviceId: true,
+      dueDate: true,
+      status: true,
+      sessionNumber: true,
+      isRecurring: true,
+      recurringIntervalValue: true,
+      recurringIntervalUnit: true,
+      planTotalSessions: true,
     },
     orderBy: { dueDate: 'asc' as const },
     take: 1,
   },
 } satisfies Prisma.AppointmentSelect;
 
+function calculateTotalSessionsFromRules(
+  rules: Array<{ toSessionNumber: number }> | null | undefined,
+) {
+  if (!Array.isArray(rules) || rules.length === 0) {
+    return null;
+  }
+
+  const totals = rules
+    .map((rule) => rule.toSessionNumber)
+    .filter((value) => Number.isInteger(value) && value > 0);
+
+  return totals.length > 0 ? Math.max(...totals) : null;
+}
+
+function parseFollowUpRulesSnapshot(
+  value:
+    | CreateTenantAppointmentDto['followUpRules']
+    | CreateTenantAppointmentDto['followUpSessionRules']
+    | null
+    | undefined,
+) {
+  if (!Array.isArray(value) || value.length === 0) return null;
+
+  const parsed = value.map((rule) => ({
+    fromSessionNumber: Number(rule.fromSessionNumber),
+    intervalDays: Number(rule.intervalDays),
+    toSessionNumber: Number(rule.toSessionNumber),
+  }));
+
+  if (
+    parsed.some(
+      (rule) =>
+        !Number.isInteger(rule.fromSessionNumber) ||
+        !Number.isInteger(rule.toSessionNumber) ||
+        !Number.isInteger(rule.intervalDays) ||
+        rule.fromSessionNumber <= 0 ||
+        rule.toSessionNumber < rule.fromSessionNumber ||
+        rule.intervalDays <= 0,
+    )
+  ) {
+    return null;
+  }
+
+  return parsed;
+}
+
 type AppointmentWithBookingRequest = Prisma.AppointmentGetPayload<{
   select: typeof appointmentSelect;
 }>;
 
+const appointmentFollowUpSummarySelect = {
+  id: true,
+  appointmentId: true,
+  nextAppointmentId: true,
+  patientId: true,
+  serviceId: true,
+  dueDate: true,
+  status: true,
+  sessionNumber: true,
+  isRecurring: true,
+  recurringIntervalValue: true,
+  recurringIntervalUnit: true,
+  planTotalSessions: true,
+} satisfies Prisma.PatientFollowUpSelect;
+
+type AppointmentFollowUpSummaryRow = Prisma.PatientFollowUpGetPayload<{
+  select: typeof appointmentFollowUpSummarySelect;
+}>;
+
+function isFollowUpRelatedToAppointment(
+  appointment: AppointmentWithBookingRequest,
+  followUp: AppointmentFollowUpSummaryRow,
+) {
+  const directlyLinked =
+    followUp.appointmentId === appointment.id ||
+    followUp.nextAppointmentId === appointment.id;
+  const sameRecurringPlan =
+    followUp.isRecurring &&
+    appointment.service?.followUpMode === 'RECURRING_CONTINUOUS' &&
+    Boolean(appointment.serviceId) &&
+    followUp.patientId === appointment.patientId &&
+    followUp.serviceId === appointment.serviceId;
+
+  return directlyLinked || sameRecurringPlan;
+}
+
 function withBookingSource<T extends AppointmentWithBookingRequest>(
   appointment: T,
+  loadedFollowUps: AppointmentFollowUpSummaryRow[] = [],
 ) {
-  const { bookingRequest, followUpsCreated, ...rest } = appointment;
-  const firstFollowUp = followUpsCreated[0];
+  const { bookingRequest, followUpsCreated, followUpsNext, ...rest } = appointment;
+  const embeddedFollowUps = [...followUpsNext, ...followUpsCreated];
+  const relatedFollowUps = [...embeddedFollowUps, ...loadedFollowUps]
+    .filter((followUp, index, rows) =>
+      isFollowUpRelatedToAppointment(appointment, followUp) &&
+      rows.findIndex((candidate) => candidate.id === followUp.id) === index,
+    )
+    .sort((left, right) => left.dueDate.getTime() - right.dueDate.getTime());
+  const firstFollowUp = relatedFollowUps[0];
+  const hasConfiguredRecurringPlan =
+    appointment.service?.followUpMode === 'RECURRING_CONTINUOUS' &&
+    Boolean(appointment.service.recurringIntervalValue) &&
+    Boolean(appointment.service.recurringIntervalUnit);
+  const hasFollowUpPlan =
+    relatedFollowUps.length > 0 || hasConfiguredRecurringPlan;
+  const followUpPlanId = firstFollowUp?.appointmentId ?? null;
+  const recurringFollowUp = relatedFollowUps.find((item) => item.isRecurring);
+  const nextFollowUp = relatedFollowUps.find(
+    (item) => !['COMPLETED', 'CANCELLED', 'CLOSED_EARLY'].includes(item.status),
+  );
+  const followUpPlanSummary = hasFollowUpPlan
+    ? {
+        type:
+          recurringFollowUp || hasConfiguredRecurringPlan
+            ? ('RECURRING_CONTINUOUS' as const)
+            : ('SESSION_BASED_PLAN' as const),
+        followUpCount: relatedFollowUps.length,
+        totalSessions: recurringFollowUp || hasConfiguredRecurringPlan
+          ? null
+          : (relatedFollowUps.find((item) => item.planTotalSessions)?.planTotalSessions ??
+            relatedFollowUps.length),
+        completedSessions: relatedFollowUps.filter(
+          (item) => item.status === 'COMPLETED',
+        ).length,
+        nextFollowUpDate: nextFollowUp
+          ? dateOnlyText(nextFollowUp.dueDate)
+          : null,
+        recurringIntervalValue:
+          recurringFollowUp?.recurringIntervalValue ??
+          appointment.service?.recurringIntervalValue ??
+          null,
+        recurringIntervalUnit:
+          recurringFollowUp?.recurringIntervalUnit ??
+          appointment.service?.recurringIntervalUnit ??
+          null,
+      }
+    : null;
 
   return {
     ...rest,
@@ -141,6 +333,12 @@ function withBookingSource<T extends AppointmentWithBookingRequest>(
           notes: bookingRequest.notes,
         }
       : null,
+    // This is the canonical appointment-level answer. Service follow-up settings
+    // describe whether new plans may be created; these persisted relations prove
+    // whether this appointment actually belongs to an existing plan.
+    hasFollowUpPlan,
+    followUpPlanId,
+    followUpPlanSummary,
     followUp: firstFollowUp
       ? {
           id: firstFollowUp.id,
@@ -160,6 +358,15 @@ function validationFailed(errors: Record<string, string>) {
   return new BadRequestException({
     message: 'Validation failed',
     errors,
+  });
+}
+
+function followUpAlreadyBooked() {
+  return new BadRequestException({
+    message: 'This follow-up session already has an appointment.',
+    errors: {
+      followUpId: 'This follow-up session already has an appointment.',
+    },
   });
 }
 
@@ -281,6 +488,7 @@ export class TenantAppointmentsService {
     private readonly auditService: AuditService,
     private readonly scheduleService: ScheduleService,
     private readonly patientFollowUpsService: PatientFollowUpsService,
+    private readonly billingService: TenantBillingService,
   ) {}
 
   async list(
@@ -290,6 +498,7 @@ export class TenantAppointmentsService {
       date?: string;
       patient?: string;
       provider?: string;
+      branch?: string;
       search?: string;
       status?: string;
     },
@@ -298,12 +507,19 @@ export class TenantAppointmentsService {
 
     const t0 = Date.now();
     const prisma = await this.prisma.getClient();
+    const statusFilterProvided = Boolean(query?.status && query.status !== 'ALL');
     const where: Prisma.AppointmentWhereInput = {
       centerId,
-      ...(query?.status && query.status !== 'ALL'
-        ? { status: query.status as AppointmentStatus }
-        : {}),
+      // Status scoping:
+      //  • explicit status (e.g. CANCELLED, SCHEDULED) → match exactly
+      //  • default / ALL → ACTIVE list: hide CANCELLED. Cancelled appointments are
+      //    only reachable via the explicit CANCELLED filter (or patient full history,
+      //    which is served by the follow-ups timeline, not this endpoint).
+      ...(statusFilterProvided
+        ? { status: query!.status as AppointmentStatus }
+        : { status: { not: 'CANCELLED' as AppointmentStatus } }),
       ...(query?.provider ? { staffUserId: query.provider } : {}),
+      ...(query?.branch ? { branchId: query.branch } : {}),
       ...(query?.date ? { appointmentDate: parseDateOnly(query.date) } : {}),
       ...(query?.search?.trim()
         ? {
@@ -376,11 +592,12 @@ export class TenantAppointmentsService {
       }
     }
 
+    const followUpRows = await this.loadAppointmentFollowUps(centerId, items);
     const itemsWithInvoice = items.map((a) =>
       withBookingSource({
         ...a,
         invoice: invoiceSummaryMap.get(a.id) ?? null,
-      }),
+      }, followUpRows),
     );
 
     console.debug(
@@ -394,7 +611,7 @@ export class TenantAppointmentsService {
     this.requirePermission(permissions, 'appointments:view');
 
     const prisma = await this.prisma.getClient();
-    const [patients, services, providers] = await Promise.all([
+    const [patients, services, branches, center] = await Promise.all([
       prisma.patient.findMany({
         where: { centerId, status: { not: 'ARCHIVED' } },
         orderBy: { fullName: 'asc' },
@@ -415,38 +632,158 @@ export class TenantAppointmentsService {
           nameHe: true,
           durationMinutes: true,
           isActive: true,
+          followUpEnabled: true,
+          followUpMode: true,
+          defaultIntervalDays: true,
+          totalRecommendedSessions: true,
+          followUpRules: true,
+          treatmentTemplates: {
+            where: { isActive: true },
+            orderBy: [{ isDefault: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
+            select: {
+              id: true,
+              nameAr: true,
+              nameEn: true,
+              nameHe: true,
+              totalSessions: true,
+              defaultIntervalDays: true,
+              phases: true,
+              isDefault: true,
+              isActive: true,
+              sortOrder: true,
+            },
+          },
         },
       }),
-      prisma.userRole.findMany({
-        where: {
-          centerId,
-          status: 'ACTIVE',
-          role: {
-            key: {
-              in: [...providerCapableRoles],
-            },
-            status: 'ACTIVE',
-          },
-          user: {
-            deletedAt: null,
-            status: 'ACTIVE',
-          },
-        },
-        orderBy: { user: { fullName: 'asc' } },
+      prisma.centerBranch.findMany({
+        where: { centerId, isActive: true },
+        orderBy: [{ isMain: 'desc' }, { sortOrder: 'asc' }, { name: 'asc' }],
         select: {
-          role: { select: { key: true, name: true } },
-          user: { select: safeUserSelect },
+          id: true,
+          name: true,
+          cityAr: true,
+          cityEn: true,
+          cityHe: true,
+          addressAr: true,
+          addressEn: true,
+          addressHe: true,
+          isMain: true,
+          isActive: true,
         },
+      }),
+      prisma.center.findUnique({
+        where: { id: centerId },
+        select: { ownerUserId: true },
       }),
     ]);
 
-    return {
-      patients,
-      services,
-      providers: providers.map((assignment) => ({
+    const providers = await prisma.userRole.findMany({
+      where: {
+        centerId,
+        OR: [
+          { providerEnabled: true },
+          ...(center?.ownerUserId ? [{ userId: center.ownerUserId }] : []),
+        ],
+        status: 'ACTIVE',
+        role: {
+          status: 'ACTIVE',
+        },
+        user: {
+          deletedAt: null,
+          status: 'ACTIVE',
+        },
+      },
+      orderBy: { user: { fullName: 'asc' } },
+      select: {
+        providerEnabled: true,
+        role: { select: { key: true, name: true } },
+        user: { select: safeUserSelect },
+      },
+    });
+    const allCenterUserAssignments = await prisma.userRole.findMany({
+      where: { centerId },
+      orderBy: [{ user: { fullName: 'asc' } }, { assignedAt: 'asc' }],
+      select: {
+        providerEnabled: true,
+        role: { select: { key: true, name: true } },
+        status: true,
+        user: {
+          select: {
+            email: true,
+            fullName: true,
+            id: true,
+            status: true,
+          },
+        },
+      },
+    });
+    const uniqueProviders = new Map<string, (typeof providers)[number]>();
+    for (const assignment of providers) {
+      if (!uniqueProviders.has(assignment.user.id)) {
+        uniqueProviders.set(assignment.user.id, assignment);
+      }
+    }
+    const providerRows = Array.from(uniqueProviders.values()).map(
+      (assignment) => ({
         ...assignment.user,
+        isOwner: assignment.user.id === center?.ownerUserId,
+        providerEnabled: assignment.providerEnabled,
         role: assignment.role,
-      })),
+      }),
+    );
+    const allCenterUsersById = new Map<
+      string,
+      {
+        email: string | null;
+        fullName: string;
+        id: string;
+        isActive: boolean;
+        isOwner: boolean;
+        providerEnabled: boolean;
+        roleNames: string[];
+      }
+    >();
+    for (const assignment of allCenterUserAssignments) {
+      const existing = allCenterUsersById.get(assignment.user.id);
+      if (existing) {
+        existing.providerEnabled =
+          existing.providerEnabled || assignment.providerEnabled;
+        existing.isActive =
+          existing.isActive ||
+          (assignment.status === 'ACTIVE' && assignment.user.status === 'ACTIVE');
+        existing.roleNames.push(assignment.role.name);
+        continue;
+      }
+      allCenterUsersById.set(assignment.user.id, {
+        email: assignment.user.email,
+        fullName: assignment.user.fullName,
+        id: assignment.user.id,
+        isActive:
+          assignment.status === 'ACTIVE' && assignment.user.status === 'ACTIVE',
+        isOwner: assignment.user.id === center?.ownerUserId,
+        providerEnabled: assignment.providerEnabled,
+        roleNames: [assignment.role.name],
+      });
+    }
+
+    return {
+      optionsDebug: {
+        allCenterUsers: Array.from(allCenterUsersById.values()),
+        centerId,
+        ownerUserId: center?.ownerUserId ?? null,
+        providersReturned: providerRows.map((provider) => ({
+          email: provider.email,
+          fullName: provider.fullName,
+          id: provider.id,
+          isOwner: provider.isOwner,
+          providerEnabled: provider.providerEnabled,
+          roleName: provider.role.name,
+        })),
+      },
+      branches,
+      patients,
+      providers: providerRows,
+      services,
     };
   }
 
@@ -457,11 +794,32 @@ export class TenantAppointmentsService {
     date?: string,
     providerId?: string,
     excludeAppointmentId?: string,
+    durationMinutes?: string,
+    isCustomService?: string,
   ) {
     this.requirePermission(permissions, 'appointments:view');
 
+    const customMode = isCustomService === 'true';
+    const hasServiceId = Boolean(serviceId?.trim());
+    const parsedDuration = durationMinutes
+      ? parseInt(durationMinutes, 10)
+      : null;
+    const hasValidDuration =
+      parsedDuration !== null &&
+      Number.isFinite(parsedDuration) &&
+      parsedDuration > 0;
+
     const errors: Record<string, string> = {};
-    if (!serviceId?.trim()) errors.serviceId = 'serviceId is required.';
+
+    if (customMode) {
+      if (!hasValidDuration) {
+        errors.durationMinutes = 'durationMinutes is required for custom service.';
+      }
+    } else {
+      if (!hasServiceId) {
+        errors.serviceId = 'serviceId is required.';
+      }
+    }
 
     const parsedDate = parseDateOnly(date);
     if (parsedDate === 'missing' || parsedDate === 'invalid') {
@@ -473,21 +831,32 @@ export class TenantAppointmentsService {
     }
 
     const prisma = await this.prisma.getClient();
-    const service = await prisma.service.findFirst({
-      where: { id: serviceId!.trim(), centerId, isActive: true },
-      select: { id: true },
-    });
 
-    if (!service) {
-      throw validationFailed({ serviceId: 'Service not found or not active.' });
+    if (!customMode) {
+      const service = await prisma.service.findFirst({
+        where: { id: serviceId!.trim(), centerId, isActive: true },
+        select: { id: true },
+      });
+
+      if (!service) {
+        throw validationFailed({ serviceId: 'Service not found or not active.' });
+      }
+
+      return this.scheduleService.computeSlots({
+        centerId,
+        date: (date as string).trim(),
+        excludeAppointmentId,
+        providerId: providerId?.trim() || undefined,
+        serviceId: service.id,
+      });
     }
 
     return this.scheduleService.computeSlots({
       centerId,
       date: (date as string).trim(),
+      durationMinutes: parsedDuration!,
       excludeAppointmentId,
       providerId: providerId?.trim() || undefined,
-      serviceId: service.id,
     });
   }
 
@@ -502,9 +871,13 @@ export class TenantAppointmentsService {
     const validated = this.validateCreate(dto);
     const prisma = await this.prisma.getClient();
 
-    const appointmentData = await this.materializeCustomServiceIfRequested(
+    const appointmentData = await this.withTreatmentTemplateSnapshot(
+      centerId,
+      await this.materializeCustomServiceIfRequested(
       centerId,
       validated,
+      dto,
+      ),
       dto,
     );
 
@@ -512,14 +885,87 @@ export class TenantAppointmentsService {
     await this.ensureSlotAvailable(centerId, appointmentData);
     await this.ensureNoOverlap(centerId, appointmentData);
 
-    const appointment = await prisma.appointment.create({
-      data: {
+    // Enforce/auto-fill branch: required when the center has multiple active
+    // branches, auto-assigned when it has exactly one, null when it has none.
+    const branchId = await this.resolveBranchId(centerId, dto.branchId);
+
+    const sourceFollowUpId = optionalTrimmed(dto.followUpId);
+    const appointment = sourceFollowUpId
+      ? await prisma.$transaction(async (tx) => {
+          const followUp = await tx.patientFollowUp.findFirst({
+            where: { centerId, id: sourceFollowUpId },
+            select: {
+              nextAppointmentId: true,
+              patientId: true,
+              serviceId: true,
+            },
+          });
+
+          if (!followUp) {
+            throw validationFailed({ followUpId: 'Follow-up session was not found.' });
+          }
+
+          if (followUp.patientId !== appointmentData.patientId) {
+            throw validationFailed({
+              patientId: 'Selected patient does not match this follow-up session.',
+            });
+          }
+
+          if (followUp.serviceId && followUp.serviceId !== appointmentData.serviceId) {
+            throw validationFailed({
+              serviceId: 'Selected service does not match this follow-up session.',
+            });
+          }
+
+          if (followUp.nextAppointmentId) {
+            throw followUpAlreadyBooked();
+          }
+
+          const created = await tx.appointment.create({
+            data: {
+              centerId,
+              createdByUserId: currentUserId,
+              branchId,
+              ...appointmentData,
+            },
+            select: appointmentSelect,
+          });
+
+          const linked = await tx.patientFollowUp.updateMany({
+            where: {
+              centerId,
+              id: sourceFollowUpId,
+              nextAppointmentId: null,
+            },
+            data: {
+              nextAppointmentId: created.id,
+              status: 'BOOKED',
+            },
+          });
+
+          if (linked.count !== 1) {
+            throw followUpAlreadyBooked();
+          }
+
+          return created;
+        })
+      : await prisma.appointment.create({
+          data: {
+            centerId,
+            createdByUserId: currentUserId,
+            branchId,
+            ...appointmentData,
+          },
+          select: appointmentSelect,
+        });
+
+    if (sourceFollowUpId) {
+      await this.patientFollowUpsService.scheduleNextRecurringAfterBooking(
         centerId,
-        createdByUserId: currentUserId,
-        ...appointmentData,
-      },
-      select: appointmentSelect,
-    });
+        sourceFollowUpId,
+        appointment.id,
+      );
+    }
 
     if (dto.saveCustomService || appointment.customServiceName) {
       console.log('[custom-service:appointment-created]', {
@@ -529,7 +975,6 @@ export class TenantAppointmentsService {
         customServiceName: appointment.customServiceName,
         defaultIntervalDays: dto.defaultIntervalDays ?? null,
         followUpEnabled: dto.followUpEnabled === true,
-        followUpType: dto.followUpType ?? null,
         saveCustomService: dto.saveCustomService === true,
         sessionRules: dto.followUpSessionRules ?? dto.followUpRules ?? null,
       });
@@ -544,7 +989,17 @@ export class TenantAppointmentsService {
       },
     );
 
-    return withBookingSource(appointment);
+    // Pre-create all follow-ups for multi-session treatment plans so the
+    // Follow-ups page shows the complete plan immediately.
+    await this.patientFollowUpsService.createPlanFromAppointment(
+      centerId,
+      appointment.id,
+    );
+
+    return this.withAppointmentFollowUpData(
+      centerId,
+      await this.findAppointmentById(centerId, appointment.id),
+    );
   }
 
   async getById(
@@ -555,7 +1010,43 @@ export class TenantAppointmentsService {
     this.requirePermission(permissions, 'appointments:view');
 
     const appointment = await this.findAppointmentById(centerId, appointmentId);
-    return withBookingSource(appointment);
+    const followUpRows = await this.loadAppointmentFollowUps(centerId, [appointment]);
+    const response = withBookingSource(appointment, followUpRows);
+
+    if (!response.hasFollowUpPlan) {
+      return { ...response, followUpPlan: [] };
+    }
+
+    // Resolve the complete plan from the same persisted Prisma relations used by
+    // appointment cards. `appointmentId` on PatientFollowUp is the plan/source
+    // identity; `nextAppointmentId` links any booked plan session to its actual
+    // appointment. Do not infer plan ownership from the current service settings.
+    const followUps = await this.patientFollowUpsService.list(
+      centerId,
+      permissions,
+      {
+        patientId: appointment.patientId,
+        includeAllForPatient: true,
+      },
+    );
+    const followUpPlan = followUps.items.filter((item) => {
+      if (
+        response.followUpPlanSummary?.type === 'RECURRING_CONTINUOUS' &&
+        item.isRecurring
+      ) {
+        return (
+          item.patientId === appointment.patientId &&
+          item.serviceId === appointment.serviceId
+        );
+      }
+
+      return response.followUpPlanId
+        ? item.appointmentId === response.followUpPlanId
+        : item.appointmentId === appointment.id ||
+            item.nextAppointmentId === appointment.id;
+    });
+
+    return { ...response, followUpPlan };
   }
 
   async update(
@@ -571,9 +1062,13 @@ export class TenantAppointmentsService {
     const validated = this.validateUpdate(dto, current);
     const prisma = await this.prisma.getClient();
 
-    const appointmentData = await this.materializeCustomServiceIfRequested(
+    const appointmentData = await this.withTreatmentTemplateSnapshot(
+      centerId,
+      await this.materializeCustomServiceIfRequested(
       centerId,
       validated,
+      dto,
+      ),
       dto,
     );
 
@@ -582,12 +1077,54 @@ export class TenantAppointmentsService {
     }
 
     await this.validateRelations(centerId, appointmentData);
-    await this.ensureSlotAvailable(centerId, appointmentData, appointmentId);
-    await this.ensureNoOverlap(centerId, appointmentData, appointmentId);
+
+    // Scheduling fields: date, startTime, provider, service.
+    // If none of these changed, the slot is already booked for this appointment —
+    // re-running availability/overlap checks would falsely reject past-time or
+    // off-grid slots that were legitimately created.
+    const schedulingChanged =
+      dateOnlyText(current.appointmentDate) !==
+        dateOnlyText(appointmentData.appointmentDate) ||
+      current.startTime !== appointmentData.startTime ||
+      current.staffUserId !== appointmentData.staffUserId ||
+      (current.serviceId ?? null) !== (appointmentData.serviceId ?? null) ||
+      current.durationMinutes !== appointmentData.durationMinutes;
+    const appointmentDateChanged =
+      dateOnlyText(current.appointmentDate) !==
+      dateOnlyText(appointmentData.appointmentDate);
+
+    console.log('[appointments:update-scheduling]', {
+      appointmentId,
+      schedulingChanged,
+      current: {
+        date: dateOnlyText(current.appointmentDate),
+        serviceId: current.serviceId,
+        staffUserId: current.staffUserId,
+        startTime: current.startTime,
+      },
+      incoming: {
+        date: dateOnlyText(appointmentData.appointmentDate),
+        serviceId: appointmentData.serviceId,
+        staffUserId: appointmentData.staffUserId,
+        startTime: appointmentData.startTime,
+      },
+    });
+
+    if (schedulingChanged) {
+      await this.ensureSlotAvailable(centerId, appointmentData, appointmentId);
+      await this.ensureNoOverlap(centerId, appointmentData, appointmentId);
+    }
+
+    // Only touch branch when the client explicitly sends branchId. When sent,
+    // the same multi-branch enforcement/auto-fill applies as on create.
+    const branchUpdate =
+      dto.branchId !== undefined
+        ? { branchId: await this.resolveBranchId(centerId, dto.branchId) }
+        : {};
 
     const result = await prisma.appointment.updateMany({
       where: { id: appointmentId, centerId },
-      data: appointmentData,
+      data: { ...appointmentData, ...branchUpdate },
     });
 
     if (result.count !== 1) {
@@ -595,6 +1132,14 @@ export class TenantAppointmentsService {
         message: 'Appointment not found',
         errors: { appointment: 'Appointment not found.' },
       });
+    }
+
+    if (appointmentDateChanged && dto.recalculateFollowUpSchedule === true) {
+      await this.patientFollowUpsService.recalculateScheduleForAppointment(
+        centerId,
+        appointmentId,
+        appointmentData.appointmentDate,
+      );
     }
 
     const appointment = await this.findAppointmentById(centerId, appointmentId);
@@ -607,7 +1152,6 @@ export class TenantAppointmentsService {
         customServiceName: appointment.customServiceName,
         defaultIntervalDays: dto.defaultIntervalDays ?? null,
         followUpEnabled: dto.followUpEnabled === true,
-        followUpType: dto.followUpType ?? null,
         saveCustomService: dto.saveCustomService === true,
         sessionRules: dto.followUpSessionRules ?? dto.followUpRules ?? null,
       });
@@ -632,22 +1176,35 @@ export class TenantAppointmentsService {
       via: 'update',
     });
 
-    if (current.status !== 'COMPLETED' && appointment.status === 'COMPLETED') {
-      await this.patientFollowUpsService.createFromCompletedAppointment(
+    if (current.status !== appointment.status) {
+      await this.patientFollowUpsService.syncFollowUpSessionFromAppointment(
         centerId,
         appointment.id,
       );
-    } else if (
-      current.status === 'COMPLETED' &&
-      appointment.status !== 'COMPLETED'
-    ) {
-      await this.patientFollowUpsService.cancelFollowUpsForAppointment(
-        centerId,
-        appointment.id,
-      );
+
+      if (current.status !== 'COMPLETED' && appointment.status === 'COMPLETED') {
+        await this.patientFollowUpsService.createFromCompletedAppointment(
+          centerId,
+          appointment.id,
+        );
+        await this.billingService.autoCreateForAppointmentCompletion(
+          centerId,
+          appointment.id,
+        );
+      }
+
+      if (current.status === 'COMPLETED' && appointment.status !== 'COMPLETED') {
+        await this.billingService.cancelAutoInvoiceForAppointment(
+          centerId,
+          appointment.id,
+        );
+      }
     }
 
-    return withBookingSource(appointment);
+    return this.withAppointmentFollowUpData(
+      centerId,
+      await this.findAppointmentById(centerId, appointment.id),
+    );
   }
 
   async updateStatus(
@@ -709,22 +1266,35 @@ export class TenantAppointmentsService {
       via: 'updateStatus',
     });
 
-    if (current.status !== 'COMPLETED' && appointment.status === 'COMPLETED') {
-      await this.patientFollowUpsService.createFromCompletedAppointment(
+    if (current.status !== appointment.status) {
+      await this.patientFollowUpsService.syncFollowUpSessionFromAppointment(
         centerId,
         appointment.id,
       );
-    } else if (
-      current.status === 'COMPLETED' &&
-      appointment.status !== 'COMPLETED'
-    ) {
-      await this.patientFollowUpsService.cancelFollowUpsForAppointment(
-        centerId,
-        appointment.id,
-      );
+
+      if (current.status !== 'COMPLETED' && appointment.status === 'COMPLETED') {
+        await this.patientFollowUpsService.createFromCompletedAppointment(
+          centerId,
+          appointment.id,
+        );
+        await this.billingService.autoCreateForAppointmentCompletion(
+          centerId,
+          appointment.id,
+        );
+      }
+
+      if (current.status === 'COMPLETED' && appointment.status !== 'COMPLETED') {
+        await this.billingService.cancelAutoInvoiceForAppointment(
+          centerId,
+          appointment.id,
+        );
+      }
     }
 
-    return withBookingSource(appointment);
+    return this.withAppointmentFollowUpData(
+      centerId,
+      await this.findAppointmentById(centerId, appointment.id),
+    );
   }
 
   async cancel(
@@ -776,7 +1346,17 @@ export class TenantAppointmentsService {
       },
     );
 
-    return withBookingSource(appointment);
+    await this.patientFollowUpsService.syncFollowUpSessionFromAppointment(
+      centerId,
+      appointment.id,
+    );
+
+    await this.billingService.cancelAutoInvoiceForAppointment(centerId, appointment.id);
+
+    return this.withAppointmentFollowUpData(
+      centerId,
+      await this.findAppointmentById(centerId, appointment.id),
+    );
   }
 
   private async findAppointmentById(centerId: string, appointmentId: string) {
@@ -794,6 +1374,59 @@ export class TenantAppointmentsService {
     }
 
     return appointment;
+  }
+
+  private async loadAppointmentFollowUps(
+    centerId: string,
+    appointments: AppointmentWithBookingRequest[],
+  ) {
+    if (appointments.length === 0) return [];
+
+    const prisma = await this.prisma.getClient();
+    const appointmentIds = appointments.map((appointment) => appointment.id);
+    const recurringAppointments = appointments.filter(
+      (appointment) =>
+        appointment.serviceId && appointment.service?.followUpMode === 'RECURRING_CONTINUOUS',
+    );
+    const patientIds = [
+      ...new Set(recurringAppointments.map((appointment) => appointment.patientId)),
+    ];
+    const serviceIds = [
+      ...new Set(
+        recurringAppointments
+          .map((appointment) => appointment.serviceId)
+          .filter((serviceId): serviceId is string => Boolean(serviceId)),
+      ),
+    ];
+
+    return prisma.patientFollowUp.findMany({
+      where: {
+        centerId,
+        OR: [
+          { appointmentId: { in: appointmentIds } },
+          { nextAppointmentId: { in: appointmentIds } },
+          ...(patientIds.length > 0 && serviceIds.length > 0
+            ? [
+                {
+                  isRecurring: true,
+                  patientId: { in: patientIds },
+                  serviceId: { in: serviceIds },
+                } satisfies Prisma.PatientFollowUpWhereInput,
+              ]
+            : []),
+        ],
+      },
+      orderBy: { dueDate: 'asc' },
+      select: appointmentFollowUpSummarySelect,
+    });
+  }
+
+  private async withAppointmentFollowUpData(
+    centerId: string,
+    appointment: AppointmentWithBookingRequest,
+  ) {
+    const followUps = await this.loadAppointmentFollowUps(centerId, [appointment]);
+    return withBookingSource(appointment, followUps);
   }
 
   private async logAppointmentAudit(
@@ -1003,6 +1636,125 @@ export class TenantAppointmentsService {
     };
   }
 
+  private async withTreatmentTemplateSnapshot(
+    centerId: string,
+    data: ReturnType<TenantAppointmentsService['validateShared']>,
+    dto: CreateTenantAppointmentDto | UpdateTenantAppointmentDto,
+  ) {
+    if (!data.serviceId) {
+      return {
+        ...data,
+        treatmentTemplateDefaultIntervalDays: null,
+        treatmentTemplateId: null,
+        treatmentTemplateNameAr: null,
+        treatmentTemplateNameEn: null,
+        treatmentTemplateNameHe: null,
+        treatmentTemplatePhases: Prisma.JsonNull,
+        treatmentTemplateTotalSessions: null,
+      };
+    }
+
+    const prisma = await this.prisma.getClient();
+    const service = await prisma.service.findFirst({
+      where: { centerId, id: data.serviceId },
+      select: {
+        followUpEnabled: true,
+        followUpMode: true,
+        followUpRules: true,
+        defaultIntervalDays: true,
+        totalRecommendedSessions: true,
+        treatmentTemplates: {
+          where: { isActive: true },
+          orderBy: [{ isDefault: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
+          select: {
+            id: true,
+            nameAr: true,
+            nameEn: true,
+            nameHe: true,
+            totalSessions: true,
+            defaultIntervalDays: true,
+            phases: true,
+            isDefault: true,
+          },
+        },
+      },
+    });
+
+    if (!service?.followUpEnabled || service.followUpMode !== 'SESSION_BASED_PLAN') {
+      return {
+        ...data,
+        treatmentTemplateDefaultIntervalDays: null,
+        treatmentTemplateId: null,
+        treatmentTemplateNameAr: null,
+        treatmentTemplateNameEn: null,
+        treatmentTemplateNameHe: null,
+        treatmentTemplatePhases: Prisma.JsonNull,
+        treatmentTemplateTotalSessions: null,
+      };
+    }
+
+    const requestedTemplateId = optionalTrimmed(dto.treatmentTemplateId);
+    const selectedTemplate =
+      service.treatmentTemplates.find((template) => template.id === requestedTemplateId) ??
+      service.treatmentTemplates.find((template) => template.isDefault) ??
+      service.treatmentTemplates[0] ??
+      null;
+
+    if (requestedTemplateId && !selectedTemplate) {
+      throw validationFailed({
+        treatmentTemplateId: 'Selected treatment plan template was not found.',
+      });
+    }
+
+    const overrideRules = parseFollowUpRulesSnapshot(
+      dto.followUpSessionRules ?? dto.followUpRules,
+    );
+    const overrideTotal = dto.totalRecommendedSessions
+      ? Number(dto.totalRecommendedSessions)
+      : null;
+    const overrideInterval = dto.defaultIntervalDays
+      ? Number(dto.defaultIntervalDays)
+      : null;
+    // When a template is selected, store only its own phases (null if the
+    // template has no phases — meaning it uses its defaultIntervalDays).
+    // Never merge or fall back to service.followUpRules: service phases may
+    // span more sessions than the template, causing phantom extra sessions.
+    const templatePhases = selectedTemplate
+      ? (selectedTemplate.phases ?? null)
+      : service.followUpRules;
+    const phases = overrideRules ?? templatePhases ?? Prisma.JsonNull;
+    // When a template is selected, totalSessions and defaultIntervalDays come
+    // exclusively from the template snapshot — never from service-level config.
+    const totalSessions =
+      (overrideRules ? calculateTotalSessionsFromRules(overrideRules) : null) ??
+      (Number.isInteger(overrideTotal) && overrideTotal! > 0 ? overrideTotal : null) ??
+      selectedTemplate?.totalSessions ??
+      (selectedTemplate ? null : service.totalRecommendedSessions) ??
+      null;
+    const defaultIntervalDays =
+      (Number.isInteger(overrideInterval) && overrideInterval! > 0
+        ? overrideInterval
+        : null) ??
+      selectedTemplate?.defaultIntervalDays ??
+      (selectedTemplate ? null : service.defaultIntervalDays) ??
+      null;
+
+    if (!totalSessions || totalSessions <= 0) {
+      return data;
+    }
+
+    return {
+      ...data,
+      treatmentTemplateDefaultIntervalDays: defaultIntervalDays,
+      treatmentTemplateId: selectedTemplate?.id ?? null,
+      treatmentTemplateNameAr: selectedTemplate?.nameAr ?? null,
+      treatmentTemplateNameEn: selectedTemplate?.nameEn ?? null,
+      treatmentTemplateNameHe: selectedTemplate?.nameHe ?? null,
+      treatmentTemplatePhases: phases,
+      treatmentTemplateTotalSessions: totalSessions,
+    };
+  }
+
   private async materializeCustomServiceIfRequested(
     centerId: string,
     data: ReturnType<TenantAppointmentsService['validateShared']>,
@@ -1012,15 +1764,29 @@ export class TenantAppointmentsService {
       return data;
     }
 
-    const followUpEnabled = dto.followUpEnabled === true;
-    const followUpType: ServiceFollowUpType =
-      dto.followUpType === 'SESSION_PLAN' ? 'SESSION_PLAN' : 'FIXED_INTERVAL';
+    const followUpMode: ServiceFollowUpMode =
+      dto.followUpMode === 'RECURRING_CONTINUOUS'
+        ? 'RECURRING_CONTINUOUS'
+        : dto.followUpMode === 'SESSION_BASED_PLAN' || dto.followUpEnabled === true
+          ? 'SESSION_BASED_PLAN'
+          : 'NONE';
+    const followUpEnabled = followUpMode !== 'NONE';
     const defaultIntervalDays = dto.defaultIntervalDays
       ? Number(dto.defaultIntervalDays)
       : null;
-    const totalRecommendedSessions = dto.totalRecommendedSessions
+    let totalRecommendedSessions = dto.totalRecommendedSessions
       ? Number(dto.totalRecommendedSessions)
       : null;
+    const recurringIntervalValue = dto.recurringIntervalValue
+      ? Number(dto.recurringIntervalValue)
+      : null;
+    const recurringIntervalUnit =
+      dto.recurringIntervalUnit === 'DAY' ||
+      dto.recurringIntervalUnit === 'WEEK' ||
+      dto.recurringIntervalUnit === 'MONTH' ||
+      dto.recurringIntervalUnit === 'YEAR'
+        ? (dto.recurringIntervalUnit as RecurringIntervalUnit)
+        : null;
     const autoCreateNextReminder = dto.autoCreateNextReminder !== false;
     const reminderMessageAr =
       typeof dto.reminderMessageAr === 'string'
@@ -1041,6 +1807,7 @@ export class TenantAppointmentsService {
     const followUpErrors: Record<string, string> = {};
 
     if (
+      followUpMode === 'SESSION_BASED_PLAN' &&
       defaultIntervalDays !== null &&
       (!Number.isFinite(defaultIntervalDays) || defaultIntervalDays <= 0)
     ) {
@@ -1048,6 +1815,7 @@ export class TenantAppointmentsService {
     }
 
     if (
+      followUpMode === 'SESSION_BASED_PLAN' &&
       totalRecommendedSessions !== null &&
       (!Number.isFinite(totalRecommendedSessions) ||
         totalRecommendedSessions <= 0)
@@ -1057,32 +1825,53 @@ export class TenantAppointmentsService {
 
     if (
       followUpEnabled &&
-      followUpType === 'SESSION_PLAN' &&
-      Array.isArray(rulesSource) &&
-      rulesSource.length > 0
+      followUpMode === 'SESSION_BASED_PLAN'
     ) {
-      const parsedRules = rulesSource.map((rule) => ({
-        fromSessionNumber: Number(rule.fromSessionNumber),
-        intervalDays: Number(rule.intervalDays),
-        toSessionNumber: Number(rule.toSessionNumber),
-      }));
-
-      if (
-        parsedRules.some(
-          (rule) =>
-            !Number.isFinite(rule.fromSessionNumber) ||
-            !Number.isFinite(rule.toSessionNumber) ||
-            !Number.isFinite(rule.intervalDays) ||
-            rule.fromSessionNumber <= 0 ||
-            rule.toSessionNumber < rule.fromSessionNumber ||
-            rule.intervalDays <= 0,
-        )
-      ) {
+      if (!Array.isArray(rulesSource) || rulesSource.length === 0) {
         followUpErrors.followUpRules =
           'Enter valid session-plan follow-up rules.';
       } else {
-        followUpRules = parsedRules;
+        const parsedRules = rulesSource.map((rule) => ({
+          fromSessionNumber: Number(rule.fromSessionNumber),
+          intervalDays: Number(rule.intervalDays),
+          toSessionNumber: Number(rule.toSessionNumber),
+        }));
+
+        if (
+          parsedRules.some(
+            (rule) =>
+              !Number.isFinite(rule.fromSessionNumber) ||
+              !Number.isFinite(rule.toSessionNumber) ||
+              !Number.isFinite(rule.intervalDays) ||
+              rule.fromSessionNumber <= 0 ||
+              rule.toSessionNumber < rule.fromSessionNumber ||
+              rule.intervalDays <= 0,
+          )
+        ) {
+          followUpErrors.followUpRules =
+            'Enter valid session-plan follow-up rules.';
+        } else {
+          followUpRules = parsedRules;
+          totalRecommendedSessions =
+            calculateTotalSessionsFromRules(parsedRules) ??
+            totalRecommendedSessions;
+        }
       }
+    }
+
+    if (
+      followUpMode === 'RECURRING_CONTINUOUS' &&
+      (recurringIntervalValue === null ||
+        !Number.isFinite(recurringIntervalValue) ||
+        recurringIntervalValue <= 0)
+    ) {
+      followUpErrors.recurringIntervalValue =
+        'Enter a valid recurring interval.';
+    }
+
+    if (followUpMode === 'RECURRING_CONTINUOUS' && !recurringIntervalUnit) {
+      followUpErrors.recurringIntervalUnit =
+        'Select a recurring interval unit.';
     }
 
     if (Object.keys(followUpErrors).length > 0) {
@@ -1100,14 +1889,21 @@ export class TenantAppointmentsService {
         nameHe: data.customServiceName,
         price: data.customServicePrice,
         followUpEnabled,
-        followUpType,
-        defaultIntervalDays,
-        totalRecommendedSessions,
+        followUpMode,
+        defaultIntervalDays:
+          followUpMode === 'SESSION_BASED_PLAN' ? defaultIntervalDays : null,
+        totalRecommendedSessions:
+          followUpMode === 'SESSION_BASED_PLAN' ? totalRecommendedSessions : null,
+        recurringIntervalValue:
+          followUpMode === 'RECURRING_CONTINUOUS' ? recurringIntervalValue : null,
+        recurringIntervalUnit:
+          followUpMode === 'RECURRING_CONTINUOUS' ? recurringIntervalUnit : null,
         autoCreateNextReminder,
         reminderMessageAr,
         reminderMessageEn,
         reminderMessageHe,
-        followUpRules,
+        followUpRules:
+          followUpMode === 'SESSION_BASED_PLAN' ? followUpRules : Prisma.JsonNull,
       },
       select: { id: true },
     });
@@ -1115,7 +1911,7 @@ export class TenantAppointmentsService {
     console.log('[custom-service:create]', {
       createdServiceId: service.id,
       followUpEnabled,
-      followUpType,
+      followUpMode,
       rules: followUpRules === Prisma.JsonNull ? null : followUpRules,
       saveCustomService: dto.saveCustomService === true,
       serviceId: data.serviceId,
@@ -1128,6 +1924,45 @@ export class TenantAppointmentsService {
     };
   }
 
+  /**
+   * Resolves the branch for an appointment against the center's active branches:
+   *  • explicit branchId → must be an active branch of this center
+   *  • omitted + exactly one active branch → auto-assigned
+   *  • omitted + multiple active branches → rejected (branch is required)
+   *  • omitted + no branches configured → null
+   */
+  private async resolveBranchId(
+    centerId: string,
+    rawBranchId: string | null | undefined,
+  ): Promise<string | null> {
+    const prisma = await this.prisma.getClient();
+    const branchId = optionalTrimmed(rawBranchId) || null;
+    const activeBranches = await prisma.centerBranch.findMany({
+      where: { centerId, isActive: true },
+      orderBy: [{ isMain: 'desc' }, { sortOrder: 'asc' }],
+      select: { id: true },
+    });
+
+    if (branchId) {
+      if (!activeBranches.some((branch) => branch.id === branchId)) {
+        throw validationFailed({
+          branchId: 'Select a valid branch from this center.',
+        });
+      }
+      return branchId;
+    }
+
+    if (activeBranches.length === 1) {
+      return activeBranches[0].id;
+    }
+
+    if (activeBranches.length > 1) {
+      throw validationFailed({ branchId: 'Choose a branch.' });
+    }
+
+    return null;
+  }
+
   private async validateRelations(
     centerId: string,
     data: {
@@ -1137,6 +1972,10 @@ export class TenantAppointmentsService {
     },
   ) {
     const prisma = await this.prisma.getClient();
+    const center = await prisma.center.findUnique({
+      where: { id: centerId },
+      select: { ownerUserId: true },
+    });
     const [patient, service, provider] = await Promise.all([
       prisma.patient.findFirst({
         where: { centerId, id: data.patientId },
@@ -1151,13 +1990,13 @@ export class TenantAppointmentsService {
       prisma.userRole.findFirst({
         where: {
           centerId,
+          OR: [
+            { providerEnabled: true },
+            ...(center?.ownerUserId ? [{ userId: center.ownerUserId }] : []),
+          ],
           userId: data.staffUserId,
           status: 'ACTIVE',
-          role: {
-            key: {
-              in: [...providerCapableRoles],
-            },
-          },
+          role: { status: 'ACTIVE' },
           user: {
             deletedAt: null,
             status: 'ACTIVE',

@@ -16,6 +16,7 @@ import {
   type ApiLanguage,
   type CreateCenterPayload,
 } from "@/lib/api/super-admin-centers";
+import { uploadPublicImage, UploadFailedError } from "@/lib/api/system-settings";
 import {
   superAdminCenterWizardDictionaries,
   type CenterWizardDictionary,
@@ -59,6 +60,7 @@ type CreateCenterFieldErrors = Partial<Record<CreateCenterFieldKey, string>>;
 type BrandingState = {
   defaultLanguage: SupportedLocale;
   enabledLanguages: SupportedLocale[];
+  logoUrl: string;
   primaryColor: string;
   secondaryColor: string;
 };
@@ -162,6 +164,7 @@ function buildCreateCenterPayload(
       enabledLanguages: branding.enabledLanguages.map(
         (language) => languageApiMap[language],
       ),
+      logoUrl: branding.logoUrl || undefined,
       primaryColor: branding.primaryColor,
       secondaryColor: branding.secondaryColor,
       theme: {
@@ -558,11 +561,15 @@ function LogoUpload({
   fileName,
   onFileChange,
   previewUrl,
+  uploadMessage,
+  uploadStatus,
 }: {
   dictionary: CenterWizardDictionary;
   fileName: string;
   onFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
   previewUrl: string;
+  uploadMessage: string;
+  uploadStatus: "error" | "idle" | "success" | "uploading";
 }) {
   return (
     <FieldShell label={dictionary.fields.logoUpload}>
@@ -596,14 +603,26 @@ function LogoUpload({
                 "mt-3 cursor-pointer",
               )}
             >
-              {dictionary.wizard.chooseLogo}
+              {uploadStatus === "uploading"
+                ? dictionary.wizard.uploadingLogo
+                : dictionary.wizard.chooseLogo}
               <input
                 accept="image/*"
                 className="sr-only"
+                disabled={uploadStatus === "uploading"}
                 onChange={onFileChange}
                 type="file"
               />
             </label>
+            {uploadMessage ? (
+              <p
+                className={`mt-2 text-xs font-semibold ${
+                  uploadStatus === "error" ? "text-rose-700" : "text-emerald-700"
+                }`}
+              >
+                {uploadMessage}
+              </p>
+            ) : null}
           </div>
         </div>
       </div>
@@ -672,6 +691,8 @@ function renderStepContent(
   fieldErrors: CreateCenterFieldErrors,
   logoFileName: string,
   logoPreviewUrl: string,
+  logoUploadMessage: string,
+  logoUploadStatus: "error" | "idle" | "success" | "uploading",
   onAdminAccountChange: (nextAdminAccount: Partial<AdminAccountState>) => void,
   onBrandingChange: (nextBranding: Partial<BrandingState>) => void,
   onCenterProfileChange: (
@@ -862,6 +883,8 @@ function renderStepContent(
               fileName={logoFileName}
               onFileChange={onLogoChange}
               previewUrl={logoPreviewUrl}
+              uploadMessage={logoUploadMessage}
+              uploadStatus={logoUploadStatus}
             />
             <ColorInput
               label={dictionary.fields.primaryColor}
@@ -1259,11 +1282,16 @@ export function SuperAdminCenterWizard() {
   const [branding, setBranding] = useState<BrandingState>({
     defaultLanguage: "en",
     enabledLanguages: ["ar", "he", "en"],
+    logoUrl: "",
     primaryColor: "#0b2d5c",
     secondaryColor: "#c8a45d",
   });
   const [logoFileName, setLogoFileName] = useState("");
   const [logoPreviewUrl, setLogoPreviewUrl] = useState("");
+  const [logoUploadMessage, setLogoUploadMessage] = useState("");
+  const [logoUploadStatus, setLogoUploadStatus] = useState<
+    "error" | "idle" | "success" | "uploading"
+  >("idle");
   const [fieldErrors, setFieldErrors] = useState<CreateCenterFieldErrors>({});
   const [saveStatus, setSaveStatus] = useState<
     "error" | "idle" | "saving" | "success"
@@ -1278,16 +1306,21 @@ export function SuperAdminCenterWizard() {
     [activeStepIndex, dictionary.wizard.progress],
   );
 
-  function handleLogoChange(event: ChangeEvent<HTMLInputElement>) {
+  async function handleLogoChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
 
     if (!file) {
       setLogoFileName("");
       setLogoPreviewUrl("");
+      setLogoUploadMessage("");
+      setLogoUploadStatus("idle");
+      setBranding((current) => ({ ...current, logoUrl: "" }));
       return;
     }
 
     setLogoFileName(file.name);
+    setLogoUploadMessage("");
+    setLogoUploadStatus("uploading");
 
     const reader = new FileReader();
     reader.onload = () => {
@@ -1296,6 +1329,24 @@ export function SuperAdminCenterWizard() {
       }
     };
     reader.readAsDataURL(file);
+
+    try {
+      const result = await uploadPublicImage(file, "logo");
+      setBranding((current) => ({ ...current, logoUrl: result.url }));
+      setLogoPreviewUrl(result.url);
+      setLogoUploadStatus("success");
+      setLogoUploadMessage(dictionary.wizard.logoUploaded);
+    } catch (error) {
+      setBranding((current) => ({ ...current, logoUrl: "" }));
+      setLogoUploadStatus("error");
+      setLogoUploadMessage(
+        error instanceof UploadFailedError && error.details
+          ? error.details
+          : dictionary.wizard.logoUploadError,
+      );
+    } finally {
+      event.target.value = "";
+    }
   }
 
   function handleBrandingChange(nextBranding: Partial<BrandingState>) {
@@ -1392,6 +1443,12 @@ export function SuperAdminCenterWizard() {
   }
 
   async function handlePrimaryAction() {
+    if (logoUploadStatus === "uploading") {
+      setSaveStatus("error");
+      setSaveMessage(dictionary.wizard.uploadingLogo);
+      return;
+    }
+
     if (activeStepIndex < stepKeys.length - 1) {
       setActiveStepIndex((current) =>
         Math.min(stepKeys.length - 1, current + 1),
@@ -1560,6 +1617,8 @@ export function SuperAdminCenterWizard() {
           fieldErrors,
           logoFileName,
           logoPreviewUrl,
+          logoUploadMessage,
+          logoUploadStatus,
           handleAdminAccountChange,
           handleBrandingChange,
           handleCenterProfileChange,

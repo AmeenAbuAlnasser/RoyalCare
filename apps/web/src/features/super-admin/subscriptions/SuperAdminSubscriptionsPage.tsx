@@ -16,12 +16,10 @@ import { superAdminSubscriptionsDictionaries } from "@/i18n/dictionaries/super-a
 import {
   listSuperAdminSubscriptions,
   logSubscriptionManualWhatsAppAction,
-  getSubscriptionLifecycleJobStatus,
   cancelSubscriptionInvoice,
   createSubscriptionInvoice,
   downloadSubscriptionInvoicePdf,
   listSubscriptionInvoices,
-  runSubscriptionLifecycleJob,
   markSubscriptionInvoicePaid,
   updateCenterSubscription,
   type ApiSubscriptionLifecycle,
@@ -30,10 +28,13 @@ import {
   type ManualSubscriptionPlan,
   type SubscriptionInvoice,
   type SubscriptionInvoiceStatus,
-  type SubscriptionLifecycleJobStatus,
   type SuperAdminSubscription,
 } from "@/lib/api/super-admin-subscriptions";
 import { getCentersAtRisk, type CentersAtRisk } from "@/lib/api/super-admin-analytics";
+import {
+  listSuperAdminPlans,
+  type SuperAdminPlan,
+} from "@/lib/api/super-admin-plans";
 import { notifySuperAdminNotificationsUpdated } from "@/lib/api/super-admin-notifications";
 import {
   getSubscriptionActionAvailability,
@@ -333,14 +334,6 @@ function formatSubscriptionDate(value: string | null, locale: SupportedLocale) {
   return formatDate(value, locale);
 }
 
-function formatJobDate(value: string | null | undefined, locale: SupportedLocale) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-
-  return `${formatDate(value, locale)} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-}
-
 function toDateInputValue(value: string | null) {
   if (!value) {
     return "";
@@ -442,17 +435,31 @@ function Spinner() {
 type EditModalProps = {
   dictionary: Dictionary;
   isRtl: boolean;
+  locale: SupportedLocale;
   onClose: () => void;
   onSaved: () => void;
   subscription: SuperAdminSubscription;
 };
 
-function EditSubscriptionModal({ dictionary, isRtl, onClose, onSaved, subscription }: EditModalProps) {
+function getPlanDisplayName(plan: SuperAdminPlan, locale: SupportedLocale): string {
+  if (locale === "ar") return plan.nameAr || plan.nameEn;
+  if (locale === "he") return plan.nameHe || plan.nameEn;
+  return plan.nameEn;
+}
+
+function EditSubscriptionModal({ dictionary, isRtl, locale, onClose, onSaved, subscription }: EditModalProps) {
   const d = dictionary.editModal;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string>(toManualStatus(subscription.status));
-  const [plan, setPlan] = useState<ManualSubscriptionPlan>(toManualPlan(subscription.planCode));
+
+  // Live plan picker state
+  const [livePlans, setLivePlans] = useState<SuperAdminPlan[]>([]);
+  const [plansLoading, setPlansLoading] = useState(true);
+  // selectedPlanId: the plan UUID chosen from the API, or null (keep legacy)
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(
+    subscription.planId ?? null,
+  );
   const [startDate, setStartDate] = useState(toDateInputValue(subscription.currentPeriodStart));
   const [endDate, setEndDate] = useState(toDateInputValue(subscription.currentPeriodEnd));
   const [notes, setNotes] = useState(subscription.billingNotes ?? "");
@@ -471,6 +478,27 @@ function EditSubscriptionModal({ dictionary, isRtl, onClose, onSaved, subscripti
     return () => document.removeEventListener("keydown", handleKey);
   }, [onClose]);
 
+  // Load plans from API on modal mount
+  useEffect(() => {
+    let cancelled = false;
+    listSuperAdminPlans()
+      .then((plans) => {
+        if (cancelled) return;
+        setLivePlans(plans);
+        // Auto-match by planId or by planCode (case-insensitive) for legacy subscriptions
+        if (!subscription.planId) {
+          const matched = plans.find(
+            (p) => p.code === subscription.planCode.trim().toUpperCase(),
+          );
+          if (matched) setSelectedPlanId(matched.id);
+        }
+      })
+      .catch(() => { /* fail silently — legacy plan stays */ })
+      .finally(() => { if (!cancelled) setPlansLoading(false); });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function handleSave() {
     setError(null);
 
@@ -483,10 +511,14 @@ function EditSubscriptionModal({ dictionary, isRtl, onClose, onSaved, subscripti
     }
 
     setSaving(true);
+    const selectedPlan = livePlans.find((p) => p.id === selectedPlanId);
     try {
       await updateCenterSubscription(subscription.centerId, {
         subscriptionStatus: status as "TRIAL" | "ACTIVE" | "EXPIRED" | "OVERDUE" | "SUSPENDED" | "CANCELLED",
-        subscriptionPlan: plan,
+        // v2: send planId when a plan from the API is selected
+        ...(selectedPlanId ? { planId: selectedPlanId } : {}),
+        // legacy fallback: always send subscriptionPlan for backward compat
+        subscriptionPlan: (selectedPlan?.code ?? toManualPlan(subscription.planCode)) as ManualSubscriptionPlan,
         subscriptionStartDate: normalizedStartDate,
         subscriptionEndDate: normalizedEndDate,
         subscriptionNotes: notes || undefined,
@@ -548,15 +580,32 @@ function EditSubscriptionModal({ dictionary, isRtl, onClose, onSaved, subscripti
               <label className={labelCls}>{d.planLabel}</label>
               <select
                 className={inputCls}
-                onChange={(e) => setPlan(e.target.value as ManualSubscriptionPlan)}
-                value={plan}
+                disabled={plansLoading}
+                onChange={(e) => setSelectedPlanId(e.target.value || null)}
+                value={selectedPlanId ?? ""}
               >
-                {ALLOWED_MANUAL_PLANS.map((p) => (
-                  <option key={p} value={p}>
-                    {dictionary.plans[p.toLowerCase() as keyof typeof dictionary.plans]}
+                {/* Legacy fallback — shown when no live plan matches */}
+                {!livePlans.some((p) => p.id === selectedPlanId) && (
+                  <option value="">
+                    {subscription.planName} ({subscription.planCode})
                   </option>
-                ))}
+                )}
+                {livePlans.map((p) => {
+                  const name = getPlanDisplayName(p, locale);
+                  const price = p.isContactPricing
+                    ? "Contact"
+                    : `${p.yearlyPrice} ${p.currency}/yr`;
+                  const popular = p.isPopular ? " ★" : "";
+                  return (
+                    <option key={p.id} value={p.id}>
+                      {name}{popular} — {price}
+                    </option>
+                  );
+                })}
               </select>
+              {plansLoading ? (
+                <p className="mt-1 text-xs text-[#66758a]">{dictionary.loadingState.loading}</p>
+              ) : null}
             </div>
 
             <div>
@@ -653,17 +702,11 @@ export function SuperAdminSubscriptionsPage() {
   const { locale, direction } = useLanguage();
   const isRtl = direction === "rtl";
   const dictionary = superAdminSubscriptionsDictionaries[locale];
-  const automationDictionary =
-    dictionary.automation ?? superAdminSubscriptionsDictionaries.en.automation!;
 
   const [subscriptions, setSubscriptions] = useState<SuperAdminSubscription[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
-  const [jobStatus, setJobStatus] = useState<SubscriptionLifecycleJobStatus | null>(null);
-  const [jobStatusError, setJobStatusError] = useState<string | null>(null);
-  const [expiringWithin7Count, setExpiringWithin7Count] = useState(0);
-  const [jobRunning, setJobRunning] = useState(false);
   const [subscriptionInvoices, setSubscriptionInvoices] = useState<SubscriptionInvoice[]>([]);
   const [invoiceLoading, setInvoiceLoading] = useState(true);
   const [invoiceSearch, setInvoiceSearch] = useState("");
@@ -692,25 +735,6 @@ export function SuperAdminSubscriptionsPage() {
   } | null>(null);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const loadJobStatus = useCallback(async () => {
-    try {
-      const [status, expiring] = await Promise.all([
-        getSubscriptionLifecycleJobStatus(),
-        listSuperAdminSubscriptions({
-          lifecycle: "EXPIRING_SOON",
-          pageSize: 1,
-        }),
-      ]);
-      setJobStatus(status);
-      setExpiringWithin7Count(expiring.pagination.total);
-      setJobStatusError(null);
-    } catch (err) {
-      setJobStatusError(
-        err instanceof Error ? err.message : automationDictionary.loadError,
-      );
-    }
-  }, [automationDictionary.loadError]);
 
   const loadSubscriptions = useCallback(
     async (searchTerm: string, filter: StatusFilter) => {
@@ -776,14 +800,6 @@ export function SuperAdminSubscriptionsPage() {
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, centerIdFilter]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void loadJobStatus();
-    }, 0);
-
-    return () => window.clearTimeout(timer);
-  }, [loadJobStatus]);
 
   useEffect(() => {
     void getCentersAtRisk().then(setCentersAtRisk).catch(() => null);
@@ -861,29 +877,6 @@ export function SuperAdminSubscriptionsPage() {
       });
     } finally {
       setRowActionLoading(null);
-    }
-  }
-
-  async function handleRunLifecycleJob() {
-    if (jobRunning) return;
-    setJobRunning(true);
-    setActionMessage(null);
-
-    try {
-      await runSubscriptionLifecycleJob();
-      setActionMessage({
-        tone: "success",
-        text: automationDictionary.runSuccess,
-      });
-      await Promise.all([loadJobStatus(), loadSubscriptions(search, statusFilter)]);
-    } catch (err) {
-      setActionMessage({
-        tone: "error",
-        text:
-          err instanceof Error ? err.message : automationDictionary.runError,
-      });
-    } finally {
-      setJobRunning(false);
     }
   }
 
@@ -1107,77 +1100,6 @@ export function SuperAdminSubscriptionsPage() {
       }).length,
     },
   ];
-  const checkedCount = jobStatus?.lastResult?.scanned ?? 0;
-  const expiredUpdatedCount = jobStatus?.lastResult?.updatedExpired ?? 0;
-  const notificationsCreatedCount = jobStatus?.lastResult?.notificationsCreated ?? 0;
-  const suspendedSkippedCount = jobStatus?.lastResult?.skippedSuspended ?? 0;
-  const duplicateNotificationsSkippedCount =
-    jobStatus?.lastResult?.duplicateNotificationsSkipped ?? 0;
-  const attentionCount = expiringWithin7Count + expiredUpdatedCount;
-  const hasAutomationWarning =
-    expiredUpdatedCount > 0 || notificationsCreatedCount > 0;
-  const statusTone =
-    jobStatus?.lastRunSuccess === false
-      ? "border-rose-200 bg-rose-50 text-rose-700"
-      : hasAutomationWarning
-        ? "border-amber-200 bg-amber-50 text-amber-700"
-        : "border-emerald-200 bg-emerald-50 text-emerald-700";
-  const automationBusinessSummaries = [
-    automationDictionary.checkedSummary(checkedCount),
-    expiredUpdatedCount > 0
-      ? automationDictionary.updatedExpiredSummary(expiredUpdatedCount)
-      : null,
-    suspendedSkippedCount > 0
-      ? automationDictionary.skippedSuspendedSummary(suspendedSkippedCount)
-      : null,
-    attentionCount === 0 && notificationsCreatedCount === 0
-      ? automationDictionary.noActionSummary
-      : null,
-  ].filter((summary): summary is string => Boolean(summary));
-  const automationSummaryItems = [
-    {
-      label: automationDictionary.status,
-      tone: statusTone,
-      value:
-        jobStatus?.lastRunSuccess == null
-          ? automationDictionary.neverRun
-          : jobStatus.lastRunSuccess
-            ? automationDictionary.success
-            : automationDictionary.failed,
-    },
-    {
-      label: automationDictionary.lastRun,
-      tone: "border-slate-200 bg-slate-50 text-slate-700",
-      value: jobStatus?.lastRunAt
-        ? formatJobDate(jobStatus.lastRunAt, locale)
-        : automationDictionary.neverRun,
-    },
-    {
-      label: automationDictionary.scanned,
-      tone: "border-slate-200 bg-slate-50 text-slate-700",
-      value: checkedCount,
-    },
-    {
-      label: automationDictionary.updatedExpired,
-      tone: "border-rose-200 bg-rose-50 text-rose-700",
-      value: expiredUpdatedCount,
-    },
-    {
-      label: automationDictionary.notificationsCreated,
-      tone: "border-[#0B2D5C]/15 bg-[#0B2D5C]/8 text-[#0B2D5C]",
-      value: notificationsCreatedCount,
-    },
-    {
-      label: automationDictionary.skippedSuspended,
-      tone: "border-slate-200 bg-slate-50 text-slate-700",
-      value: suspendedSkippedCount,
-    },
-    {
-      label: automationDictionary.duplicateNotificationsSkipped,
-      tone: "border-slate-200 bg-slate-50 text-slate-700",
-      value: duplicateNotificationsSkippedCount,
-    },
-  ];
   const billingText = subscriptionBillingText[locale];
   const invoiceStatusLabel = (status: SubscriptionInvoiceStatus | "ALL") => {
     if (status === "ALL") return dictionary.filters.all;
@@ -1254,74 +1176,6 @@ export function SuperAdminSubscriptionsPage() {
             </div>
           </section>
         )}
-
-        <Section title={automationDictionary.title}>
-          <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_auto]">
-            <div className="min-w-0">
-              <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div className="min-w-0">
-                  <p className="text-sm leading-6 text-[#66758a]">
-                    {automationDictionary.subtitle}
-                  </p>
-                  <div className="mt-3 space-y-1">
-                    <p className="text-base font-semibold text-[#0B2D5C]">
-                      {automationDictionary.requireAttention(attentionCount)}
-                    </p>
-                    {automationBusinessSummaries.map((summary) => (
-                      <p
-                        className="text-sm font-medium text-[#66758a]"
-                        key={summary}
-                      >
-                        {summary}
-                      </p>
-                    ))}
-                  </div>
-                </div>
-                <div className="shrink-0 rounded-md border border-[#E5E7EB] bg-[#F8FAFC] px-3 py-2 text-sm text-[#526176]">
-                  <span className="font-medium text-[#24364f]">
-                    {automationDictionary.nextRun}:
-                  </span>{" "}
-                  {formatJobDate(jobStatus?.nextRunAt, locale)}
-                </div>
-              </div>
-              {jobStatusError && (
-                <p className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700">
-                  {jobStatusError}
-                </p>
-              )}
-              <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {automationSummaryItems.map((item) => (
-                  <div
-                    className={`min-w-0 rounded-lg border px-4 py-3 ${item.tone}`}
-                    key={item.label}
-                  >
-                    <p className="min-w-0 truncate text-xs font-semibold opacity-75">
-                      {item.label}
-                    </p>
-                    <p className="mt-2 break-words text-xl font-semibold">
-                      {item.value}
-                    </p>
-                  </div>
-                ))}
-              </div>
-              {jobStatus?.lastRunError && (
-                <p className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700">
-                  {jobStatus.lastRunError}
-                </p>
-              )}
-            </div>
-            <div className="flex items-start xl:justify-end">
-              <button
-                className="min-h-11 rounded-lg bg-[#0B2D5C] px-5 text-sm font-semibold text-white transition hover:bg-[#09264f] disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={jobRunning}
-                onClick={() => void handleRunLifecycleJob()}
-                type="button"
-              >
-                {jobRunning ? automationDictionary.running : automationDictionary.runNow}
-              </button>
-            </div>
-          </div>
-        </Section>
 
         <Section title={billingText.title}>
           <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-[minmax(320px,0.9fr)_minmax(0,1.4fr)]">
@@ -1930,6 +1784,7 @@ export function SuperAdminSubscriptionsPage() {
         <EditSubscriptionModal
           dictionary={dictionary}
           isRtl={isRtl}
+          locale={locale}
           onClose={() => setEditTarget(null)}
           onSaved={() => void loadSubscriptions(search, statusFilter)}
           subscription={editTarget}

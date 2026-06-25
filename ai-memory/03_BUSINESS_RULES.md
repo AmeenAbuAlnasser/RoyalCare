@@ -1,6 +1,34 @@
+## 2026-06-17 - Public Booking UX Modes
+
+- Public center websites support two booking modes per center through `BrandingSettings.publicBookingMode`.
+- Default mode is `SIMPLE_REQUEST`.
+- `SIMPLE_REQUEST` asks visitors only for full name, phone/WhatsApp, optional city/area, optional note, and an optional preselected service/offer context from the URL. It must not require provider, date, or time.
+- The city/area field is intentionally lightweight and must not ask for a full address.
+- If a public center has more than one active branch, `SIMPLE_REQUEST` must require the visitor to choose a branch. If it has exactly one active branch, the request is automatically assigned to that branch and no branch selector is shown.
+- `patientArea` remains optional and must not replace branch selection.
+- Simple requests create `BookingRequest` rows with `status=PENDING`, `source=PUBLIC_WEBSITE`, optional `serviceId`, optional `patientArea`, and nullable `requestedDate/requestedTime`.
+- `DIRECT_BOOKING` keeps the existing flow: service, optional provider, date, available time, and patient details.
+- Tenant admins see both modes in `/tenant/booking-requests`. Request-only rows without a date/time are contact requests; staff should contact the patient and schedule manually through the appointment flow.
+- Public booking requests must continue notifying center admins through the existing `BOOKING_REQUEST_CREATED` notification and action URL `/tenant/booking-requests`.
+
+## 2026-06-07 - Appointment Provider Visibility
+
+- A staff member appears as an appointment/schedule/public booking provider when the center-specific staff assignment is active, the user is active, and either `UserRole.providerEnabled=true` or `User.id === Center.ownerUserId`.
+- Staff role no longer blocks provider visibility by itself. Active center owners must appear as providers through `Center.ownerUserId` even if an older `providerEnabled` value is false/null.
+- Inactive staff must not appear in provider dropdowns or provider scheduling lists.
+
+## 2026-06-08 - Tenant Invoice Creation Rule
+
+- Tenant treatment invoices must be persisted only when a user explicitly creates an invoice, or when a future center setting such as `autoCreateInvoiceOnAppointment=true` deliberately enables auto-billing.
+- Changing an appointment status to `COMPLETED`, editing an appointment, recalculating follow-up schedules, or generating future follow-up sessions must not silently create financial debt.
+- Future treatment/follow-up estimates are not receivables. Receivables must come from real persisted `Invoice` rows only.
+- `Invoice.source` records the creation origin; current explicit tenant invoice actions save `MANUAL`.
+
 # RoyalCare - Business Rules
 
-Last updated: 2026-05-26
+Latest update 2026-06-08: A single service may have multiple treatment plan templates/protocols instead of duplicate services for different session counts. When a template is assigned through an appointment/follow-up flow, RoyalCare copies the template snapshot into the appointment and generated patient follow-up plan. Existing patient plans must remain unchanged when the service template is edited later. Service, patient, provider, template, and notes values remain user/business data and must not be translated by UI helpers.
+
+Last updated: 2026-06-02
 Status: Dedicated tenant login, patients, services, appointments, tenant staff, tenant billing, subscription lifecycle, scheduling, marketing tracking, center website analytics, smart contact widget, and treatment follow-up rules documented
 
 ## 0. Latest Addition - Smart Follow-up Treatment Plans (2026-05-28)
@@ -9,11 +37,16 @@ Some services can define a follow-up plan so centers remember recurring sessions
 
 Service rules:
 - Follow-ups are disabled by default and enabled per service.
-- `FIXED_INTERVAL` uses `defaultIntervalDays`.
-- `SESSION_PLAN` uses session rules: `fromSessionNumber`, `toSessionNumber`, `intervalDays`.
+- `followUpMode=NONE` creates no follow-ups.
+- `followUpMode=SESSION_BASED_PLAN` creates a finite treatment plan driven by total session count. It supports `followUpRules` (`fromSessionNumber`, `toSessionNumber`, `intervalDays`) with `defaultIntervalDays` fallback and marks the plan completed after its final session.
+- `followUpMode=RECURRING_CONTINUOUS` creates an unlimited lifecycle of future reminders from `recurringIntervalValue` and `recurringIntervalUnit`; it does not use a fixed session count or treatment-plan progress.
 - If no session rule matches, the default interval is used when present.
 - `totalRecommendedSessions` prevents creating a next reminder once the completed-session count reaches the recommendation.
 - `autoCreateNextReminder=false` keeps settings saved but does not create reminders automatically.
+- Recurring services use `recurringIntervalValue` plus `recurringIntervalUnit` (`DAY`, `WEEK`, `MONTH`, `YEAR`). When a recurring appointment is completed, the system creates only one next recurring follow-up.
+- Active recurring duplicate protection guarantees max one unbooked actionable recurring follow-up per patient and service. Active statuses are `UPCOMING`, `DUE`, `CONTACTED`, and `MISSED`; `BOOKED` rows remain history while the next cycle may already exist.
+- When a recurring follow-up is marked `COMPLETED`, the backend creates one next recurring row from the completed row's stored interval snapshot. It never recursively regenerates older completed rows and skips creation if a newer active recurring row already exists.
+- Updating recurring interval settings on a service does not retroactively modify existing recurring follow-up rows; only newly generated rows from the updated service settings use the new interval.
 
 Automatic creation:
 - When an appointment transitions to `COMPLETED`, the backend checks the linked service follow-up settings.
@@ -22,17 +55,32 @@ Automatic creation:
 - The next `sessionNumber` shown to staff is the recommended upcoming session number.
 
 Tenant worklist:
-- `/tenant/follow-ups` shows Today, This week, Overdue, Upcoming, Contacted, Booked, and Completed filters.
+- `/tenant/follow-ups` shows Today, Next 7 Days, Overdue, Upcoming, Contacted, Booked, and Completed filters.
+- The Next 7 Days filter uses a rolling window from today through today + 7 days inclusive; it is not a calendar-week filter. Today rows may also appear in Next 7 Days, while overdue, completed, booked, and cancelled rows must not.
+- The Upcoming filter groups rows by patient first. Staff see one patient summary card with phone, follow-up count, nearest due date, remaining-time badge, and latest treatment summary.
+- The active filter controls which patients appear in the summary list, but expanding a patient must load the full follow-up/treatment plan for that patient, including completed, contacted, booked, overdue, upcoming, and pending rows. Expanded plan cards sort by session number when available, then due date, then creation date.
+- Only one expanded plan card should be highlighted as the next actionable follow-up: the first non-completed/non-booked future item, or the nearest pending/overdue item when no future actionable item exists.
 - Staff can open WhatsApp with a prefilled message, mark contacted/booked/completed, add notes, and open appointment creation prefilled with patient/service context.
+- Staff can manually reschedule a follow-up by changing `dueDate`. For active `DUE` or `UPCOMING` follow-ups, changing `dueDate` recalculates whether the status should be `DUE` or `UPCOMING`; contacted/booked/completed states keep their workflow status.
 - WhatsApp is manual only in v1; no automatic sending is allowed.
 - Follow-up metrics include due today, overdue, contacted, booked/completed from follow-ups, and conversion percentage.
+- Recurring analytics include recurring due today, recurring due in the next 7 days, and the distinct recurring patient retention count.
+
+## Tenant Expenses
+
+- Expenses are center-owned operational costs and must always be scoped by the authenticated tenant `centerId`.
+- Expense reads require `expenses:view`; creation requires `expenses:create`; updates/categories require `expenses:edit`; deletes require `expenses:delete`; expense dashboards/reports require `expenses:reports`.
+- Default categories are created per center on first expense/options/category access if the center has no categories yet.
+- Recurring expenses currently represent monthly recurring costs. Creating an expense with `recurring=true` creates an `ExpenseRecurrence` template and marks the source expense as `RECURRING`.
+- Due recurring expenses are generated opportunistically during expense list/overview access when the user also has `expenses:create`.
+- Expense reports compare tenant revenue from payments against non-cancelled expenses and expose net profit, category/branch breakdowns, and unpaid expense alerts.
 
 Patient profile:
 - Patient details show a compact follow-up timeline for the patient, with due date, session number, status, and notes.
 
 Security:
 - Tenant follow-up endpoints require a valid center session.
-- Reads require `appointments:view`; status/note updates require `appointments:update`.
+- Reads require `appointments:view`; status, note, and due-date updates require `appointments:update`.
 - Every follow-up query and mutation is scoped by the session `centerId`.
 
 ## 1. Platform Model
@@ -266,8 +314,8 @@ Rules:
 - Appointment cannot exist without a same-center patient.
 - Appointment cannot exist without a same-center active service.
 - Appointment cannot exist without a same-center active provider/staff user.
-- Appointment providers must be same-center active staff users with provider-capable roles only: `DOCTOR`, `STAFF`, or `CENTER_MANAGER`.
-- `RECEPTIONIST` and `ACCOUNTANT` must not appear in appointment provider dropdowns unless a future confirmed rule explicitly allows them.
+- Appointment providers must be same-center active staff users with `UserRole.providerEnabled=true` or the center owner user id; role alone must not exclude an active center owner.
+- `RECEPTIONIST` and `ACCOUNTANT` must not appear in appointment provider dropdowns unless `providerEnabled=true` is explicitly enabled for that staff assignment.
 - Appointment creator is the authenticated center staff user.
 - Overlapping appointments are blocked for the same provider.
 - Impossible duplicate slots are blocked for the same patient.
@@ -689,3 +737,39 @@ Rules:
 - If "save as future service" is selected, the API creates a real `Service` record scoped to the current `centerId` and links it to the appointment.
 - Temporary custom services do not require a `Service` row; billing can create an invoice with nullable `serviceId`, `customServiceName`, and the custom/manual invoice amount.
 - Tenant financial reports group revenue from custom-service invoices under the custom service name.
+# 2026-06-06 Public Profile Branch Rules
+
+- A center may publish multiple active branches/locations for its public website.
+- Public contact/location UI must prefer active `CenterBranch` rows when they exist.
+- Legacy single contact fields in `BrandingSettings` remain backward-compatible fallback for centers with no branches.
+- Branch data is public profile/contact content only in this phase. Booking remains a general center booking flow; appointments, services, and staff are not branch-aware yet.
+- Deleting a branch through public-profile management soft-deactivates it (`isActive=false`) instead of hard deleting location/contact history.
+# 2026-06-08 - Follow-up Early Treatment Plan Closure
+
+- A finite treatment follow-up plan may be closed early when the patient reaches the desired result before all planned sessions.
+- Early closure must keep completed/booked session history unchanged.
+- Future unbooked sessions with actionable statuses (`DUE`, `UPCOMING`, `CONTACTED`, `MISSED`) become `CLOSED_EARLY`.
+- Closed future sessions must not appear in upcoming, today, overdue, or reminder-due follow-up queues.
+- Closed plans are read-only in the follow-up timeline: no booking CTA and no WhatsApp reminder action for closed future sessions.
+- Linked appointment actions remain visible for sessions that already have appointments.
+# 2026-06-08 Follow-up Schedule Recalculation
+
+- When an appointment linked to a follow-up plan/session changes date, the follow-up schedule must remain consistent only if the user explicitly chooses recalculation.
+- Recalculation keeps completed, cancelled, closed-early, and other booked sessions unchanged, except the edited appointment's own linked follow-up session is updated to the new appointment date.
+- Pending/actionable sessions after the changed session are recalculated from the stored treatment-plan snapshot phases/default intervals; dynamic patient plans must not read later service-template edits.
+## 2026-06-20 - Dedicated Recurring Follow-up Workflow
+
+- Recurring reminders and finite treatment session plans are separate work queues and must not share treatment-progress UI.
+- Recurring filters are due soon (today through 7 days), today, overdue, contacted, and booked.
+- Sending a manual WhatsApp reminder records reminder time, actor, and increments `reminderCount`.
+- Marking contacted records `lastContactedAt`, `lastContactedByUserId`, and increments `reminderCount`.
+- Skipping a recurring cycle preserves the current row as `SKIPPED` and creates one next row from the stored recurrence interval.
+- Pausing sets the active recurring row and its plan state to `PAUSED`; paused rows are excluded from actionable/date queues.
+- Booking from a recurring row links the appointment to that row and creates the following cycle from the booked appointment date plus the stored interval. History is retained through `originFollowUpId`.
+- A `BOOKED` recurring row is fulfilled history, not an active unbooked reminder; duplicate protection applies to actionable unbooked recurring statuses.
+- The first recurring lifecycle row is created only after its source appointment is `COMPLETED`; its due date is calculated from `completedAt` (falling back to `appointmentDate`) plus the service recurrence interval.
+- Opening the recurring queue safely backfills missing rows from completed appointments with enabled recurring service settings, keeping one active lifecycle per patient and service.
+- Recurring date queues contain only `planStatus=ACTIVE` rows; today/overdue/upcoming visibility is determined from `dueDate` and excludes terminal or paused cycles.
+- Recurring API/UI date filtering uses the canonical `nextDueDate` contract (`PatientFollowUp.nextRecurringAt` persisted value); `dueDate` remains the finite-plan/session date.
+- Recurring counters honor the same optional branch filter as the visible recurring queue.
+- Recurring buckets are mutually exclusive: overdue is before today, today is the current calendar date, and due-soon/THIS_WEEK is strictly after today through seven calendar days ahead (inclusive).

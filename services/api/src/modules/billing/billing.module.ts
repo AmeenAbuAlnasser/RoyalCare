@@ -17,5 +17,6 @@ import { TenantReportsService } from './services/tenant-reports.service';
     TenantCreditService,
     TenantReportsService,
   ],
+  exports: [TenantBillingService],
 })
 export class BillingModule {}

@@ -23,7 +23,10 @@ import {
 import { trackMarketingEvent } from "@/lib/marketing/track-event";
 import { trackCenterEvent } from "@/lib/marketing/track-center-event";
 import { normalizeForWhatsApp, readWhatsAppDefaultCode } from "@/lib/whatsapp";
-import { FAVICON_EVENT, type FaviconUpdateDetail } from "@/components/brand/GlobalFavicon";
+import {
+  FAVICON_EVENT,
+  type FaviconUpdateDetail,
+} from "@/components/brand/GlobalFavicon";
 import { SmartContactWidget } from "@/components/center/SmartContactWidget";
 
 type Dictionary = (typeof publicCentersDictionaries)["en"];
@@ -35,24 +38,137 @@ type BookingConfirmation = {
   time: string;
   patientName: string;
   phone: string;
+  patientArea: string;
   notes: string;
 };
+
+const simpleRequestCopy = {
+  en: {
+    intro:
+      "Leave your details and we will contact you to confirm the appointment.",
+    selectedService: "Selected service",
+    noService: "The center will help you choose the right service.",
+  },
+  ar: {
+    intro: "اترك بياناتك وسنتواصل معك لتأكيد الموعد.",
+    selectedService: "الخدمة المختارة",
+    noService: "سيساعدك المركز في اختيار الخدمة المناسبة.",
+  },
+  he: {
+    intro: "השאירו פרטים וניצור איתכם קשר לאישור התור.",
+    selectedService: "שירות נבחר",
+    noService: "המרכז יעזור לכם לבחור את השירות המתאים.",
+  },
+} as const;
+
+const patientAreaOptions = [
+  "جنين",
+  "قباطية",
+  "يعبد",
+  "طولكرم",
+  "نابلس",
+  "رام الله",
+  "الداخل",
+  "أخرى",
+] as const;
+
+const patientAreaCopy = {
+  en: {
+    label: "City / Area (optional)",
+    placeholder: "Choose or type city / area",
+    manualPlaceholder: "Type city / area",
+    tooLong: "City / area must be 120 characters or fewer.",
+  },
+  ar: {
+    label: "المدينة / المنطقة (اختياري)",
+    placeholder: "اختر أو اكتب المدينة / المنطقة",
+    manualPlaceholder: "اكتب المدينة / المنطقة",
+    tooLong: "يجب ألا تتجاوز المدينة / المنطقة 120 حرفًا.",
+  },
+  he: {
+    label: "עיר / אזור (אופציונלי)",
+    placeholder: "בחרו או הקלידו עיר / אזור",
+    manualPlaceholder: "הקלידו עיר / אזור",
+    tooLong: "עיר / אזור חייבים להיות עד 120 תווים.",
+  },
+} as const;
+
+const branchSelectCopy = {
+  en: {
+    title: "Choose branch",
+    required: "Choose branch",
+    error: "Choose branch",
+    map: "View map",
+    phone: "Phone",
+    whatsapp: "WhatsApp",
+  },
+  ar: {
+    title: "اختر الفرع",
+    required: "اختر الفرع",
+    error: "اختر الفرع",
+    phone: "الهاتف",
+    whatsapp: "واتساب",
+  },
+  he: {
+    title: "בחר סניף",
+    required: "בחר סניף",
+    error: "בחר סניף",
+    phone: "טלפון",
+    whatsapp: "וואטסאפ",
+  },
+} as const;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function resolveLocalizedName(
   center: Pick<PublicCenterDetail, "name" | "nameAr" | "nameEn" | "nameHe">,
-  locale: SupportedLocale,
+  _locale: SupportedLocale,
 ): string {
-  if (locale === "ar") return center.nameAr || center.nameEn || center.name;
-  if (locale === "he") return center.nameHe || center.nameEn || center.name;
-  return center.nameEn || center.name;
+  void _locale;
+  return center.name || center.nameEn || center.nameAr || center.nameHe || "";
 }
 
-function resolveServiceName(service: PublicServiceFull, locale: SupportedLocale): string {
-  if (locale === "ar") return service.nameAr || service.nameEn;
-  if (locale === "he") return service.nameHe || service.nameEn;
+function resolveServiceName(
+  service: PublicServiceFull,
+  _locale: SupportedLocale,
+): string {
+  void _locale;
   return service.nameEn || service.nameAr || service.nameHe;
+}
+
+function resolveBranchCity(
+  branch: PublicCenterDetail["branches"][number],
+  locale: SupportedLocale,
+) {
+  if (locale === "ar") return branch.cityAr || branch.cityEn || branch.cityHe;
+  if (locale === "he") return branch.cityHe || branch.cityEn || branch.cityAr;
+  return branch.cityEn || branch.cityAr || branch.cityHe;
+}
+
+function resolveBranchAddress(
+  branch: PublicCenterDetail["branches"][number],
+  locale: SupportedLocale,
+) {
+  const localized =
+    locale === "ar"
+      ? branch.addressAr
+      : locale === "he"
+        ? branch.addressHe
+        : branch.addressEn;
+  return (
+    localized ||
+    branch.addressAr ||
+    branch.addressEn ||
+    branch.addressHe ||
+    resolveBranchCity(branch, locale) ||
+    ""
+  );
+}
+
+function getBranchMapLabel(locale: SupportedLocale) {
+  if (locale === "ar") return "عرض على الخريطة";
+  if (locale === "he") return "הצג במפה";
+  return "View map";
 }
 
 function getTodayString(): string {
@@ -77,7 +193,8 @@ function formatDisplayDate(dateStr: string, locale: SupportedLocale): string {
   try {
     const [y, mo, d] = dateStr.split("-").map(Number);
     const date = new Date(y, mo - 1, d);
-    const localeTag = locale === "ar" ? "ar-SA" : locale === "he" ? "he-IL" : "en-US";
+    const localeTag =
+      locale === "ar" ? "ar-SA" : locale === "he" ? "he-IL" : "en-US";
     return date.toLocaleDateString(localeTag, {
       weekday: "long",
       year: "numeric",
@@ -95,23 +212,35 @@ function formatDisplayTime(timeStr: string, locale: SupportedLocale): string {
   try {
     const date = new Date();
     date.setHours(h, m, 0, 0);
-    const localeTag = locale === "ar" ? "ar-SA" : locale === "he" ? "he-IL" : "en-US";
-    return date.toLocaleTimeString(localeTag, { hour: "numeric", minute: "2-digit", hour12: true });
+    const localeTag =
+      locale === "ar" ? "ar-SA" : locale === "he" ? "he-IL" : "en-US";
+    return date.toLocaleTimeString(localeTag, {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
   } catch {
     return timeStr;
   }
 }
 
-function buildWhatsAppHref(message: string): string | null {
-  const supportPhone = process.env.NEXT_PUBLIC_ROYALCARE_SUPPORT_WHATSAPP ?? "";
-  if (!supportPhone) return null;
-  const normalized = normalizeForWhatsApp(supportPhone, readWhatsAppDefaultCode());
+function buildWhatsAppHref(
+  message: string,
+  phone?: string | null,
+): string | null {
+  if (!phone) return null;
+  const normalized = normalizeForWhatsApp(phone, readWhatsAppDefaultCode());
   if (!/^\d{7,15}$/.test(normalized)) return null;
   return `https://wa.me/${normalized}?text=${encodeURIComponent(message)}`;
 }
 
 const WA_ICON = (
-  <svg aria-hidden="true" className="h-4 w-4 shrink-0" fill="currentColor" viewBox="0 0 24 24">
+  <svg
+    aria-hidden="true"
+    className="h-4 w-4 shrink-0"
+    fill="currentColor"
+    viewBox="0 0 24 24"
+  >
     <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.890-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
   </svg>
 );
@@ -119,9 +248,24 @@ const WA_ICON = (
 // ─── Center website navbar (no RoyalCare platform header) ────────────────────
 
 const centerWebsiteLabels = {
-  en: { home: "Home", services: "Services", contact: "Contact", backToCenter: "Back to center" },
-  ar: { home: "الرئيسية", services: "الخدمات", contact: "التواصل", backToCenter: "العودة للمركز" },
-  he: { home: "בית", services: "שירותים", contact: "יצירת קשר", backToCenter: "חזרה למרכז" },
+  en: {
+    home: "Home",
+    services: "Services",
+    contact: "Contact",
+    backToCenter: "Back to center",
+  },
+  ar: {
+    home: "الرئيسية",
+    services: "الخدمات",
+    contact: "التواصل",
+    backToCenter: "العودة للمركز",
+  },
+  he: {
+    home: "בית",
+    services: "שירותים",
+    contact: "יצירת קשר",
+    backToCenter: "חזרה למרכז",
+  },
 } as const;
 
 function BookingNavbar({
@@ -219,7 +363,10 @@ function BookingNavbar({
 function FieldError({ msg }: { msg?: string }) {
   if (!msg) return null;
   return (
-    <p className="mt-1.5 text-xs font-semibold leading-5 text-red-600" role="alert">
+    <p
+      className="mt-1.5 text-xs font-semibold leading-5 text-red-600"
+      role="alert"
+    >
       {msg}
     </p>
   );
@@ -235,7 +382,9 @@ function SectionCard({ children }: { children: React.ReactNode }) {
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="mb-4 text-sm font-bold uppercase tracking-wide text-[#66758a]">{children}</h2>
+    <h2 className="mb-4 text-sm font-bold uppercase tracking-wide text-[#66758a]">
+      {children}
+    </h2>
   );
 }
 
@@ -269,7 +418,9 @@ function CenterSummaryCard({
       ) : (
         <div
           className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl text-lg font-bold text-white shadow-sm"
-          style={{ backgroundColor: center.branding?.primaryColor ?? "#0B2D5C" }}
+          style={{
+            backgroundColor: center.branding?.primaryColor ?? "#0B2D5C",
+          }}
         >
           {initials || "?"}
         </div>
@@ -288,15 +439,22 @@ function CenterSummaryCard({
 
 function SuccessState({
   confirmation,
+  locale,
   slug,
   d,
+  whatsappPhone,
 }: {
   confirmation: BookingConfirmation;
+  locale: SupportedLocale;
   slug: string;
   d: Dictionary;
+  whatsappPhone: string | null;
 }) {
-  const followUpMessage = `Hello, I sent a booking request for ${confirmation.serviceName} on ${confirmation.date} at ${confirmation.time}. Could you please confirm my appointment?\n\nName: ${confirmation.patientName}\nPhone: ${confirmation.phone}`;
-  const waHref = buildWhatsAppHref(followUpMessage);
+  const followUpMessage =
+    confirmation.date && confirmation.time
+      ? `Hello, I sent a booking request for ${confirmation.serviceName} on ${confirmation.date} at ${confirmation.time}. Could you please confirm my appointment?\n\nName: ${confirmation.patientName}\nPhone: ${confirmation.phone}${confirmation.patientArea ? `\nCity / Area: ${confirmation.patientArea}` : ""}`
+      : `Hello, I sent a booking request for ${confirmation.serviceName || confirmation.centerName}. Could you please contact me to confirm the appointment?\n\nName: ${confirmation.patientName}\nPhone: ${confirmation.phone}${confirmation.patientArea ? `\nCity / Area: ${confirmation.patientArea}` : ""}`;
+  const waHref = buildWhatsAppHref(followUpMessage, whatsappPhone);
 
   return (
     <SectionCard>
@@ -316,22 +474,42 @@ function SuccessState({
           </svg>
         </div>
 
-        <h1 className="text-xl font-bold text-[#0B2D5C]">{d.booking.successTitle}</h1>
-        <p className="mt-2 max-w-sm text-sm leading-6 text-[#66758a]">{d.booking.successSubtitle}</p>
+        <h1 className="text-xl font-bold text-[#0B2D5C]">
+          {d.booking.successTitle}
+        </h1>
+        <p className="mt-2 max-w-sm text-sm leading-6 text-[#66758a]">
+          {d.booking.successSubtitle}
+        </p>
 
         <div className="mt-6 w-full max-w-sm rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] p-4 text-start">
           <dl className="space-y-2.5">
             {[
-              { label: d.booking.successCenterLabel, value: confirmation.centerName },
-              { label: d.booking.successServiceLabel, value: confirmation.serviceName },
+              {
+                label: d.booking.successCenterLabel,
+                value: confirmation.centerName,
+              },
+              {
+                label: d.booking.successServiceLabel,
+                value: confirmation.serviceName,
+              },
+              {
+                label: patientAreaCopy[locale].label,
+                value: confirmation.patientArea,
+              },
               { label: d.booking.successDateLabel, value: confirmation.date },
               { label: d.booking.successTimeLabel, value: confirmation.time },
-            ].map(({ label, value }) => (
-              <div key={label} className="flex gap-2">
-                <dt className="w-20 shrink-0 text-xs font-semibold text-[#66758a]">{label}</dt>
-                <dd className="min-w-0 break-words text-xs font-medium text-[#0B2D5C]">{value}</dd>
-              </div>
-            ))}
+            ]
+              .filter(({ value }) => Boolean(value))
+              .map(({ label, value }) => (
+                <div key={label} className="flex gap-2">
+                  <dt className="w-20 shrink-0 text-xs font-semibold text-[#66758a]">
+                    {label}
+                  </dt>
+                  <dd className="min-w-0 break-words text-xs font-medium text-[#0B2D5C]">
+                    {value}
+                  </dd>
+                </div>
+              ))}
           </dl>
         </div>
 
@@ -392,18 +570,26 @@ function BookingForm({
   initialServiceId?: string;
 }) {
   const isOfferBooking = Boolean(offer);
+  const isSimpleRequest =
+    center.branding?.publicBookingMode !== "DIRECT_BOOKING";
   const centerName = resolveLocalizedName(center, locale);
   const today = getTodayString();
   const maxDate = getMaxDateString();
+  const srCopy = simpleRequestCopy[locale];
+  const branchCopy = branchSelectCopy[locale];
+  const activeBranches = center.branches ?? [];
+  const shouldChooseBranch = isSimpleRequest && activeBranches.length > 1;
 
   // In offer mode the service list is hidden by default; user can reveal it manually.
   const [showServiceList, setShowServiceList] = useState(false);
 
-  const [selectedServiceIdx, setSelectedServiceIdx] = useState<number | null>(() => {
-    if (!initialServiceId || isOfferBooking) return null;
-    const idx = center.services.findIndex((s) => s.id === initialServiceId);
-    return idx >= 0 ? idx : null;
-  });
+  const [selectedServiceIdx, setSelectedServiceIdx] = useState<number | null>(
+    () => {
+      if (!initialServiceId || isOfferBooking) return null;
+      const idx = center.services.findIndex((s) => s.id === initialServiceId);
+      return idx >= 0 ? idx : null;
+    },
+  );
 
   // Fire SelectService tracking once when a service is preselected via URL param.
   useEffect(() => {
@@ -425,23 +611,40 @@ function BookingForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [selectedProviderId, setSelectedProviderId] = useState("");
+  const [selectedBranchId, setSelectedBranchId] = useState(() =>
+    activeBranches.length === 1 ? activeBranches[0].id : "",
+  );
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedTime, setSelectedTime] = useState("");
   const [patientName, setPatientName] = useState("");
   const [phone, setPhone] = useState("");
+  const [patientArea, setPatientArea] = useState("");
+  const [manualPatientArea, setManualPatientArea] = useState("");
   const [notes, setNotes] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [confirmation, setConfirmation] = useState<BookingConfirmation | null>(null);
+  const [confirmation, setConfirmation] = useState<BookingConfirmation | null>(
+    null,
+  );
 
-  type AvailabilityState = { status: "idle" | "loading" | "ready" | "error"; slots: AvailabilitySlot[] };
-  const [availability, setAvailability] = useState<AvailabilityState>({ status: "idle", slots: [] });
+  type AvailabilityState = {
+    status: "idle" | "loading" | "ready" | "error";
+    slots: AvailabilitySlot[];
+  };
+  const [availability, setAvailability] = useState<AvailabilityState>({
+    status: "idle",
+    slots: [],
+  });
   // Incrementing this forces an availability re-fetch without changing service/date.
   const [availabilityKey, setAvailabilityKey] = useState(0);
   // In offer mode we fetch slots even without a service selected (using first service as proxy).
-  const canFetchSlots = selectedServiceIdx !== null || (isOfferBooking && center.services.length > 0);
-  const isSlotsLoading = canFetchSlots && Boolean(selectedDate) && availability.status === "loading";
+  const canFetchSlots =
+    !isSimpleRequest &&
+    (selectedServiceIdx !== null ||
+      (isOfferBooking && center.services.length > 0));
+  const isSlotsLoading =
+    canFetchSlots && Boolean(selectedDate) && availability.status === "loading";
 
   const slotUnavailableLabel = (reason?: string) => {
     switch (reason) {
@@ -488,13 +691,21 @@ function BookingForm({
       queueMicrotask(() => {
         if (!cancelled) setAvailability({ status: "idle", slots: [] });
       });
-      return () => { cancelled = true; };
+      return () => {
+        cancelled = true;
+      };
     }
     const service = center.services[effectiveServiceIdx];
     queueMicrotask(() => {
-      if (!cancelled) setAvailability((prev) => ({ ...prev, status: "loading" }));
+      if (!cancelled)
+        setAvailability((prev) => ({ ...prev, status: "loading" }));
     });
-    getPublicAvailability(slug, service.id, selectedDate, selectedProviderId || undefined)
+    getPublicAvailability(
+      slug,
+      service.id,
+      selectedDate,
+      selectedProviderId || undefined,
+    )
       .then((data) => {
         if (cancelled) return;
         setAvailability({ status: "ready", slots: data.slots });
@@ -508,9 +719,17 @@ function BookingForm({
         if (cancelled) return;
         setAvailability({ status: "error", slots: [] });
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedServiceIdx, selectedProviderId, selectedDate, availabilityKey, isOfferBooking]);
+  }, [
+    selectedServiceIdx,
+    selectedProviderId,
+    selectedDate,
+    availabilityKey,
+    isOfferBooking,
+  ]);
 
   function handleDateChange(val: string) {
     setSelectedDate(val);
@@ -530,32 +749,29 @@ function BookingForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (process.env.NODE_ENV === "development") console.log("[BookingForm] handleSubmit called");
     if (submitting) return;
     setSubmitError(null);
 
-    if (process.env.NODE_ENV === "development") {
-      console.log("[BookingForm]", {
-        offerIdFromUrl: offer?.id,
-        selectedOfferId: offer?.id,
-        isOfferBooking,
-        selectedServiceId: selectedServiceIdx !== null ? center.services[selectedServiceIdx]?.id : null,
-        selectedDate,
-        selectedSlot: selectedTime,
-      });
-    }
-
     const newErrors: Record<string, string> = {};
-    if (!isOfferBooking && selectedServiceIdx === null) newErrors.service = d.booking.errorSelectService;
-    if (!selectedDate) newErrors.date = d.booking.errorSelectDate;
-    if (!isOfferBooking && !selectedTime) newErrors.time = d.booking.errorSelectTime;
-    if (!isOfferBooking && isSlotsLoading) newErrors.time = d.booking.errorSelectTime;
+    if (!isSimpleRequest && !isOfferBooking && selectedServiceIdx === null)
+      newErrors.service = d.booking.errorSelectService;
+    if (!isSimpleRequest && !selectedDate)
+      newErrors.date = d.booking.errorSelectDate;
+    if (!isSimpleRequest && !isOfferBooking && !selectedTime)
+      newErrors.time = d.booking.errorSelectTime;
+    if (!isSimpleRequest && !isOfferBooking && isSlotsLoading)
+      newErrors.time = d.booking.errorSelectTime;
+    if (shouldChooseBranch && !selectedBranchId)
+      newErrors.branch = branchCopy.error;
     if (!patientName.trim()) newErrors.name = d.booking.errorName;
     if (!/^\d{7,15}$/.test(phone.replace(/[\s\-().+]/g, "")))
       newErrors.phone = d.booking.errorPhone;
-
-    if (process.env.NODE_ENV === "development") {
-      console.log("[BookingForm] validation errors:", newErrors);
+    const resolvedPatientArea =
+      patientArea === "أخرى"
+        ? manualPatientArea.trim() || patientArea
+        : patientArea.trim();
+    if (resolvedPatientArea.length > 120) {
+      newErrors.patientArea = patientAreaCopy[locale].tooLong;
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -569,31 +785,50 @@ function BookingForm({
       return;
     }
 
-    const service = selectedServiceIdx !== null ? center.services[selectedServiceIdx] : null;
+    const service =
+      selectedServiceIdx !== null ? center.services[selectedServiceIdx] : null;
     const serviceName = service ? resolveServiceName(service, locale) : "";
-    const displayDate = formatDisplayDate(selectedDate, locale);
-    const displayTime = selectedTime ? formatDisplayTime(selectedTime, locale) : "";
+    const displayDate = isSimpleRequest
+      ? ""
+      : formatDisplayDate(selectedDate, locale);
+    const displayTime = isSimpleRequest
+      ? ""
+      : selectedTime
+        ? formatDisplayTime(selectedTime, locale)
+        : "";
     const trimmedNotes = notes.trim();
+    const whatsAppNotes = [
+      resolvedPatientArea
+        ? `${patientAreaCopy[locale].label}: ${resolvedPatientArea}`
+        : "",
+      trimmedNotes,
+    ]
+      .filter(Boolean)
+      .join("\n");
 
     const payload = {
       fullName: patientName.trim(),
       phone: phone.trim(),
-      providerId: selectedProviderId || undefined,
+      patientArea: resolvedPatientArea || undefined,
+      branchId: selectedBranchId || undefined,
+      providerId: isSimpleRequest ? undefined : selectedProviderId || undefined,
       serviceId: service?.id || undefined,
       notes: trimmedNotes || undefined,
-      requestedDate: selectedDate,
-      requestedTime: selectedTime || undefined,
+      requestedDate: isSimpleRequest ? undefined : selectedDate,
+      requestedTime: isSimpleRequest ? undefined : selectedTime || undefined,
       offerId: offer?.id || undefined,
       offerTitle: offer
-        ? (locale === "ar" ? offer.titleAr : locale === "he" ? offer.titleHe : offer.titleEn) ?? offer.titleEn ?? undefined
+        ? ((locale === "ar"
+            ? offer.titleAr
+            : locale === "he"
+              ? offer.titleHe
+              : offer.titleEn) ??
+          offer.titleEn ??
+          undefined)
         : undefined,
       offerPrice: offer?.newPrice ?? offer?.oldPrice ?? undefined,
       offerCurrency: offer?.currency || undefined,
     };
-
-    if (process.env.NODE_ENV === "development") {
-      console.log("[BookingForm] submitting payload:", payload);
-    }
 
     trackMarketingEvent("SubmitBookingAttempt", {
       centerName,
@@ -606,10 +841,6 @@ function BookingForm({
     setSubmitting(true);
     try {
       const createdBooking = await createPublicBookingRequest(slug, payload);
-      if (process.env.NODE_ENV === "development") {
-        console.log("[BookingForm] API success:", createdBooking);
-      }
-
       const bookingUpdatePayload = JSON.stringify({
         bookingRequestId: createdBooking.bookingRequestId ?? null,
         fullName: patientName.trim(),
@@ -629,9 +860,9 @@ function BookingForm({
         time: displayTime,
         name: patientName.trim(),
         phone: phone.trim(),
-        notes: trimmedNotes,
+        notes: whatsAppNotes,
       });
-      const waHref = buildWhatsAppHref(message);
+      const waHref = buildWhatsAppHref(message, center.branding?.whatsappPhone);
       if (waHref) {
         trackMarketingEvent("WhatsAppClick", {
           centerName,
@@ -650,8 +881,8 @@ function BookingForm({
         serviceName,
         ...(offer?.id ? { offerId: offer.id } : {}),
       });
-      trackCenterEvent(slug, 'COMPLETE_BOOKING', {
-        page: '/book',
+      trackCenterEvent(slug, "COMPLETE_BOOKING", {
+        page: "/book",
         extraData: { serviceName },
       });
 
@@ -662,14 +893,11 @@ function BookingForm({
         time: displayTime,
         patientName: patientName.trim(),
         phone: phone.trim(),
+        patientArea: resolvedPatientArea,
         notes: trimmedNotes,
       });
     } catch (err: unknown) {
       const apiErr = err as BookingRequestError;
-      if (process.env.NODE_ENV === "development") {
-        console.error("[BookingForm] API error:", err);
-      }
-
       // Slot was taken between the user picking a time and submitting.
       if (apiErr?.code === "SLOT_UNAVAILABLE") {
         setSelectedTime("");
@@ -691,10 +919,17 @@ function BookingForm({
         const mapped: Record<string, string> = {};
         if (apiErr.errors.fullName) mapped.name = d.booking.errorName;
         if (apiErr.errors.phone) mapped.phone = d.booking.errorPhone;
-        if (apiErr.errors.serviceId) mapped.service = d.booking.errorSelectService;
-        if (apiErr.errors.providerId) mapped.service = d.booking.errorSelectService;
-        if (apiErr.errors.requestedDate) mapped.date = d.booking.errorSelectDate;
-        if (apiErr.errors.requestedTime) mapped.time = d.booking.errorSelectTime;
+        if (apiErr.errors.patientArea)
+          mapped.patientArea = patientAreaCopy[locale].tooLong;
+        if (apiErr.errors.branchId) mapped.branch = branchCopy.error;
+        if (apiErr.errors.serviceId)
+          mapped.service = d.booking.errorSelectService;
+        if (apiErr.errors.providerId)
+          mapped.service = d.booking.errorSelectService;
+        if (apiErr.errors.requestedDate)
+          mapped.date = d.booking.errorSelectDate;
+        if (apiErr.errors.requestedTime)
+          mapped.time = d.booking.errorSelectTime;
         if (Object.keys(mapped).length > 0) {
           setErrors(mapped);
           trackMarketingEvent("BookingFailed", {
@@ -734,19 +969,56 @@ function BookingForm({
   }
 
   if (confirmation) {
-    return <SuccessState confirmation={confirmation} d={d} slug={slug} />;
+    return (
+      <SuccessState
+        confirmation={confirmation}
+        d={d}
+        locale={locale}
+        slug={slug}
+        whatsappPhone={center.branding?.whatsappPhone ?? null}
+      />
+    );
   }
 
-  if (center.services.length === 0 && !isOfferBooking) {
+  if (!isSimpleRequest && center.services.length === 0 && !isOfferBooking) {
     return <AdminState title={d.booking.noServices} tone="warning" />;
   }
 
   const oml = offerModeLabels[locale];
 
   return (
-    <form aria-busy={submitting} className="space-y-5" noValidate onSubmit={handleSubmit}>
+    <form
+      aria-busy={submitting}
+      className="space-y-5"
+      noValidate
+      onSubmit={handleSubmit}
+    >
+      {isSimpleRequest ? (
+        <SectionCard>
+          <p className="text-sm font-semibold leading-6 text-[#0B2D5C]">
+            {srCopy.intro}
+          </p>
+          {selectedServiceIdx !== null ? (
+            <div className="mt-4 rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-[#66758a]">
+                {srCopy.selectedService}
+              </p>
+              <p className="mt-1 text-sm font-bold text-[#0B2D5C]">
+                {resolveServiceName(
+                  center.services[selectedServiceIdx],
+                  locale,
+                )}
+              </p>
+            </div>
+          ) : !offer ? (
+            <p className="mt-3 rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] px-4 py-3 text-sm font-medium text-[#66758a]">
+              {srCopy.noService}
+            </p>
+          ) : null}
+        </SectionCard>
+      ) : null}
       {/* 1 — Service (hidden in offer mode unless user toggles) */}
-      {!isOfferBooking || showServiceList ? (
+      {!isSimpleRequest && (!isOfferBooking || showServiceList) ? (
         <SectionCard>
           <SectionTitle>{d.booking.selectServiceTitle}</SectionTitle>
           <div className="space-y-2.5">
@@ -773,8 +1045,8 @@ function BookingForm({
                       serviceId: service.id,
                       serviceName: name,
                     });
-                    trackCenterEvent(slug, 'SELECT_SERVICE', {
-                      page: '/book',
+                    trackCenterEvent(slug, "SELECT_SERVICE", {
+                      page: "/book",
                       extraData: { serviceId: service.id, serviceName: name },
                     });
                   }}
@@ -782,7 +1054,9 @@ function BookingForm({
                 >
                   <span
                     className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${
-                      selected ? "border-[#0B2D5C] bg-[#0B2D5C]" : "border-[#C8CDD4] bg-white"
+                      selected
+                        ? "border-[#0B2D5C] bg-[#0B2D5C]"
+                        : "border-[#C8CDD4] bg-white"
                     }`}
                   >
                     {selected && (
@@ -790,19 +1064,35 @@ function BookingForm({
                     )}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-bold leading-snug text-[#0B2D5C]">{name}</p>
+                    <p className="text-sm font-bold leading-snug text-[#0B2D5C]">
+                      {name}
+                    </p>
                     <div className="mt-1.5 flex flex-wrap gap-1.5">
                       {service.durationMinutes != null && (
                         <span className="inline-flex items-center gap-1 rounded-full border border-[#E5E7EB] bg-white px-2 py-0.5 text-xs font-medium text-[#526176]">
-                          <svg aria-hidden="true" className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <svg
+                            aria-hidden="true"
+                            className="h-3 w-3 shrink-0"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                            viewBox="0 0 24 24"
+                          >
                             <circle cx="12" cy="12" r="10" />
-                            <path d="M12 6v6l4 2" strokeLinecap="round" strokeLinejoin="round" />
+                            <path
+                              d="M12 6v6l4 2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
                           </svg>
                           {service.durationMinutes} min
                         </span>
                       )}
                       {service.price != null && (
-                        <span className="inline-flex items-center rounded-full border border-[#C8A45D]/35 bg-[#C8A45D]/10 px-2 py-0.5 text-xs font-semibold text-[#7A5C20]" dir="ltr">
+                        <span
+                          className="inline-flex items-center rounded-full border border-[#C8A45D]/35 bg-[#C8A45D]/10 px-2 py-0.5 text-xs font-semibold text-[#7A5C20]"
+                          dir="ltr"
+                        >
                           {service.currency} {service.price}
                         </span>
                       )}
@@ -823,7 +1113,7 @@ function BookingForm({
             </button>
           )}
         </SectionCard>
-      ) : (
+      ) : !isSimpleRequest ? (
         /* Offer mode: service list hidden — show toggle link */
         <button
           className="w-full rounded-xl border border-dashed border-[#C8CDD4] bg-[#F8FAFC] px-4 py-3 text-sm font-semibold text-[#526176] transition hover:border-[#0B2D5C]/40 hover:text-[#0B2D5C]"
@@ -832,130 +1122,257 @@ function BookingForm({
         >
           {oml.switchToService}
         </button>
-      )}
+      ) : null}
 
-      {selectedServiceIdx !== null && center.providers.length > 0 && (
-        <SectionCard>
-          <SectionTitle>{d.booking.selectProviderTitle}</SectionTitle>
-          <select
-            className="min-h-11 w-full rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] px-4 py-2.5 text-sm font-medium text-[#0B2D5C] focus:border-[#0B2D5C] focus:outline-none focus:ring-2 focus:ring-[#0B2D5C]/15 disabled:cursor-not-allowed disabled:opacity-70"
-            disabled={submitting}
-            onChange={(event) => {
-              setSelectedProviderId(event.target.value);
-              setSelectedTime("");
-              clearError("time");
-            }}
-            value={selectedProviderId}
-          >
-            <option value="">{d.booking.anyProvider}</option>
-            {center.providers.map((provider) => (
-              <option key={provider.id} value={provider.id}>
-                {provider.name}
-              </option>
-            ))}
-          </select>
-        </SectionCard>
-      )}
+      {!isSimpleRequest &&
+        selectedServiceIdx !== null &&
+        center.providers.length > 0 && (
+          <SectionCard>
+            <SectionTitle>{d.booking.selectProviderTitle}</SectionTitle>
+            <select
+              className="min-h-11 w-full rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] px-4 py-2.5 text-sm font-medium text-[#0B2D5C] focus:border-[#0B2D5C] focus:outline-none focus:ring-2 focus:ring-[#0B2D5C]/15 disabled:cursor-not-allowed disabled:opacity-70"
+              disabled={submitting}
+              onChange={(event) => {
+                setSelectedProviderId(event.target.value);
+                setSelectedTime("");
+                clearError("time");
+              }}
+              value={selectedProviderId}
+            >
+              <option value="">{d.booking.anyProvider}</option>
+              {center.providers.map((provider) => (
+                <option key={provider.id} value={provider.id}>
+                  {provider.name}
+                </option>
+              ))}
+            </select>
+          </SectionCard>
+        )}
 
       {/* 2 — Date */}
-      <SectionCard>
-        <SectionTitle>{d.booking.selectDateTitle}</SectionTitle>
-        <input
-          className="min-h-11 w-full rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] px-4 py-2.5 text-sm font-medium text-[#0B2D5C] focus:border-[#0B2D5C] focus:outline-none focus:ring-2 focus:ring-[#0B2D5C]/15 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
-          disabled={submitting}
-          max={maxDate}
-          min={today}
-          onChange={(e) => handleDateChange(e.target.value)}
-          type="date"
-          value={selectedDate}
-        />
-        <FieldError msg={errors.date} />
-      </SectionCard>
+      {!isSimpleRequest ? (
+        <SectionCard>
+          <SectionTitle>{d.booking.selectDateTitle}</SectionTitle>
+          <input
+            className="min-h-11 w-full rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] px-4 py-2.5 text-sm font-medium text-[#0B2D5C] focus:border-[#0B2D5C] focus:outline-none focus:ring-2 focus:ring-[#0B2D5C]/15 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+            disabled={submitting}
+            max={maxDate}
+            min={today}
+            onChange={(e) => handleDateChange(e.target.value)}
+            type="date"
+            value={selectedDate}
+          />
+          <FieldError msg={errors.date} />
+        </SectionCard>
+      ) : null}
 
       {/* 3 — Time slots (requires date; in offer mode shows without service selection) */}
-      {(selectedServiceIdx !== null || isOfferBooking) && selectedDate && (
-        <SectionCard>
-          <SectionTitle>{d.booking.selectTimeTitle}</SectionTitle>
+      {!isSimpleRequest &&
+        (selectedServiceIdx !== null || isOfferBooking) &&
+        selectedDate && (
+          <SectionCard>
+            <SectionTitle>{d.booking.selectTimeTitle}</SectionTitle>
 
-          {/* Loading skeleton */}
-          {(availability.status === "idle" || availability.status === "loading") && (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-5">
-              {Array.from({ length: 12 }).map((_, i) => (
-                <div
-                  className="h-12 animate-pulse rounded-xl bg-[#E5E7EB]"
-                  key={i}
-                />
-              ))}
-            </div>
-          )}
+            {/* Loading skeleton */}
+            {(availability.status === "idle" ||
+              availability.status === "loading") && (
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-5">
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <div
+                    className="h-12 animate-pulse rounded-xl bg-[#E5E7EB]"
+                    key={i}
+                  />
+                ))}
+              </div>
+            )}
 
-          {/* Error */}
-          {availability.status === "error" && (
-            <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-              {d.booking.loadError}
-            </p>
-          )}
+            {/* Error */}
+            {availability.status === "error" && (
+              <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                {d.booking.loadError}
+              </p>
+            )}
 
-          {/* No slots */}
-          {availability.status === "ready" && availability.slots.length === 0 && (
-            <p className="text-sm text-[#66758a]">{d.booking.noSlotsForDate}</p>
-          )}
+            {/* No slots */}
+            {availability.status === "ready" &&
+              availability.slots.length === 0 && (
+                <p className="text-sm text-[#66758a]">
+                  {d.booking.noSlotsForDate}
+                </p>
+              )}
 
-          {/* Slot grid */}
-          {availability.status === "ready" && availability.slots.length > 0 && (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-5">
-              {availability.slots.map((slot) => {
-                const isSelected = selectedTime === slot.time;
-                const isBooked = !slot.available;
-                return (
-                  <button
-                    className={`min-h-12 rounded-xl border-2 px-2 py-2 text-xs font-bold transition focus:outline-none focus:ring-2 focus:ring-[#0B2D5C]/20 ${
-                      isBooked
-                        ? "cursor-not-allowed border-[#E5E7EB] bg-[#F3F4F6] text-[#B0BAC9]"
-                        : isSelected
-                          ? "border-[#0B2D5C] bg-[#0B2D5C] text-white"
-                          : "border-[#E5E7EB] bg-[#F8FAFC] text-[#0B2D5C] hover:border-[#0B2D5C]/40"
-                    }`}
-                    disabled={isBooked || submitting}
-                    aria-disabled={isBooked || submitting}
-                    key={slot.time}
-                    onClick={() => {
-                      if (submitting) return;
-                      setSelectedTime(slot.time);
-                      clearError("time");
-                      trackMarketingEvent("SelectDateTime", {
-                        centerName,
-                        centerSlug: slug,
-                        requestedDate: selectedDate,
-                        requestedTime: slot.time,
-                        source: "time_slot",
-                      });
-                    }}
-                    type="button"
-                  >
-                    <span className="block">{formatDisplayTime(slot.time, locale)}</span>
-                    {isBooked && (
-                      <span className="mt-0.5 block text-[10px] font-normal">
-                        {slotUnavailableLabel(slot.reason)}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+            {/* Slot grid */}
+            {availability.status === "ready" &&
+              availability.slots.length > 0 && (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-5">
+                  {availability.slots.map((slot) => {
+                    const isSelected = selectedTime === slot.time;
+                    const isBooked = !slot.available;
+                    return (
+                      <button
+                        className={`min-h-12 rounded-xl border-2 px-2 py-2 text-xs font-bold transition focus:outline-none focus:ring-2 focus:ring-[#0B2D5C]/20 ${
+                          isBooked
+                            ? "cursor-not-allowed border-[#E5E7EB] bg-[#F3F4F6] text-[#B0BAC9]"
+                            : isSelected
+                              ? "border-[#0B2D5C] bg-[#0B2D5C] text-white"
+                              : "border-[#E5E7EB] bg-[#F8FAFC] text-[#0B2D5C] hover:border-[#0B2D5C]/40"
+                        }`}
+                        disabled={isBooked || submitting}
+                        aria-disabled={isBooked || submitting}
+                        key={slot.time}
+                        onClick={() => {
+                          if (submitting) return;
+                          setSelectedTime(slot.time);
+                          clearError("time");
+                          trackMarketingEvent("SelectDateTime", {
+                            centerName,
+                            centerSlug: slug,
+                            requestedDate: selectedDate,
+                            requestedTime: slot.time,
+                            source: "time_slot",
+                          });
+                        }}
+                        type="button"
+                      >
+                        <span className="block">
+                          {formatDisplayTime(slot.time, locale)}
+                        </span>
+                        {isBooked && (
+                          <span className="mt-0.5 block text-[10px] font-normal">
+                            {slotUnavailableLabel(slot.reason)}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
-          <FieldError msg={errors.time} />
-        </SectionCard>
-      )}
+            <FieldError msg={errors.time} />
+          </SectionCard>
+        )}
 
       {/* 4 — Patient info */}
+      {shouldChooseBranch ? (
+        <SectionCard>
+          <SectionTitle>{branchCopy.title}</SectionTitle>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {activeBranches.map((branch) => {
+              const selected = selectedBranchId === branch.id;
+              const city = resolveBranchCity(branch, locale);
+              const address = resolveBranchAddress(branch, locale);
+              const hasAddress = Boolean(
+                branch.addressAr || branch.addressEn || branch.addressHe,
+              );
+              return (
+                <div
+                  className={`flex min-h-[190px] flex-col justify-between rounded-xl border-2 px-4 py-3.5 text-start shadow-sm transition duration-200 ${
+                    submitting
+                      ? "cursor-not-allowed opacity-70"
+                      : "cursor-pointer"
+                  } ${
+                    selected
+                      ? "border-[#0B2D5C] bg-white shadow-md ring-2 ring-[#0B2D5C]/10"
+                      : "border-[#E5E7EB] bg-[#F8FAFC] hover:border-[#0B2D5C]/35 hover:bg-white hover:shadow-md"
+                  }`}
+                  key={branch.id}
+                  onClick={() => {
+                    if (submitting) return;
+                    setSelectedBranchId(branch.id);
+                    clearError("branch");
+                  }}
+                  onKeyDown={(event) => {
+                    if (submitting) return;
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setSelectedBranchId(branch.id);
+                      clearError("branch");
+                    }
+                  }}
+                  role="button"
+                  tabIndex={submitting ? -1 : 0}
+                >
+                  <span className="block min-w-0">
+                    <span className="flex min-w-0 items-center justify-between gap-3">
+                      <span className="min-w-0 truncate text-sm font-bold leading-5 text-[#0B2D5C]">
+                        {branch.name}
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition ${
+                          selected
+                            ? "border-[#0B2D5C] bg-[#0B2D5C]"
+                            : "border-[#C8CDD4] bg-white"
+                        }`}
+                      >
+                        {selected ? (
+                          <span className="h-2 w-2 rounded-full bg-white" />
+                        ) : null}
+                      </span>
+                    </span>
+                    {city ? (
+                      <span className="mt-1.5 block truncate text-xs font-medium leading-5 text-[#66758a]">
+                        {city}
+                      </span>
+                    ) : null}
+                    <span className="mt-1.5 block min-h-10">
+                      {address && (hasAddress || !city) ? (
+                        <span className="line-clamp-2 text-sm font-semibold leading-5 text-[#0B2D5C]">
+                          {address}
+                        </span>
+                      ) : null}
+                    </span>
+                  </span>
+                  <span className="mt-3 block">
+                    <span className="flex min-h-6 flex-wrap items-center gap-1.5">
+                      {branch.phone ? (
+                        <span className="inline-flex min-h-6 items-center rounded-full border border-[#E5E7EB] bg-white px-2 text-[10px] font-semibold leading-none text-[#526176]">
+                          {branchCopy.phone}:{" "}
+                          <span className="ms-1" dir="ltr">
+                            {branch.phone}
+                          </span>
+                        </span>
+                      ) : null}
+                      {branch.whatsapp ? (
+                        <span className="inline-flex min-h-6 items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 text-[10px] font-semibold leading-none text-emerald-700">
+                          {branchCopy.whatsapp}:{" "}
+                          <span className="ms-1" dir="ltr">
+                            {branch.whatsapp}
+                          </span>
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="mt-3 flex min-h-7 items-center">
+                      {branch.mapsUrl ? (
+                        <a
+                          className="inline-flex min-h-7 items-center justify-center rounded-lg border border-[#0B2D5C]/15 bg-white px-2.5 text-[11px] font-bold text-[#0B2D5C] transition hover:border-[#0B2D5C]/35 hover:bg-[#0B2D5C]/5"
+                          href={branch.mapsUrl}
+                          onClick={(event) => event.stopPropagation()}
+                          rel="noopener noreferrer"
+                          target="_blank"
+                        >
+                          {getBranchMapLabel(locale)}
+                        </a>
+                      ) : null}
+                    </span>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <FieldError msg={errors.branch} />
+        </SectionCard>
+      ) : null}
+
       <SectionCard>
         <SectionTitle>{d.booking.patientInfoTitle}</SectionTitle>
         <div className="space-y-4">
           {/* Name */}
           <div>
-            <label className="mb-1.5 block text-xs font-bold text-[#0B2D5C]" htmlFor="booking-name">
+            <label
+              className="mb-1.5 block text-xs font-bold text-[#0B2D5C]"
+              htmlFor="booking-name"
+            >
               {d.booking.patientNameLabel}
               <span className="ms-1 text-red-500">*</span>
             </label>
@@ -976,7 +1393,10 @@ function BookingForm({
 
           {/* Phone */}
           <div>
-            <label className="mb-1.5 block text-xs font-bold text-[#0B2D5C]" htmlFor="booking-phone">
+            <label
+              className="mb-1.5 block text-xs font-bold text-[#0B2D5C]"
+              htmlFor="booking-phone"
+            >
               {d.booking.phoneLabel}
               <span className="ms-1 text-red-500">*</span>
             </label>
@@ -997,9 +1417,54 @@ function BookingForm({
             <FieldError msg={errors.phone} />
           </div>
 
+          {/* City / area */}
+          <div>
+            <label
+              className="mb-1.5 block text-xs font-bold text-[#0B2D5C]"
+              htmlFor="booking-patient-area"
+            >
+              {patientAreaCopy[locale].label}
+            </label>
+            <input
+              className="min-h-11 w-full rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] px-4 py-2.5 text-sm text-[#0B2D5C] placeholder-[#9AA5B4] focus:border-[#0B2D5C] focus:outline-none focus:ring-2 focus:ring-[#0B2D5C]/15 disabled:cursor-not-allowed disabled:opacity-70"
+              disabled={submitting}
+              id="booking-patient-area"
+              list="booking-patient-area-options"
+              onChange={(e) => {
+                setPatientArea(e.target.value);
+                clearError("patientArea");
+              }}
+              placeholder={patientAreaCopy[locale].placeholder}
+              type="text"
+              value={patientArea}
+            />
+            <datalist id="booking-patient-area-options">
+              {patientAreaOptions.map((area) => (
+                <option key={area} value={area} />
+              ))}
+            </datalist>
+            {patientArea === "أخرى" ? (
+              <input
+                className="mt-2 min-h-11 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm text-[#0B2D5C] placeholder-[#9AA5B4] focus:border-[#0B2D5C] focus:outline-none focus:ring-2 focus:ring-[#0B2D5C]/15 disabled:cursor-not-allowed disabled:opacity-70"
+                disabled={submitting}
+                onChange={(e) => {
+                  setManualPatientArea(e.target.value);
+                  clearError("patientArea");
+                }}
+                placeholder={patientAreaCopy[locale].manualPlaceholder}
+                type="text"
+                value={manualPatientArea}
+              />
+            ) : null}
+            <FieldError msg={errors.patientArea} />
+          </div>
+
           {/* Notes */}
           <div>
-            <label className="mb-1.5 block text-xs font-bold text-[#0B2D5C]" htmlFor="booking-notes">
+            <label
+              className="mb-1.5 block text-xs font-bold text-[#0B2D5C]"
+              htmlFor="booking-notes"
+            >
               {d.booking.notesLabel}
             </label>
             <textarea
@@ -1030,9 +1495,25 @@ function BookingForm({
         type="submit"
       >
         {submitting ? (
-          <svg aria-hidden="true" className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" />
+          <svg
+            aria-hidden="true"
+            className="h-4 w-4 animate-spin"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+            />
+            <path
+              className="opacity-75"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+              fill="currentColor"
+            />
           </svg>
         ) : (
           WA_ICON
@@ -1066,15 +1547,25 @@ const offerSectionLabels = {
   },
 } as const;
 
-function resolveOfferTitle(offer: PublicOffer, locale: SupportedLocale): string {
-  if (locale === "ar") return offer.titleAr || offer.titleEn || offer.titleHe || "";
-  if (locale === "he") return offer.titleHe || offer.titleEn || offer.titleAr || "";
+function resolveOfferTitle(
+  offer: PublicOffer,
+  locale: SupportedLocale,
+): string {
+  if (locale === "ar")
+    return offer.titleAr || offer.titleEn || offer.titleHe || "";
+  if (locale === "he")
+    return offer.titleHe || offer.titleEn || offer.titleAr || "";
   return offer.titleEn || offer.titleAr || offer.titleHe || "";
 }
 
-function resolveOfferBadge(offer: PublicOffer, locale: SupportedLocale): string {
-  if (locale === "ar") return offer.badgeAr || offer.badgeEn || offer.badgeHe || "";
-  if (locale === "he") return offer.badgeHe || offer.badgeEn || offer.badgeAr || "";
+function resolveOfferBadge(
+  offer: PublicOffer,
+  locale: SupportedLocale,
+): string {
+  if (locale === "ar")
+    return offer.badgeAr || offer.badgeEn || offer.badgeHe || "";
+  if (locale === "he")
+    return offer.badgeHe || offer.badgeEn || offer.badgeAr || "";
   return offer.badgeEn || offer.badgeAr || offer.badgeHe || "";
 }
 
@@ -1108,10 +1599,15 @@ function OfferSummaryCard({
         🎁
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-[10px] font-bold uppercase tracking-wide" style={{ color: primaryColor }}>
+        <p
+          className="text-[10px] font-bold uppercase tracking-wide"
+          style={{ color: primaryColor }}
+        >
           {ol.selectedOffer}
         </p>
-        <p className="mt-0.5 truncate text-sm font-bold text-[#0B2D5C]">{title || "—"}</p>
+        <p className="mt-0.5 truncate text-sm font-bold text-[#0B2D5C]">
+          {title || "—"}
+        </p>
         <div className="mt-1 flex flex-wrap items-center gap-2">
           {badge ? (
             <span
@@ -1122,7 +1618,11 @@ function OfferSummaryCard({
             </span>
           ) : null}
           {newPriceNum != null && !Number.isNaN(newPriceNum) ? (
-            <span className="text-xs font-black" style={{ color: primaryColor }} dir="ltr">
+            <span
+              className="text-xs font-black"
+              style={{ color: primaryColor }}
+              dir="ltr"
+            >
               {newPriceNum.toLocaleString()} {offer.currency}
             </span>
           ) : null}
@@ -1144,7 +1644,16 @@ function OfferSummaryCard({
         onClick={onRemove}
         type="button"
       >
-        <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+        <svg
+          aria-hidden="true"
+          className="h-4 w-4"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2"
+          viewBox="0 0 24 24"
+        >
           <path d="M18 6L6 18M6 6l12 12" />
         </svg>
       </button>
@@ -1158,7 +1667,6 @@ function BookingContent({
   locale,
   d,
   offer,
-  offerId,
   onRemoveOffer,
   serviceId,
 }: {
@@ -1167,7 +1675,6 @@ function BookingContent({
   locale: SupportedLocale;
   d: Dictionary;
   offer: PublicOffer | null;
-  offerId?: string;
   onRemoveOffer: () => void;
   serviceId?: string;
 }) {
@@ -1177,8 +1684,12 @@ function BookingContent({
       <SectionCard>
         <CenterSummaryCard center={center} d={d} locale={locale} />
         <div className="mt-4 border-t border-[#E5E7EB] pt-4">
-          <h1 className="text-lg font-bold text-[#0B2D5C]">{d.booking.title}</h1>
-          <p className="mt-1 text-sm leading-6 text-[#66758a]">{d.booking.subtitle}</p>
+          <h1 className="text-lg font-bold text-[#0B2D5C]">
+            {d.booking.title}
+          </h1>
+          <p className="mt-1 text-sm leading-6 text-[#66758a]">
+            {d.booking.subtitle}
+          </p>
         </div>
       </SectionCard>
 
@@ -1215,9 +1726,10 @@ export function BookingPage({
   const { locale, direction } = useLanguage();
   const d = publicCentersDictionaries[locale as SupportedLocale];
   const [center, setCenter] = useState<PublicCenterDetail | null>(null);
-  const [status, setStatus] = useState<"loading" | "ready" | "not-found" | "error">("loading");
+  const [status, setStatus] = useState<
+    "loading" | "ready" | "not-found" | "error"
+  >("loading");
   const [resolvedOffer, setResolvedOffer] = useState<PublicOffer | null>(null);
-  const [activeOfferId, setActiveOfferId] = useState<string | undefined>(initialOfferId);
 
   useEffect(() => {
     let cancelled = false;
@@ -1232,13 +1744,19 @@ export function BookingPage({
         centerName: resolveLocalizedName(data, locale as SupportedLocale),
         centerSlug: data.slug,
       });
-      trackCenterEvent(data.slug, 'VIEW_BOOKING_PAGE', { page: '/book' });
+      trackCenterEvent(data.slug, "VIEW_BOOKING_PAGE", { page: "/book" });
       trackMarketingEvent("StartBooking", {
         centerName: resolveLocalizedName(data, locale as SupportedLocale),
         centerSlug: data.slug,
-        source: initialOfferId ? "offer_card" : initialServiceId ? "service_card" : "booking_page_load",
+        source: initialOfferId
+          ? "offer_card"
+          : initialServiceId
+            ? "service_card"
+            : "booking_page_load",
         ...(initialOfferId ? { offerId: initialOfferId } : {}),
-        ...(initialServiceId && !initialOfferId ? { serviceId: initialServiceId } : {}),
+        ...(initialServiceId && !initialOfferId
+          ? { serviceId: initialServiceId }
+          : {}),
       });
 
       if (initialOfferId) {
@@ -1263,7 +1781,7 @@ export function BookingPage({
     return () => {
       cancelled = true;
     };
-  }, [locale, slug, initialOfferId]);
+  }, [locale, slug, initialOfferId, initialServiceId]);
 
   // Sync browser tab title + center favicon when center loads.
   useEffect(() => {
@@ -1284,7 +1802,11 @@ export function BookingPage({
   return (
     <div className="min-h-screen bg-[#F8FAFC]" dir={direction} lang={locale}>
       <TenantMarketingInjector slug={slug} />
-      <BookingNavbar center={center} locale={locale as SupportedLocale} slug={slug} />
+      <BookingNavbar
+        center={center}
+        locale={locale as SupportedLocale}
+        slug={slug}
+      />
 
       <main className="mx-auto w-full max-w-2xl px-4 py-8 sm:px-6 sm:py-10">
         <Link
@@ -1327,10 +1849,8 @@ export function BookingPage({
               d={d}
               locale={locale as SupportedLocale}
               offer={resolvedOffer}
-              offerId={activeOfferId}
               onRemoveOffer={() => {
                 setResolvedOffer(null);
-                setActiveOfferId(undefined);
               }}
               serviceId={initialServiceId}
               slug={slug}

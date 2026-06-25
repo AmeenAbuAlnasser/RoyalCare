@@ -752,6 +752,13 @@ function formatAdminCenterSummary(
       planCode: string;
       planName: string;
     }>;
+    branding?: {
+      defaultLanguage?: string | null;
+      enabledLanguages?: string[] | null;
+      logoUrl?: string | null;
+      primaryColor?: string | null;
+      secondaryColor?: string | null;
+    } | null;
   },
   usersCount: number,
 ) {
@@ -761,6 +768,15 @@ function formatAdminCenterSummary(
     slug: center.slug,
     status: center.status,
     publicVisible: center.publicVisible,
+    branding: center.branding
+      ? {
+          defaultLanguage: center.branding.defaultLanguage,
+          enabledLanguages: center.branding.enabledLanguages,
+          logoUrl: center.branding.logoUrl,
+          primaryColor: center.branding.primaryColor,
+          secondaryColor: center.branding.secondaryColor,
+        }
+      : null,
     createdAt: center.createdAt,
     usersCount,
     subscriptions: (center.subscriptions ?? []).map((s) => ({
@@ -1051,7 +1067,7 @@ export class CentersService {
   async updateAdminCenterPublicVisibility(
     centerId: string,
     publicVisible: boolean,
-    authorId: string,
+    authorId?: string,
   ) {
     if (!UUID_REGEX.test(centerId)) {
       throw new NotFoundException('Center not found.');
@@ -1424,6 +1440,7 @@ export class CentersService {
         const assignment = await tx.userRole.create({
           data: {
             centerId,
+            providerEnabled: (validation.role ?? 'STAFF') === 'CENTER_OWNER',
             roleId: role.id,
             status: ACTIVE_USER_ROLE_STATUS,
             userId: user.id,
@@ -1495,6 +1512,9 @@ export class CentersService {
         const assignment = await tx.userRole.update({
           where: { id: existingAssignment.id },
           data: {
+            ...(validation.role === 'CENTER_OWNER'
+              ? { providerEnabled: true }
+              : {}),
             roleId: nextRoleId,
             status:
               validation.status && validation.status !== 'ACTIVE'
@@ -1929,8 +1949,33 @@ export class CentersService {
       const latestSubscription = existingCenter.subscriptions[0];
       const oldStatus = latestSubscription?.status ?? null;
       const oldEndDate = latestSubscription?.currentPeriodEnd ?? null;
-      const nextPlan =
-        validation.plan ?? latestSubscription?.planCode ?? 'BASIC';
+      // v2: if planId is provided, resolve Plan from DB and denormalize code/name.
+      // planCode and planName are always written for backwards compatibility.
+      const planFromId = dto.planId
+        ? await tx.plan.findUnique({
+            where: { id: dto.planId },
+            select: { id: true, code: true, nameEn: true },
+          })
+        : null;
+
+      if (dto.planId && !planFromId) {
+        throw new BadRequestException({
+          message: 'Validation failed',
+          errors: { planId: 'No plan found with this id.' },
+        });
+      }
+
+      const nextPlan = planFromId?.code
+        ?? validation.plan
+        ?? latestSubscription?.planCode
+        ?? 'BASIC';
+
+      const nextPlanName = planFromId?.nameEn
+        ?? PLAN_NAMES[nextPlan as keyof typeof PLAN_NAMES]
+        ?? nextPlan;
+
+      const nextPlanId = planFromId?.id ?? null;
+
       const nextStatus =
         validation.status &&
         isAllowedValue(validation.status, MANUAL_SUBSCRIPTION_STATUSES)
@@ -1962,7 +2007,8 @@ export class CentersService {
         expiresAt: nextEndDate,
         gracePeriodEndsAt: null,
         planCode: nextPlan,
-        planName: PLAN_NAMES[nextPlan as keyof typeof PLAN_NAMES] ?? nextPlan,
+        planName: nextPlanName,
+        ...(nextPlanId !== null ? { planId: nextPlanId } : {}),
         status: nextStatus,
       };
 
@@ -2026,8 +2072,7 @@ export class CentersService {
         center,
         centerName: existingCenter.name,
         newEndDate: nextEndDate,
-        newPlanName:
-          PLAN_NAMES[nextPlan as keyof typeof PLAN_NAMES] ?? nextPlan,
+        newPlanName: nextPlanName,
         newStartDate: nextStartDate,
         newStatus: nextStatus,
         oldEndDate,
@@ -2934,6 +2979,7 @@ export class CentersService {
           await tx.userRole.create({
             data: {
               centerId: center.id,
+              providerEnabled: true,
               roleId: role.id,
               userId: adminUser.id,
               status: ACTIVE_USER_ROLE_STATUS,

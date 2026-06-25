@@ -88,6 +88,7 @@ export function PatientFormModal({
 
   const submitLabel =
     mode === "create" ? dictionary.patients.submit : dictionary.patients.update;
+  const optionalLabel = getOptionalLabel(dictionary);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-[#0B2D5C]/45 p-0 sm:items-center sm:justify-center sm:p-4">
@@ -134,7 +135,11 @@ export function PatientFormModal({
               <p className="text-xs text-[#6B7280] md:col-span-2">
                 {dictionary.patients.namesOptionalHint}
               </p>
-              <Field error={errors.fullNameAr} label={dictionary.patients.fullNameAr}>
+              <Field
+                error={errors.fullNameAr}
+                label={dictionary.patients.fullNameAr}
+                optionalLabel={optionalLabel}
+              >
                 <input
                   className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
                   dir="rtl"
@@ -144,7 +149,11 @@ export function PatientFormModal({
                   value={form.fullNameAr}
                 />
               </Field>
-              <Field error={errors.fullNameHe} label={dictionary.patients.fullNameHe}>
+              <Field
+                error={errors.fullNameHe}
+                label={dictionary.patients.fullNameHe}
+                optionalLabel={optionalLabel}
+              >
                 <input
                   className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
                   dir="rtl"
@@ -154,7 +163,11 @@ export function PatientFormModal({
                   value={form.fullNameHe}
                 />
               </Field>
-              <Field error={errors.fullNameEn} label={dictionary.patients.fullNameEn}>
+              <Field
+                error={errors.fullNameEn}
+                label={dictionary.patients.fullNameEn}
+                optionalLabel={optionalLabel}
+              >
                 <input
                   className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
                   dir="ltr"
@@ -181,7 +194,11 @@ export function PatientFormModal({
               value={form.phone}
             />
           </Field>
-          <Field error={errors.email} label={dictionary.patients.email}>
+          <Field
+            error={errors.email}
+            label={dictionary.patients.email}
+            optionalLabel={optionalLabel}
+          >
             <input
               className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
               dir="ltr"
@@ -191,7 +208,11 @@ export function PatientFormModal({
               value={form.email}
             />
           </Field>
-          <Field error={errors.gender} label={dictionary.patients.gender}>
+          <Field
+            error={errors.gender}
+            label={dictionary.patients.gender}
+            optionalLabel={optionalLabel}
+          >
             <select
               className="min-h-11 w-full rounded-md border border-[#D8DEE8] bg-white px-3 text-sm text-[#132238]"
               onChange={(event) =>
@@ -214,6 +235,7 @@ export function PatientFormModal({
           <Field
             error={errors.dateOfBirth}
             label={dictionary.patients.dateOfBirth}
+            optionalLabel={optionalLabel}
           >
             <input
               className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
@@ -224,7 +246,11 @@ export function PatientFormModal({
               value={form.dateOfBirth}
             />
           </Field>
-          <Field error={errors.nationalId} label={dictionary.patients.nationalId}>
+          <Field
+            error={errors.nationalId}
+            label={dictionary.patients.nationalId}
+            optionalLabel={optionalLabel}
+          >
             <input
               className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
               onChange={(event) =>
@@ -233,7 +259,7 @@ export function PatientFormModal({
               value={form.nationalId}
             />
           </Field>
-          <Field error={errors.status} label={dictionary.patients.status}>
+          <Field error={errors.status} label={dictionary.patients.status} required>
             <select
               className="min-h-11 w-full rounded-md border border-[#D8DEE8] bg-white px-3 text-sm text-[#132238]"
               onChange={(event) =>
@@ -254,7 +280,8 @@ export function PatientFormModal({
           <Field
             className="md:col-span-2"
             error={errors.notes}
-            label={dictionary.patients.notes}
+            label={getAdditionalNotesLabel(dictionary)}
+            optionalLabel={optionalLabel}
           >
             <textarea
               className="min-h-28 w-full rounded-md border border-[#D8DEE8] px-3 py-2 text-sm text-[#132238]"
@@ -288,24 +315,46 @@ export function PatientFormModal({
   );
 }
 
+function getOptionalLabel(dictionary: CenterAdminDictionary) {
+  const common = dictionary.common as { optional?: string };
+  if (common.optional) return common.optional;
+  if (dictionary.patients.addPatient === "إضافة مريض") return "اختياري";
+  if (dictionary.patients.addPatient === "הוספת מטופל") return "אופציונלי";
+  return "Optional";
+}
+
+function getAdditionalNotesLabel(dictionary: CenterAdminDictionary) {
+  if (dictionary.patients.notes === "ملاحظات") return "ملاحظات إضافية";
+  if (dictionary.patients.notes === "Notes") return "Additional notes";
+  if (dictionary.patients.notes === "הערות") return "הערות נוספות";
+  return dictionary.patients.notes;
+}
+
 function Field({
   children,
   className = "",
   error,
   label,
+  optionalLabel,
   required = false,
 }: {
   children: ReactNode;
   className?: string;
   error?: string;
   label: string;
+  optionalLabel?: string;
   required?: boolean;
 }) {
   return (
     <label className={`block min-w-0 ${className}`}>
-      <span className="text-sm font-semibold text-[#24364f]">
-        {label}
+      <span className="flex min-w-0 flex-wrap items-baseline gap-1 text-sm font-semibold text-[#24364f]">
+        <span>{label}</span>
         {required ? <span className="text-[#B42318]"> *</span> : null}
+        {!required && optionalLabel ? (
+          <span className="text-xs font-medium text-[#8B98AA]">
+            ({optionalLabel})
+          </span>
+        ) : null}
       </span>
       <span className="mt-2 block">{children}</span>
       {error ? (

@@ -21,10 +21,11 @@ export type ScheduleSlot = {
 type ComputeSlotsParams = {
   centerId: string;
   date: string;
+  durationMinutes?: number;
   excludeAppointmentId?: string;
   excludeBookingRequestId?: string;
   providerId?: string;
-  serviceId: string;
+  serviceId?: string;
 };
 
 const DEFAULT_OPEN_MINUTES = 9 * 60;
@@ -91,32 +92,42 @@ export class ScheduleService {
     if (!date) {
       return {
         date: params.date,
-        serviceId: params.serviceId,
+        serviceId: params.serviceId ?? null,
         slots: [] as ScheduleSlot[],
       };
     }
 
     const prisma = await this.prisma.getClient();
-    const service = await prisma.service.findFirst({
-      where: {
-        archivedAt: null,
-        centerId: params.centerId,
-        id: params.serviceId,
-        isActive: true,
-      },
-      select: {
-        bufferMinutes: true,
-        durationMinutes: true,
-        id: true,
-      },
-    });
 
-    if (!service) {
-      return { date: params.date, serviceId: params.serviceId, slots: [] };
+    let durationMinutes: number;
+    let requestedBufferMinutes = 0;
+    let resolvedServiceId: string | null = null;
+
+    if (params.serviceId) {
+      const service = await prisma.service.findFirst({
+        where: {
+          archivedAt: null,
+          centerId: params.centerId,
+          id: params.serviceId,
+          isActive: true,
+        },
+        select: {
+          bufferMinutes: true,
+          durationMinutes: true,
+          id: true,
+        },
+      });
+
+      if (!service) {
+        return { date: params.date, serviceId: params.serviceId, slots: [] };
+      }
+
+      durationMinutes = service.durationMinutes ?? SLOT_STEP_MINUTES;
+      requestedBufferMinutes = service.bufferMinutes ?? 0;
+      resolvedServiceId = service.id;
+    } else {
+      durationMinutes = params.durationMinutes ?? SLOT_STEP_MINUTES;
     }
-
-    const durationMinutes = service.durationMinutes ?? SLOT_STEP_MINUTES;
-    const requestedBufferMinutes = service.bufferMinutes ?? 0;
     const appointmentEndOffset = durationMinutes + requestedBufferMinutes;
     const dayOfWeek = dayOfWeekByIndex[date.getUTCDay()];
 
@@ -298,7 +309,7 @@ export class ScheduleService {
 
     return {
       date: params.date,
-      serviceId: service.id,
+      serviceId: resolvedServiceId,
       slots,
     };
   }

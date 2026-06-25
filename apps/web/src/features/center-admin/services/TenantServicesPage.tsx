@@ -23,6 +23,110 @@ import {
 } from "./service-display";
 import { hasTenantServicePermission } from "./service-permissions";
 
+type FollowUpLabels = {
+  followUpBadge: string;
+  noFollowUpBadge: string;
+  sessionBasedPlanLabel: string;
+  recurringContinuousLabel: string;
+  templateCountBadge: (count: number) => string;
+  defaultTemplateSummary: (name: string, sessions: number) => string;
+  totalSessionsBadge: (count: number) => string;
+  intervalDaysBadge: (days: number) => string;
+  followUpAutoHint: string;
+};
+
+function ServiceFollowUpBadge({
+  service,
+  locale,
+  l,
+}: {
+  service: TenantService;
+  locale: string;
+  l: FollowUpLabels;
+}) {
+  if (!service.followUpEnabled) {
+    return (
+      <div className="mt-3">
+        <span className="inline-flex items-center rounded-full border border-[#E5E7EB] bg-[#F8FAFC] px-2.5 py-0.5 text-xs font-medium text-[#9CA3AF]">
+          {l.noFollowUpBadge}
+        </span>
+      </div>
+    );
+  }
+
+  const templates = service.treatmentTemplates ?? [];
+  const hasTemplates = templates.length > 0;
+  const defaultTemplate =
+    templates.find((t) => t.isDefault) ?? templates[0] ?? null;
+  const rules = service.followUpRules ?? [];
+
+  const planTypeLabel =
+    service.followUpMode === "RECURRING_CONTINUOUS"
+      ? l.recurringContinuousLabel
+      : l.sessionBasedPlanLabel;
+
+  const templateName = defaultTemplate
+    ? locale === "ar"
+      ? defaultTemplate.nameAr || defaultTemplate.nameEn
+      : locale === "he"
+        ? defaultTemplate.nameHe || defaultTemplate.nameEn
+        : defaultTemplate.nameEn || defaultTemplate.nameAr
+    : null;
+
+  const totalSessions =
+    service.totalRecommendedSessions ??
+    (rules.length > 0
+      ? Math.max(...rules.map((r) => r.toSessionNumber))
+      : null);
+
+  const intervalDays =
+    service.followUpMode === "RECURRING_CONTINUOUS" &&
+    service.recurringIntervalUnit === "DAY"
+      ? service.recurringIntervalValue
+      : (service.defaultIntervalDays ??
+        (rules.length > 0 ? rules[0].intervalDays : null));
+
+  return (
+    <div
+      className="mt-3 min-w-0 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2.5"
+      title={l.followUpAutoHint}
+    >
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+        <span className="inline-flex items-center rounded-full bg-violet-600 px-2.5 py-0.5 text-xs font-semibold text-white">
+          {l.followUpBadge}
+        </span>
+        <span className="inline-flex items-center rounded-full border border-violet-300 bg-white px-2 py-0.5 text-xs font-medium text-violet-700">
+          {planTypeLabel}
+        </span>
+        {hasTemplates && (
+          <span className="inline-flex items-center rounded-full border border-violet-300 bg-white px-2 py-0.5 text-xs font-medium text-violet-700">
+            {l.templateCountBadge(templates.length)}
+          </span>
+        )}
+      </div>
+      {hasTemplates && defaultTemplate && templateName ? (
+        <p className="mt-1.5 break-words text-xs text-violet-700">
+          {l.defaultTemplateSummary(templateName, defaultTemplate.totalSessions)}
+        </p>
+      ) : null}
+      {!hasTemplates && (totalSessions !== null || intervalDays !== null) ? (
+        <div className="mt-1.5 flex min-w-0 flex-wrap gap-x-3 gap-y-0.5">
+          {totalSessions !== null ? (
+            <span className="text-xs text-violet-700">
+              {l.totalSessionsBadge(totalSessions)}
+            </span>
+          ) : null}
+          {intervalDays !== null ? (
+            <span className="text-xs text-violet-700">
+              {l.intervalDaysBadge(intervalDays)}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 type FilterMode = "all" | "active" | "archived";
 
 function normalizeSearch(value: string) {
@@ -336,6 +440,11 @@ export function TenantServicesPage() {
                     <p className="mt-3 line-clamp-2 break-words text-sm leading-6 text-[#66758a]">
                       {description || dictionary.common.notAvailable}
                     </p>
+                    <ServiceFollowUpBadge
+                      l={dictionary.services}
+                      locale={locale}
+                      service={service}
+                    />
                     <dl className="mt-4 grid min-w-0 grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                       <Detail
                         label={dictionary.services.durationMinutes}

@@ -25,6 +25,11 @@ export type PermissionKey =
   | "billing:cancel"
   | "payments:view"
   | "payments:create"
+  | "expenses:view"
+  | "expenses:create"
+  | "expenses:edit"
+  | "expenses:delete"
+  | "expenses:reports"
   | "reports:view"
   | "settings:view"
   | "permissions:view"
@@ -38,6 +43,7 @@ export type PermissionGroup = {
     | "appointments"
     | "billing"
     | "payments"
+    | "expenses"
     | "reports"
     | "settings"
     | "permissions";
@@ -51,6 +57,7 @@ const sectionOrder: PermissionGroup["sectionKey"][] = [
   "appointments",
   "billing",
   "payments",
+  "expenses",
   "reports",
   "settings",
   "permissions",
@@ -81,6 +88,11 @@ const allPermissionKeys: PermissionKey[] = [
   "billing:cancel",
   "payments:view",
   "payments:create",
+  "expenses:view",
+  "expenses:create",
+  "expenses:edit",
+  "expenses:delete",
+  "expenses:reports",
   "reports:view",
   "settings:view",
   "permissions:view",
@@ -110,6 +122,10 @@ const defaultRolePermissions: Record<CenterRoleKey, PermissionKey[]> = {
     "billing:create",
     "payments:view",
     "payments:create",
+    "expenses:view",
+    "expenses:create",
+    "expenses:edit",
+    "expenses:reports",
   ],
   ACCOUNTANT: [
     "staff:view",
@@ -120,6 +136,10 @@ const defaultRolePermissions: Record<CenterRoleKey, PermissionKey[]> = {
     "billing:update",
     "payments:view",
     "payments:create",
+    "expenses:view",
+    "expenses:create",
+    "expenses:edit",
+    "expenses:reports",
   ],
   STAFF: [
     "staff:view",
@@ -171,6 +191,11 @@ export const permKeyToDictKey: Record<PermissionKey, string> = {
   "billing:cancel": "billingMarkPaid",
   "payments:view": "paymentsView",
   "payments:create": "paymentsCreate",
+  "expenses:view": "expensesView",
+  "expenses:create": "expensesCreate",
+  "expenses:edit": "expensesEdit",
+  "expenses:delete": "expensesDelete",
+  "expenses:reports": "expensesReports",
   "patients:view": "patientsView",
   "patients:create": "patientsCreate",
   "patients:update": "patientsUpdate",

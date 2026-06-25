@@ -1,6 +1,11 @@
 import { API_BASE_URL, ApiRequestError } from "./super-admin-centers";
 
 export type InvoiceStatus = "PENDING" | "PARTIAL" | "PAID" | "CANCELLED";
+export type InvoiceSource =
+  | "MANUAL"
+  | "AUTO_APPOINTMENT"
+  | "AUTO_FOLLOW_UP"
+  | "AUTO_RECALCULATION";
 
 export type PaymentMethod = "CASH" | "BANK_TRANSFER" | "CHECK" | "OTHER";
 
@@ -112,6 +117,7 @@ export type TenantInvoice = {
   amount: string;
   currency: string;
   status: InvoiceStatus;
+  source: InvoiceSource;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -190,6 +196,7 @@ export function listTenantInvoices(filters?: {
   search?: string;
   status?: string;
   appointmentId?: string;
+  branchId?: string;
 }) {
   const params = new URLSearchParams();
 
@@ -203,6 +210,10 @@ export function listTenantInvoices(filters?: {
 
   if (filters?.appointmentId) {
     params.set("appointmentId", filters.appointmentId);
+  }
+
+  if (filters?.branchId) {
+    params.set("branchId", filters.branchId);
   }
 
   const queryString = params.toString();
@@ -288,7 +299,36 @@ export type ReportPeriod = "today" | "last7days" | "week" | "month" | "custom";
 export type ReportFilters = {
   period?: ReportPeriod;
   from?: string;
+  openOnly?: boolean;
+  overdueOnly?: boolean;
   to?: string;
+  allUnbilled?: boolean;
+};
+
+export type ReceivablePaymentStatus = "PAID" | "PARTIAL" | "PENDING" | "OVERDUE";
+
+export type ReceivableDetail = {
+  invoiceId: string;
+  invoiceNumber: string | null;
+  patientId: string;
+  patientName: string;
+  patientPhone: string;
+  serviceId: string;
+  serviceName: string;
+  totalAmount: string;
+  paidAmount: string;
+  remainingAmount: string;
+  paymentStatus: ReceivablePaymentStatus;
+  lastPaymentDate: string | null;
+  dueDate: string;
+};
+
+export type TopDebtPatientEntry = {
+  rank: number;
+  patientId: string;
+  patientName: string;
+  patientPhone: string;
+  remainingAmount: string;
 };
 
 export type TenantReportsSummary = {
@@ -313,6 +353,30 @@ export type TenantFinancialReportsResponse = {
     overdueInvoices: number;
     totalPatientCredit: string;
     averageInvoiceValue: string;
+    totalReceivables: string;
+    patientsWithDebt: number;
+    unpaidInvoices: number;
+    partiallyPaidInvoices: number;
+    highestDebt: string;
+    totalExpenses?: string;
+    netProfit?: string;
+    revenueAfterExpenses?: string;
+    profitMargin?: number;
+  };
+  summary?: {
+    revenue: string;
+    expenses?: string;
+    netProfit?: string;
+    revenueAfterExpenses?: string;
+    profitMargin?: number;
+    totalReceivables: string;
+    overdueInvoicesCount: number;
+    unpaidInvoicesCount: number;
+    partiallyPaidInvoicesCount: number;
+    paidInvoicesCount: number;
+    invoiceCountIncluded: number;
+    patientsWithBalanceCount: number;
+    highestDebt: string;
   };
   charts: {
     revenueByDay: Array<{ date: string; amount: string }>;
@@ -325,17 +389,77 @@ export type TenantFinancialReportsResponse = {
       amount: string;
     }>;
     topPatientsBySpending: TopPatientEntry[];
+    receivablesByPaymentStatus?: Array<{ status: ReceivablePaymentStatus; amount: string }>;
+    topPatientsByDebt?: TopDebtPatientEntry[];
+    topDebtors?: TopDebtPatientEntry[];
+    revenueVsReceivables?: Array<{ key: "REVENUE" | "RECEIVABLES"; amount: string }>;
+    expensesByCategory?: Array<{ categoryId: string; name: string; color: string; amount: string }>;
+    expensesByBranch?: Array<{ branchId: string | null; name: string; amount: string }>;
+    revenueVsExpenses?: Array<{ key: "REVENUE" | "EXPENSES" | "NET_PROFIT"; amount: string }>;
+  };
+  expenses?: {
+    total: string;
+    pending: string;
+    count: number;
+    netProfit: string;
+    profitMargin: number;
+  };
+  receivables?: {
+    details: ReceivableDetail[];
+  };
+  reportMeta?: {
+    rangeType: string;
+    startDate: string;
+    endDate: string;
+    invoiceCountIncluded: number;
+    paymentCountIncluded: number;
   };
   currency: string;
   periodStart: string;
   periodEnd: string;
+  operational?: {
+    appointmentsTodayTotal: number;
+    appointmentsTodayCompleted: number;
+    appointmentsTodayUpcoming: number;
+    appointmentsTodayCancelled: number;
+    delayedFollowUps: number;
+    newPatientsThisMonth: number;
+    activeTreatmentPlans: number;
+    completedWithoutInvoiceCount?: number;
+    completedWithoutInvoice?: Array<{
+      id: string;
+      appointmentDate: string;
+      startTime: string;
+      endTime: string;
+      patientId: string;
+      patientName: string;
+      patientPhone: string;
+      serviceId: string | null;
+      serviceNameAr: string | null;
+      serviceNameEn: string | null;
+      serviceNameHe: string | null;
+      providerName: string | null;
+    }>;
+  };
+  appointmentAnalytics?: {
+    totalInPeriod: number;
+    completedInPeriod: number;
+    cancelledInPeriod: number;
+    noShowInPeriod: number;
+    cancellationRatePct: number;
+    noShowRatePct: number;
+    topProviders: Array<{ userId: string; name: string; count: number }>;
+  };
 };
 
 export function getTenantFinancialReports(filters?: ReportFilters) {
   const params = new URLSearchParams();
   if (filters?.period) params.set("period", filters.period);
   if (filters?.from) params.set("from", filters.from);
+  if (filters?.openOnly) params.set("openOnly", "true");
+  if (filters?.overdueOnly) params.set("overdueOnly", "true");
   if (filters?.to) params.set("to", filters.to);
+  if (filters?.allUnbilled) params.set("allUnbilled", "true");
   const qs = params.toString();
   return request<TenantFinancialReportsResponse>(
     `/tenant/reports/financial${qs ? `?${qs}` : ""}`,

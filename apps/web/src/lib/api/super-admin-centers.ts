@@ -46,6 +46,7 @@ export type ApiCenter = {
   branding?: {
     defaultLanguage: ApiLanguage;
     enabledLanguages: ApiLanguage[];
+    logoUrl?: string | null;
     primaryColor?: string | null;
     secondaryColor?: string | null;
   } | null;
@@ -102,6 +103,7 @@ export type CreateCenterPayload = {
   branding: {
     defaultLanguage: ApiLanguage;
     enabledLanguages: ApiLanguage[];
+    logoUrl?: string;
     primaryColor: string;
     secondaryColor: string;
     theme?: Record<string, unknown>;
@@ -507,7 +509,7 @@ export function updateCenterPublicVisibility(
   publicVisible: boolean,
 ) {
   return request<ApiCenter>(
-    `/admin/centers/${centerId}/public-visibility`,
+    `/centers/${centerId}/public-visibility`,
     {
       body: JSON.stringify({ publicVisible }),
       method: "PATCH",

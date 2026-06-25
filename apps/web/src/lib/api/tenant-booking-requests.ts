@@ -10,24 +10,45 @@ export type BookingRequestService = {
   durationMinutes: number | null;
 };
 
+export type BookingRequestBranch = {
+  id: string;
+  name: string;
+  cityAr: string | null;
+  cityEn: string | null;
+  cityHe: string | null;
+  addressAr: string | null;
+  addressEn: string | null;
+  addressHe: string | null;
+  mapsUrl: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+};
+
 export type TenantBookingRequest = {
   id: string;
   centerId: string;
   serviceId: string | null;
+  branchId: string | null;
   appointmentId: string | null;
   fullName: string;
   phone: string;
+  patientArea: string | null;
   notes: string | null;
-  requestedDate: string;
+  requestedDate: string | null;
   requestedTime: string | null;
+  source: "PUBLIC_WEBSITE" | "CUSTOMER_PORTAL" | "ADMIN";
   status: BookingRequestStatus;
   createdAt: string;
   updatedAt: string;
   service: BookingRequestService | null;
+  branch: BookingRequestBranch | null;
   offerId: string | null;
   offerTitle: string | null;
   offerPrice: string | null;
   offerCurrency: string | null;
+  /** Present on list responses: whether this phone already maps to a patient. */
+  patientExists?: boolean;
+  existingPatientId?: string | null;
 };
 
 export type TenantBookingRequestsListResponse = {
@@ -73,12 +94,16 @@ async function request<T>(path: string, init?: RequestInit) {
   return (await response.json()) as T;
 }
 
-export function listTenantBookingRequests(statusFilter?: string) {
-  const params = statusFilter && statusFilter !== "ALL"
-    ? `?status=${encodeURIComponent(statusFilter)}`
-    : "";
+export function listTenantBookingRequests(
+  statusFilter?: string,
+  branchId?: string,
+) {
+  const params = new URLSearchParams();
+  if (statusFilter && statusFilter !== "ALL") params.set("status", statusFilter);
+  if (branchId) params.set("branchId", branchId);
+  const queryString = params.toString();
   return request<TenantBookingRequestsListResponse>(
-    `/tenant/booking-requests${params}`,
+    `/tenant/booking-requests${queryString ? `?${queryString}` : ""}`,
   );
 }
 
@@ -89,9 +114,38 @@ export function acceptTenantBookingRequest(
   return request<TenantBookingRequest>(
     `/tenant/booking-requests/${requestId}/accept`,
     {
-      body: JSON.stringify(
-        patientResolution ? { patientResolution } : {},
-      ),
+      body: JSON.stringify(patientResolution ? { patientResolution } : {}),
+      method: "PATCH",
+    },
+  );
+}
+
+export type BookingRequestConversion = {
+  patientId: string;
+  serviceId: string | null;
+  created: boolean;
+};
+
+/**
+ * Resolves (or creates, deduped by phone) the patient for a SIMPLE_REQUEST so
+ * the appointment can then be created against a real patient.
+ */
+export function prepareBookingRequestConversion(requestId: string) {
+  return request<BookingRequestConversion>(
+    `/tenant/booking-requests/${requestId}/prepare-conversion`,
+    { method: "PATCH" },
+  );
+}
+
+/** Links a freshly created appointment back to the booking request. */
+export function linkBookingRequestAppointment(
+  requestId: string,
+  appointmentId: string,
+) {
+  return request<TenantBookingRequest>(
+    `/tenant/booking-requests/${requestId}/link`,
+    {
+      body: JSON.stringify({ appointmentId }),
       method: "PATCH",
     },
   );

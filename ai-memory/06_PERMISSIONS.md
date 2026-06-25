@@ -1,7 +1,7 @@
 # RoyalCare - Permissions
 
-Last updated: 2026-04-30
-Status: Super Admin RBAC plus tenant login, patients, services, appointments, staff, and billing foundations implemented
+Last updated: 2026-06-14
+Status: Super Admin RBAC plus tenant login, patients, services, appointments, staff, billing, reports, and expenses foundations implemented
 
 ## 1. Permission Goals
 
@@ -268,6 +268,16 @@ Implemented tenant billing enforcement:
 - `billing.mark_paid` is checked before showing the Mark as Paid button.
 - `billing.update` is checked before showing the Cancel Invoice button.
 
+Implemented tenant expenses enforcement:
+- Tenant Expenses endpoints require a valid center staff session cookie.
+- Expense list/overview/detail/category actions derive `centerId` from the session, never from client-supplied input.
+- Canonical expense permission keys are `expenses:view`, `expenses:create`, `expenses:edit`, `expenses:delete`, and `expenses:reports`.
+- Legacy dot keys such as `expenses.view`, `expenses.create`, `expenses.edit`, `expenses.delete`, and `expenses.reports` are normalized on read for compatibility.
+- Tenant sidebar visibility for Expenses is gated by `expenses:view` after permission normalization.
+- `CENTER_OWNER` has all tenant permissions, including expense permissions.
+- `CENTER_MANAGER` has expense permissions by default, including for existing saved role-permission rows through effective permission normalization.
+- `ACCOUNTANT` has `expenses:view`, `expenses:create`, `expenses:edit`, and `expenses:reports` by default.
+
 Dashboard:
 - `dashboard.read`
 
@@ -380,7 +390,7 @@ Center Manager:
 Implemented tenant permission key standard:
 - Use colon keys only for canonical tenant RBAC storage and checks.
 - Legacy dot keys are read through a compatibility normalizer only.
-- Final canonical keys: `patients:view`, `patients:create`, `patients:update`, `patients:status`, `appointments:view`, `appointments:create`, `appointments:update`, `appointments:status`, `appointments:cancel`, `services:view`, `services:create`, `services:update`, `services:archive`, `services:status`, `staff:view`, `staff:create`, `staff:update`, `staff:status`, `billing:view`, `billing:create`, `billing:update`, `billing:cancel`, `payments:view`, `payments:create`, `reports:view`, `settings:view`, `permissions:view`, `permissions:update`.
+- Final canonical keys: `patients:view`, `patients:create`, `patients:update`, `patients:status`, `appointments:view`, `appointments:create`, `appointments:update`, `appointments:status`, `appointments:cancel`, `services:view`, `services:create`, `services:update`, `services:archive`, `services:status`, `staff:view`, `staff:create`, `staff:update`, `staff:status`, `billing:view`, `billing:create`, `billing:update`, `billing:cancel`, `payments:view`, `payments:create`, `expenses:view`, `expenses:create`, `expenses:edit`, `expenses:delete`, `expenses:reports`, `reports:view`, `settings:view`, `permissions:view`, `permissions:update`.
 
 Implemented Tenant Services defaults:
 - `CENTER_OWNER`: all tenant permissions
@@ -406,6 +416,11 @@ Implemented Tenant Billing/Payments defaults:
 - `ACCOUNTANT`: `billing:view`, `billing:create`, `billing:update`, `payments:view`, `payments:create`
 - `RECEPTIONIST`: `billing:view`, `billing:create`, `payments:view`, `payments:create`
 - `DOCTOR`, `STAFF`: `billing:view`, `payments:view`
+
+Implemented Tenant Expenses defaults:
+- `CENTER_OWNER`: all tenant permissions
+- `CENTER_MANAGER`: all tenant permissions, with saved role rows receiving effective expense permissions by default
+- `ACCOUNTANT`: `expenses:view`, `expenses:create`, `expenses:edit`, `expenses:reports`
 
 Receptionist:
 - Customers, appointments, basic dashboard

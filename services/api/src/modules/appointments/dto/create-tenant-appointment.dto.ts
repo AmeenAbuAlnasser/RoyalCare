@@ -1,5 +1,6 @@
 export class CreateTenantAppointmentDto {
   appointmentDate?: string;
+  branchId?: string | null;
   autoCreateNextReminder?: boolean;
   customServiceCurrency?: string | null;
   customServiceDuration?: number | string | null;
@@ -9,6 +10,9 @@ export class CreateTenantAppointmentDto {
   durationMinutes?: number | string;
   endTime?: string;
   followUpEnabled?: boolean;
+  followUpId?: string | null;
+  treatmentTemplateId?: string | null;
+  followUpMode?: 'NONE' | 'SESSION_BASED_PLAN' | 'RECURRING_CONTINUOUS';
   followUpRules?: Array<{
     fromSessionNumber?: number | string;
     toSessionNumber?: number | string;
@@ -19,7 +23,8 @@ export class CreateTenantAppointmentDto {
     toSessionNumber?: number | string;
     intervalDays?: number | string;
   }> | null;
-  followUpType?: 'FIXED_INTERVAL' | 'SESSION_PLAN';
+  recurringIntervalValue?: number | string | null;
+  recurringIntervalUnit?: 'DAY' | 'WEEK' | 'MONTH' | 'YEAR' | null;
   internalNotes?: string | null;
   notes?: string | null;
   patientId?: string;

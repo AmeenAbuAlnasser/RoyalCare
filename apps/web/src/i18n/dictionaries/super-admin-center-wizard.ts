@@ -48,6 +48,9 @@ export type CenterWizardDictionary = {
     selectedLogo: string;
     noLogoSelected: string;
     logoPreviewAlt: string;
+    logoUploaded: string;
+    logoUploadError: string;
+    uploadingLogo: string;
     datePickerHint: string;
     uploadHint: string;
     reviewHint: string;
@@ -249,7 +252,10 @@ export const superAdminCenterWizardDictionaries: Record<
       noLogoSelected: "No logo selected",
       logoPreviewAlt: "Selected center logo preview",
       datePickerHint: "Select day, month, and year. Stored value remains YYYY-MM-DD.",
-      uploadHint: "Choose an image file. This preview is local only and is not uploaded yet.",
+      uploadHint: "Choose an image file. It will be uploaded and saved with the new center.",
+      logoUploaded: "Logo uploaded and ready to save.",
+      logoUploadError: "Logo upload failed.",
+      uploadingLogo: "Uploading...",
       reviewHint: "Review the mock setup before future backend integration.",
       reviewWarning: "Please review all information carefully before creating the center.",
       saveSuccess: "Center created successfully. Redirecting to Centers Management.",
@@ -448,7 +454,10 @@ export const superAdminCenterWizardDictionaries: Record<
       noLogoSelected: "لم يتم اختيار شعار",
       logoPreviewAlt: "معاينة شعار المركز المختار",
       datePickerHint: "اختر اليوم والشهر والسنة. تبقى القيمة المخزنة بصيغة YYYY-MM-DD.",
-      uploadHint: "اختر ملف صورة. المعاينة محلية فقط ولا يتم رفعها حاليا.",
+      uploadHint: "اختر ملف صورة. سيتم رفعه وحفظه مع المركز الجديد.",
+      logoUploaded: "تم رفع الشعار وسيتم حفظه مع المركز.",
+      logoUploadError: "تعذر رفع الشعار.",
+      uploadingLogo: "جار الرفع...",
       reviewHint: "راجع إعدادات المثال قبل ربطها لاحقا بالخلفية.",
       reviewWarning: "يرجى مراجعة جميع المعلومات بعناية قبل إنشاء المركز.",
       saveSuccess: "تم إنشاء المركز بنجاح. جار الانتقال إلى إدارة المراكز.",
@@ -647,7 +656,10 @@ export const superAdminCenterWizardDictionaries: Record<
       noLogoSelected: "לא נבחר לוגו",
       logoPreviewAlt: "תצוגה מקדימה של לוגו המרכז",
       datePickerHint: "בחרו יום, חודש ושנה. הערך נשמר בפורמט YYYY-MM-DD.",
-      uploadHint: "בחרו קובץ תמונה. התצוגה מקומית בלבד ולא נשלחת עדיין.",
+      uploadHint: "בחרו קובץ תמונה. הוא יועלה ויישמר עם המרכז החדש.",
+      logoUploaded: "הלוגו הועלה ומוכן לשמירה.",
+      logoUploadError: "העלאת הלוגו נכשלה.",
+      uploadingLogo: "מעלה...",
       reviewHint: "בדקו את הגדרות הדוגמה לפני חיבור עתידי לשרת.",
       reviewWarning: "יש לבדוק את כל המידע בקפידה לפני יצירת המרכז.",
       saveSuccess: "המרכז נוצר בהצלחה. עוברים לניהול המרכזים.",

@@ -50,13 +50,14 @@ export class TenantAppointmentsController {
     @Query('status') status?: string,
     @Query('date') date?: string,
     @Query('provider') provider?: string,
+    @Query('branch') branch?: string,
   ) {
     const session = await this.getSession(request);
 
     return this.tenantAppointmentsService.list(
       session.center.id,
       session.permissions,
-      { date, provider, search, status },
+      { branch, date, provider, search, status },
     );
   }
 
@@ -92,6 +93,8 @@ export class TenantAppointmentsController {
     @Query('date') date?: string,
     @Query('providerId') providerId?: string,
     @Query('excludeAppointmentId') excludeAppointmentId?: string,
+    @Query('durationMinutes') durationMinutes?: string,
+    @Query('isCustomService') isCustomService?: string,
   ) {
     const session = await this.getSession(request);
 
@@ -102,6 +105,8 @@ export class TenantAppointmentsController {
       date,
       providerId,
       excludeAppointmentId,
+      durationMinutes,
+      isCustomService,
     );
   }
 

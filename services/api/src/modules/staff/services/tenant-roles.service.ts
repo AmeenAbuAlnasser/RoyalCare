@@ -32,6 +32,13 @@ const ROLE_DISPLAY_NAMES: Record<CenterRoleKey, string> = {
 };
 
 const ALL_PERMISSION_KEYS = [...tenantPermissionKeys];
+const EXPENSE_PERMISSION_KEYS = [
+  'expenses:view',
+  'expenses:create',
+  'expenses:edit',
+  'expenses:delete',
+  'expenses:reports',
+] as const;
 
 const DEFAULT_ROLE_PERMISSIONS: Record<CenterRoleKey, TenantPermissionKey[]> = {
   CENTER_OWNER: [...ALL_PERMISSION_KEYS],
@@ -56,6 +63,10 @@ const DEFAULT_ROLE_PERMISSIONS: Record<CenterRoleKey, TenantPermissionKey[]> = {
     'billing:create',
     'payments:view',
     'payments:create',
+    'expenses:view',
+    'expenses:create',
+    'expenses:edit',
+    'expenses:reports',
   ],
   ACCOUNTANT: [
     'staff:view',
@@ -66,6 +77,10 @@ const DEFAULT_ROLE_PERMISSIONS: Record<CenterRoleKey, TenantPermissionKey[]> = {
     'billing:update',
     'payments:view',
     'payments:create',
+    'expenses:view',
+    'expenses:create',
+    'expenses:edit',
+    'expenses:reports',
   ],
   STAFF: [
     'staff:view',
@@ -117,12 +132,16 @@ export class TenantRolesService {
       };
     }
 
+    const storedPermissions = rolePerms.map((rp) => rp.permission.key);
+    const permissions =
+      role.key === 'CENTER_MANAGER'
+        ? [...storedPermissions, ...EXPENSE_PERMISSION_KEYS]
+        : storedPermissions;
+
     return {
       roleId: role.id,
       roleKey: role.key,
-      permissions: normalizeTenantPermissionKeys(
-        rolePerms.map((rp) => rp.permission.key),
-      ),
+      permissions: normalizeTenantPermissionKeys(permissions),
     };
   }
 

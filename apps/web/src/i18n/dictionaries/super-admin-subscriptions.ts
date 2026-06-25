@@ -173,6 +173,8 @@ type SuperAdminSubscriptionsDictionary = {
     notificationsCreated: string;
     auditLogsCreated: string;
     skippedSuspended: string;
+    skippedSuspendedHelperText: string;
+    viewSuspended: string;
     duplicateNotificationsSkipped: string;
     runSuccess: string;
     runError: string;
@@ -416,7 +418,9 @@ export const superAdminSubscriptionsDictionaries: Record<
       updatedExpired: "Expired updated",
       notificationsCreated: "Notifications created",
       auditLogsCreated: "Audit logs",
-      skippedSuspended: "Skipped suspended",
+      skippedSuspended: "Suspended subscriptions skipped",
+      skippedSuspendedHelperText: "Skipped because suspended subscriptions are not changed automatically.",
+      viewSuspended: "View suspended subscriptions",
       duplicateNotificationsSkipped: "Duplicate notifications skipped",
       runSuccess: "Lifecycle job completed successfully.",
       runError: "Lifecycle job failed. Please try again.",
@@ -655,7 +659,9 @@ export const superAdminSubscriptionsDictionaries: Record<
       updatedExpired: "تم تحديث المنتهية",
       notificationsCreated: "الإشعارات المنشأة",
       auditLogsCreated: "سجلات التدقيق",
-      skippedSuspended: "تم تخطي الموقوفة",
+      skippedSuspended: "اشتراكات موقوفة تم تجاهلها",
+      skippedSuspendedHelperText: "تم تجاهلها لأن الاشتراكات الموقوفة لا يتم تعديلها تلقائياً.",
+      viewSuspended: "عرض الاشتراكات الموقوفة",
       duplicateNotificationsSkipped: "إشعارات مكررة تم تخطيها",
       runSuccess: "اكتملت مهمة دورة حياة الاشتراك بنجاح.",
       runError: "فشل تشغيل مهمة دورة حياة الاشتراك. يرجى المحاولة مرة أخرى.",
@@ -894,7 +900,9 @@ export const superAdminSubscriptionsDictionaries: Record<
       updatedExpired: "עודכנו לפג תוקף",
       notificationsCreated: "התראות שנוצרו",
       auditLogsCreated: "רשומות ביקורת",
-      skippedSuspended: "דולגו מושהים",
+      skippedSuspended: "מינויים מושעים שדולגו",
+      skippedSuspendedHelperText: "דולגו כי מינויים מושעים אינם משתנים אוטומטית.",
+      viewSuspended: "הצג מינויים מושעים",
       duplicateNotificationsSkipped: "התראות כפולות דולגו",
       runSuccess: "משימת מחזור החיים הושלמה בהצלחה.",
       runError: "הרצת משימת מחזור החיים נכשלה. נסה שוב.",

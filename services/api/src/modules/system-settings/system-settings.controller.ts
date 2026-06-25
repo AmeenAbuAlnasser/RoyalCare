@@ -2,13 +2,12 @@ import {
   BadRequestException,
   Body,
   Controller,
-  ForbiddenException,
   Get,
-  Headers,
   Patch,
   Post,
   Req,
   UploadedFile,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import type { Request } from 'express';
@@ -17,7 +16,8 @@ import { randomUUID } from 'crypto';
 import { mkdir, writeFile } from 'fs/promises';
 import { join, resolve } from 'path';
 import sharp from 'sharp';
-import { PermissionsService } from '../permissions/services/permissions.service';
+import { RequirePermissions } from '../permissions/decorators/require-permissions.decorator';
+import { PermissionGuard } from '../permissions/guards/permission.guard';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
 import {
   PUBLIC_SYSTEM_SETTING_KEYS,
@@ -47,6 +47,7 @@ const SOCIAL_URL_KEYS = new Set([
 ]);
 const PHONE_KEYS = new Set([
   'whatsapp_support_phone',
+  'public_sales_whatsapp',
   'public_support_phone',
   'public_support_whatsapp',
 ]);
@@ -217,34 +218,6 @@ function validateSettings(settings: SettingEntry[]): void {
   }
 }
 
-async function requireSuperAdminUser(
-  permissionsService: PermissionsService,
-  userId?: string | string[],
-) {
-  const normalizedUserId = Array.isArray(userId) ? userId[0] : userId;
-
-  if (!normalizedUserId) {
-    throw new ForbiddenException({
-      message: 'Permission denied',
-      errors: { role: 'SUPER_ADMIN role is required.' },
-    });
-  }
-
-  const permissionContext =
-    await permissionsService.getUserPermissions(normalizedUserId);
-  const roles = permissionContext.roles as Array<{ key: string }>;
-  const isSuperAdmin = roles.some((role) => role.key === 'super_admin');
-
-  if (!permissionContext.user || !isSuperAdmin) {
-    throw new ForbiddenException({
-      message: 'Permission denied',
-      errors: { role: 'SUPER_ADMIN role is required.' },
-    });
-  }
-
-  return permissionContext.user;
-}
-
 function getPublicBrandingUploadDir(): string {
   return resolve(
     process.cwd(),
@@ -259,31 +232,18 @@ function getPublicBrandingUploadDir(): string {
 }
 
 @Controller('admin/settings')
+@UseGuards(PermissionGuard)
+@RequirePermissions('manage:settings')
 export class SystemSettingsController {
-  constructor(
-    private readonly settingsService: SystemSettingsService,
-    private readonly permissionsService: PermissionsService,
-  ) {}
-
-  private async requireSuperAdmin(userId?: string | string[]) {
-    return requireSuperAdminUser(this.permissionsService, userId);
-  }
+  constructor(private readonly settingsService: SystemSettingsService) {}
 
   @Get()
-  async getAll(
-    @Headers('x-royalcare-super-admin-user-id') superAdminUserId?: string,
-  ) {
-    await this.requireSuperAdmin(superAdminUserId);
+  async getAll() {
     return { settings: await this.settingsService.getAll() };
   }
 
   @Patch()
-  async update(
-    @Body() dto: UpdateSettingsDto,
-    @Headers('x-royalcare-super-admin-user-id') superAdminUserId?: string,
-  ) {
-    await this.requireSuperAdmin(superAdminUserId);
-
+  async update(@Body() dto: UpdateSettingsDto) {
     if (!Array.isArray(dto?.settings) || dto.settings.length === 0) {
       throw new BadRequestException({
         message: 'Validation failed',
@@ -314,23 +274,21 @@ export class SystemSettingsController {
 }
 
 @Controller('admin/uploads')
+@UseGuards(PermissionGuard)
+@RequirePermissions('manage:settings')
 export class AdminUploadsController {
-  constructor(private readonly permissionsService: PermissionsService) {}
-
   @Post('public-image')
   @UseInterceptors(
     FileInterceptor('file', { limits: { fileSize: MULTER_MAX_BYTES } }),
   )
   async uploadPublicImage(
     @UploadedFile() file: UploadedPublicImageFile | undefined,
-    @Headers('x-royalcare-super-admin-user-id') superAdminUserId?: string,
     @Req() req?: Request,
   ) {
     console.log('UPLOAD HIT');
     console.log('[upload:public-image] headers:', {
       origin: req?.headers?.['origin'],
       contentType: req?.headers?.['content-type'],
-      superAdminUserId: req?.headers?.['x-royalcare-super-admin-user-id'],
     });
     console.log('[upload:public-image] received file:', {
       originalname: file?.originalname ?? null,
@@ -338,8 +296,6 @@ export class AdminUploadsController {
       size: file?.size ?? null,
       hasBuffer: !!file?.buffer,
     });
-
-    await requireSuperAdminUser(this.permissionsService, superAdminUserId);
 
     if (!file?.buffer) {
       throw new BadRequestException({
@@ -449,5 +405,26 @@ export class PublicSystemSettingsController {
   @Get()
   async getPublicSettings() {
     return { settings: await this.settingsService.getPublicSettings() };
+  }
+}
+
+@Controller('public/platform-contact')
+export class PublicPlatformContactController {
+  constructor(private readonly settingsService: SystemSettingsService) {}
+
+  @Get()
+  async getPlatformContact() {
+    const salesNumber = await this.settingsService.getSetting(
+      'public_sales_whatsapp',
+    );
+    const supportWhatsapp = await this.settingsService.getSetting(
+      'public_support_whatsapp',
+    );
+    const supportPhone =
+      await this.settingsService.getSetting('public_support_phone');
+
+    return {
+      salesWhatsappNumber: salesNumber || supportWhatsapp || supportPhone || '',
+    };
   }
 }

@@ -14,59 +14,42 @@ import {
   type PublicCenterType,
 } from "@/lib/api/public-centers";
 import {
+  getPlatformContact,
   getPublicSystemSettings,
   type SystemSetting,
 } from "@/lib/api/system-settings";
-import {
-  getPublicFeaturedServices,
-  type FeaturedService,
-} from "@/lib/api/featured-services";
 import { trackPlatformEvent } from "@/lib/marketing/platform-track";
 import { PublicFooter } from "./PublicFooter";
 import { PublicHeader } from "./PublicHeader";
+import { publicPricingDictionaries } from "@/i18n/dictionaries/public-pricing";
+import {
+  listPublicPlans,
+  type ApiPlanFeature,
+  type PublicPlan,
+} from "@/lib/api/super-admin-plans";
+import {
+  buildPricingWhatsAppMessage,
+  buildPricingWhatsAppUrl,
+  getPublicFeatureName,
+  getPublicPlanName,
+} from "@/features/public/pricing/pricing-whatsapp";
 
 type Dictionary = (typeof publicCentersDictionaries)["en"];
 
-const serviceVisuals = [
-  "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=900&q=80",
-  "https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=900&q=80",
-  "https://images.unsplash.com/photo-1600334129128-685c5582fd35?auto=format&fit=crop&w=900&q=80",
-  "https://images.unsplash.com/photo-1512290923902-8a9f81dc236c?auto=format&fit=crop&w=900&q=80",
-  "https://images.unsplash.com/photo-1556228578-8c89e6adf883?auto=format&fit=crop&w=900&q=80",
-  "https://images.unsplash.com/photo-1606811971618-4486d14f3f99?auto=format&fit=crop&w=900&q=80",
-];
-
-
 function resolveLocalizedName(
   center: Pick<PublicCenterSummary, "name" | "nameAr" | "nameEn" | "nameHe">,
-  locale: SupportedLocale,
+  _locale: SupportedLocale,
 ): string {
-  if (locale === "ar") return center.nameAr || center.nameEn || center.name;
-  if (locale === "he") return center.nameHe || center.nameEn || center.name;
-  return center.nameEn || center.name;
+  return center.name || center.nameEn || center.nameAr || center.nameHe || "";
 }
 
 function resolveServiceName(
   service: { nameEn: string; nameAr: string; nameHe: string },
-  locale: SupportedLocale,
+  _locale: SupportedLocale,
 ): string {
-  if (locale === "ar") return service.nameAr || service.nameEn;
-  if (locale === "he") return service.nameHe || service.nameEn;
   return service.nameEn || service.nameAr || service.nameHe;
 }
 
-function resolveFeaturedServiceTitle(
-  service: FeaturedService,
-  locale: SupportedLocale,
-): string {
-  const fallback =
-    locale === "ar" ? "خدمة جديدة" : locale === "he" ? "שירות חדש" : "New Service";
-  if (locale === "ar")
-    return service.titleAr || service.titleEn || service.titleHe || fallback;
-  if (locale === "he")
-    return service.titleHe || service.titleEn || service.titleAr || fallback;
-  return service.titleEn || service.titleAr || service.titleHe || fallback;
-}
 
 function normalizeSearch(value: string) {
   return value.trim().toLowerCase();
@@ -291,14 +274,14 @@ function CenterCard({
     >
       <article className="flex h-full min-w-0 flex-col rounded-2xl border border-[#E3E8EF] bg-white shadow-[0_8px_24px_rgba(11,45,92,0.08)] transition duration-200 group-hover:-translate-y-1.5 group-hover:border-[#C8A45D]/50 group-hover:shadow-[0_24px_52px_rgba(11,45,92,0.15)]">
 
-        {/* Outer wrapper — relative so logo can hang below image without being clipped */}
+        {/* Outer wrapper - relative so logo can hang below image without being clipped */}
         <div className="relative">
 
-          {/* Image — 16:9, own overflow-hidden so hover scale is contained */}
+          {/* Image - 16:9, own overflow-hidden so hover scale is contained */}
           <div className="relative aspect-video overflow-hidden rounded-t-2xl">
             {/* Elegant gradient fallback */}
             <div className={`absolute inset-0 bg-gradient-to-br ${gradient}`} />
-            {/* Center monogram — shown only when no cover image, no ugly icon */}
+            {/* Center monogram - shown only when no cover image, no ugly icon */}
             {!hasCover && (
               <div className="absolute inset-0 flex items-center justify-center select-none">
                 <span className="text-8xl font-black text-white/[0.08]">{initials}</span>
@@ -309,6 +292,8 @@ function CenterCard({
               <img
                 alt=""
                 className={`absolute inset-0 h-full w-full object-cover object-center transition duration-500 group-hover:scale-105 ${imgFailed ? "opacity-0" : ""}`}
+                decoding="async"
+                loading="lazy"
                 onError={() => setImgFailed(true)}
                 src={brandingCover}
               />
@@ -316,12 +301,12 @@ function CenterCard({
             {/* Scrim for legibility */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/8 to-transparent" />
 
-            {/* Type badge — top start */}
+            {/* Type badge - top start */}
             <div className="absolute start-3 top-3">
               <CenterTypeBadge label={d.centerTypes[center.type]} type={center.type} />
             </div>
 
-            {/* Rating badge — top end */}
+            {/* Rating badge - top end */}
             <div className="absolute end-3 top-3">
               <span className="inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-xs font-black text-[#0B2D5C] shadow">
                 <span className="text-[#C8A45D]">★</span>
@@ -330,12 +315,14 @@ function CenterCard({
             </div>
           </div>
 
-          {/* Logo — absolute on the outer wrapper (no overflow-hidden here), never clipped */}
+          {/* Logo - absolute on the outer wrapper (no overflow-hidden here), never clipped */}
           <div className="absolute bottom-0 start-4 z-10 translate-y-1/2">
             {center.branding?.logoUrl ? (
               <img
                 alt={displayName}
                 className="h-14 w-14 rounded-xl border-2 border-white bg-white object-contain p-1 shadow-lg"
+                decoding="async"
+                loading="lazy"
                 src={center.branding.logoUrl}
               />
             ) : (
@@ -346,12 +333,12 @@ function CenterCard({
           </div>
         </div>
 
-        {/* Body — pt-10 reserves 40px above content so the 56px logo (half = 28px) has breathing room */}
+        {/* Body - pt-10 reserves 40px above content so the 56px logo (half = 28px) has breathing room */}
         <div className="flex flex-1 flex-col gap-3 px-4 pb-4 pt-10">
 
           {/* Name + city */}
           <div className="min-w-0">
-            {/* min-h-[2.75rem] = 2 lines × text-base leading-snug (1.375 × 1rem × 2) */}
+            {/* min-h-[2.75rem] = 2 lines x text-base leading-snug (1.375 x 1rem x 2) */}
             <h3 className="line-clamp-2 min-h-[2.75rem] text-base font-black leading-snug text-[#0B2D5C]">
               {displayName}
             </h3>
@@ -371,7 +358,7 @@ function CenterCard({
             </div>
           </div>
 
-          {/* Services count + next-available pills — flex-nowrap keeps this row single-line */}
+          {/* Services count + next-available pills - flex-nowrap keeps this row single-line */}
           <div className="flex min-w-0 flex-nowrap gap-2 overflow-hidden">
             <span className="inline-flex items-center rounded-full border border-[#E3E8EF] bg-[#F8FAFC] px-3 py-1 text-xs font-bold text-[#0B2D5C]">
               {formatNumber(center.services.length)}&nbsp;{d.landing.servicesCount}
@@ -387,7 +374,7 @@ function CenterCard({
             </span>
           </div>
 
-          {/* Service chips — flex-nowrap + overflow-hidden = exactly one row, always same height */}
+          {/* Service chips - flex-nowrap + overflow-hidden = exactly one row, always same height */}
           <div className="flex min-w-0 flex-nowrap gap-1.5 overflow-hidden">
             {serviceChips.length > 0 ? (
               <>
@@ -415,7 +402,7 @@ function CenterCard({
             )}
           </div>
 
-          {/* CTA — div styled as button; no nested <a> inside the parent Link */}
+          {/* CTA - div styled as button; no nested <a> inside the parent Link */}
           <div className={buttonClassName("primary", "md", "pointer-events-none mt-auto w-full justify-center")}>
             {d.landing.bookCta}
           </div>
@@ -425,13 +412,218 @@ function CenterCard({
   );
 }
 
+function getPreviewPlans(plans: PublicPlan[]) {
+  const byCode = new Map(plans.map((plan) => [plan.code.toUpperCase(), plan]));
+  const preferred = ["BASIC", "PROFESSIONAL", "ENTERPRISE"]
+    .map((code) => byCode.get(code))
+    .filter((plan): plan is PublicPlan => Boolean(plan));
+
+  if (preferred.length === 3) return preferred;
+  return [...plans].sort((a, b) => a.displayOrder - b.displayOrder).slice(0, 3);
+}
+
+function PricingPreviewSection({
+  locale,
+  plans,
+  salesWhatsappNumber,
+  text,
+}: {
+  locale: SupportedLocale;
+  plans: PublicPlan[];
+  salesWhatsappNumber: string;
+  text: Dictionary["landing"];
+}) {
+  if (plans.length === 0) return null;
+
+  const pricingCopy = publicPricingDictionaries[locale];
+  const previewPlans = getPreviewPlans(plans);
+
+  return (
+    <section className="bg-[#F8F7F4] py-14 sm:py-20">
+      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
+        <div className="mb-8 flex min-w-0 flex-col gap-5 md:flex-row md:items-end md:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-widest text-[#C8A45D]">
+              {text.pricingPreviewEyebrow}
+            </p>
+            <h2 className="mt-3 text-3xl font-black leading-tight text-[#0B2D5C] sm:text-4xl">
+              {text.pricingPreviewTitle}
+            </h2>
+            <p className="mt-4 max-w-2xl text-base leading-8 text-[#66758a]">
+              {text.pricingPreviewSubtitle}
+            </p>
+          </div>
+          <Link
+            className={buttonClassName(
+              "secondary",
+              "md",
+              "w-full justify-center border-[#0B2D5C] bg-white text-[#0B2D5C] shadow-[0_10px_26px_rgba(11,45,92,0.06)] hover:border-[#C8A45D] hover:bg-[#C8A45D] hover:text-[#071F3F] md:w-auto",
+            )}
+            href="/pricing"
+          >
+            {text.pricingPreviewFullDetails}
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-1 items-stretch gap-6 md:grid-cols-3 lg:gap-8">
+          {previewPlans.map((plan) => {
+            const isProfessional = plan.code.toUpperCase() === "PROFESSIONAL";
+            const isHighlighted = plan.isPopular || isProfessional;
+            const features = ((plan.features as ApiPlanFeature[] | null) ?? [])
+              .filter((feature) => feature.included)
+              .slice(0, 4);
+            const message = buildPricingWhatsAppMessage(
+              plan,
+              pricingCopy.whatsapp,
+            );
+            const whatsappHref = salesWhatsappNumber
+              ? buildPricingWhatsAppUrl(salesWhatsappNumber, message)
+              : null;
+
+            return (
+              <article
+                className={`relative flex min-w-0 flex-col overflow-hidden rounded-[1.35rem] border bg-white p-6 shadow-[0_16px_44px_rgba(11,45,92,0.08)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_24px_58px_rgba(11,45,92,0.13)] sm:p-7 ${
+                  isHighlighted
+                    ? "border-[#C8A45D]/80 bg-[linear-gradient(135deg,#FFF8E8_0%,#FFFFFF_52%)] shadow-[0_28px_72px_rgba(11,45,92,0.16),0_0_42px_rgba(200,164,93,0.22)] md:-mt-4 md:scale-[1.03]"
+                    : plan.isContactPricing
+                      ? "border-[#0B2D5C]/20 bg-[linear-gradient(135deg,#F7F9FC_0%,#FFFFFF_62%)]"
+                      : "border-[#E3E8EF] bg-[linear-gradient(135deg,#FFFFFF_0%,#FBFAF7_100%)]"
+                }`}
+                key={plan.id}
+              >
+                {isHighlighted ? (
+                  <span className="mb-5 w-max rounded-full border border-[#C8A45D]/35 bg-[#071F3F] px-3.5 py-1.5 text-xs font-black text-[#F6E6B8] shadow-[0_10px_26px_rgba(7,31,63,0.24)]">
+                    {pricingCopy.plans.popular}
+                  </span>
+                ) : null}
+                <h3 className="text-2xl font-black leading-tight text-[#0B2D5C]">
+                  {getPublicPlanName(plan, locale)}
+                </h3>
+                <div className="mt-5 min-h-20">
+                  {plan.isContactPricing ? (
+                    <div className="rounded-2xl border border-[#C8A45D]/35 bg-white/75 px-4 py-4">
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-[#8A6A25]">
+                        {pricingCopy.plans.customPricing}
+                      </p>
+                      <p className="mt-2 text-3xl font-black leading-none text-[#0B2D5C]">
+                        {pricingCopy.plans.contactPricing}
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="flex flex-wrap items-end gap-2">
+                      <span className="text-5xl font-black leading-none text-[#0B2D5C]">
+                        {plan.yearlyPrice}
+                      </span>
+                      <span className="pb-1 text-sm font-black uppercase tracking-[0.12em] text-[#8A6A25]">
+                        {plan.currency}
+                      </span>
+                      </p>
+                      <span className="mt-2 block text-sm font-semibold text-[#66758a]">
+                        {pricingCopy.plans.perYear}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <ul className="mt-5 flex-1 space-y-3">
+                  {features.map((feature) => (
+                    <li
+                      className="flex min-w-0 items-start gap-3 text-sm font-semibold leading-6 text-[#526176]"
+                      key={feature.key}
+                    >
+                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[#C8A45D]/25 bg-[#FFF7E6] text-xs font-black text-[#0B2D5C]">
+                        ✓
+                      </span>
+                      <span className="min-w-0">
+                        {getPublicFeatureName(feature, locale)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-7">
+                  {whatsappHref ? (
+                    <a
+                      className="inline-flex min-h-12 w-full items-center justify-center rounded-xl border-2 border-[#0B2D5C] bg-[#0B2D5C] px-4 text-sm font-black text-white shadow-[0_12px_30px_rgba(11,45,92,0.14)] transition hover:border-[#C8A45D] hover:bg-[#C8A45D] hover:text-[#071F3F] focus:outline-none focus:ring-3 focus:ring-[#C8A45D]/30"
+                      href={whatsappHref}
+                      onClick={() =>
+                        trackPlatformEvent("PricingPlanWhatsAppClick", {
+                          isContactPricing: plan.isContactPricing,
+                          planCode: plan.code,
+                          planId: plan.id,
+                          planName: plan.nameEn,
+                        })
+                      }
+                      rel="noopener noreferrer"
+                      target="_blank"
+                    >
+                      {text.pricingPreviewWhatsappCta}
+                    </a>
+                  ) : (
+                    <button
+                      className="inline-flex min-h-12 w-full cursor-not-allowed items-center justify-center rounded-xl bg-slate-100 px-4 text-sm font-black text-slate-400"
+                      disabled
+                      type="button"
+                    >
+                      {text.pricingPreviewWhatsappCta}
+                    </button>
+                  )}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function WhyRoyalCareSection({ text }: { text: Dictionary["landing"] }) {
+  return (
+    <section className="bg-white py-14 sm:py-20">
+      <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
+        <div className="mb-9 max-w-2xl">
+          <p className="text-xs font-bold uppercase tracking-widest text-[#C8A45D]">
+            RoyalCare
+          </p>
+          <h2 className="mt-3 text-3xl font-black leading-tight text-[#0B2D5C] sm:text-4xl">
+            {text.whyRoyalCareTitle}
+          </h2>
+          <p className="mt-4 text-base leading-8 text-[#66758a]">
+            {text.whyRoyalCareSubtitle}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {text.whyRoyalCareBenefits.map((benefit, index) => (
+            <article
+              className="group min-w-0 rounded-2xl border border-[#E3E8EF] bg-white p-6 shadow-[0_12px_34px_rgba(11,45,92,0.06)] transition duration-200 hover:-translate-y-1 hover:border-[#C8A45D]/45 hover:shadow-[0_22px_50px_rgba(11,45,92,0.11)]"
+              key={benefit.title}
+            >
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#C8A45D]/25 bg-[#F8F7F4] text-sm font-black text-[#0B2D5C] transition group-hover:bg-[#0B2D5C] group-hover:text-white">
+                {String(index + 1).padStart(2, "0")}
+              </div>
+              <h3 className="mt-5 text-lg font-black text-[#0B2D5C]">
+                {benefit.title}
+              </h3>
+              <p className="mt-3 text-sm leading-7 text-[#66758a]">
+                {benefit.description}
+              </p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function CentersDirectoryPage() {
   const { locale, direction } = useLanguage();
   const activeLocale = locale as SupportedLocale;
   const d = publicCentersDictionaries[activeLocale];
   const [centers, setCenters] = useState<PublicCenterSummary[]>([]);
   const [publicSettings, setPublicSettings] = useState<SystemSetting[]>([]);
-  const [featuredServices, setFeaturedServices] = useState<FeaturedService[]>([]);
+  const [publicPlans, setPublicPlans] = useState<PublicPlan[]>([]);
+  const [salesWhatsappNumber, setSalesWhatsappNumber] = useState("");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
 
@@ -476,11 +668,14 @@ export function CentersDirectoryPage() {
 
   useEffect(() => {
     let cancelled = false;
-    void getPublicFeaturedServices()
-      .then((data) => {
-        if (!cancelled) setFeaturedServices(data);
-      })
-      .catch(() => undefined);
+    void Promise.all([
+      listPublicPlans().catch(() => []),
+      getPlatformContact().catch(() => ({ salesWhatsappNumber: "" })),
+    ]).then(([plans, contact]) => {
+      if (cancelled) return;
+      setPublicPlans([...plans].sort((a, b) => a.displayOrder - b.displayOrder));
+      setSalesWhatsappNumber(contact.salesWhatsappNumber ?? "");
+    });
     return () => {
       cancelled = true;
     };
@@ -540,16 +735,17 @@ export function CentersDirectoryPage() {
 
       <main className="min-w-0">
         <section className="relative overflow-hidden bg-[#061B35]">
-          {/* Background: image overlay + multi-layer gradient + gold accent orbs */}
+          {/* Background: image overlay + multi-layer gradient */}
           <div className="absolute inset-0">
             <img
               alt=""
               className="h-full w-full object-cover opacity-[0.17]"
+              decoding="async"
+              fetchPriority="high"
               src={heroImageUrl}
             />
-            <div className="absolute inset-0 bg-gradient-to-br from-[#061B35] via-[#0B2D5C]/97 to-[#091A2E]" />
-            <div className="absolute -end-24 -top-24 h-96 w-96 rounded-full bg-[#C8A45D]/8 blur-3xl" />
-            <div className="absolute -start-16 bottom-0 h-72 w-72 rounded-full bg-[#C8A45D]/6 blur-3xl" />
+            <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(6,27,53,0.98)_0%,rgba(11,45,92,0.97)_54%,rgba(7,31,63,0.98)_100%)]" />
+            <div className="absolute inset-x-0 top-0 h-40 bg-[linear-gradient(180deg,rgba(200,164,93,0.14),transparent)]" />
           </div>
 
           <div className="relative mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 sm:py-20 lg:py-28">
@@ -623,7 +819,7 @@ export function CentersDirectoryPage() {
                   </a>
                 </div>
 
-                {/* Owner link — less prominent */}
+                {/* Owner link - less prominent */}
                 <p className="mt-5 text-xs text-white/45">
                   <Link
                     className="underline underline-offset-2 transition hover:text-white/70"
@@ -641,6 +837,8 @@ export function CentersDirectoryPage() {
                     <img
                       alt=""
                       className="h-52 w-full object-cover sm:h-64 lg:h-72"
+                      decoding="async"
+                      fetchPriority="high"
                       src={heroImageUrl}
                     />
                   </div>
@@ -668,6 +866,15 @@ export function CentersDirectoryPage() {
             </div>
           </div>
         </section>
+
+        <PricingPreviewSection
+          locale={activeLocale}
+          plans={publicPlans}
+          salesWhatsappNumber={salesWhatsappNumber}
+          text={d.landing}
+        />
+
+        <WhyRoyalCareSection text={d.landing} />
 
         {/* === How It Works === */}
         <section className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6 sm:py-16" id="how-it-works">
@@ -732,75 +939,6 @@ export function CentersDirectoryPage() {
                 <p className="mt-2 text-sm font-semibold text-white/70">{d.landing.heroStatBookingLabel}</p>
               </div>
             </div>
-          </div>
-        </section>
-
-        <section className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6" id="how-it-works-services">
-          <div className="mb-5 min-w-0">
-            <p className="text-xs font-bold uppercase text-[#C8A45D]">
-              {d.landing.featuredServicesEyebrow}
-            </p>
-            <h2 className="mt-2 text-2xl font-black text-[#0B2D5C] sm:text-3xl">
-              {d.landing.featuredServicesTitle}
-            </h2>
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {featuredServices.length > 0
-              ? featuredServices.map((service, index) => {
-                  const localTitle = resolveFeaturedServiceTitle(
-                    service,
-                    activeLocale,
-                  );
-                  const visual =
-                    service.imageUrl ||
-                    serviceVisuals[index % serviceVisuals.length];
-                  return (
-                    <a
-                      className="group relative min-h-48 overflow-hidden rounded-2xl bg-[#0B2D5C] shadow-[0_14px_36px_rgba(11,45,92,0.10)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_22px_50px_rgba(11,45,92,0.16)]"
-                      href="#featured-centers"
-                      key={service.id}
-                      onClick={() => setQuery(localTitle)}
-                    >
-                      <img
-                        alt=""
-                        className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105"
-                        src={visual}
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-[#0B2D5C]/82 via-[#0B2D5C]/24 to-transparent" />
-                      <div className="absolute bottom-0 w-full p-5">
-                        <h3 className="text-2xl font-black text-white">
-                          {localTitle}
-                        </h3>
-                        <p className="mt-2 text-sm font-semibold text-white/80">
-                          {d.landing.exploreService}
-                        </p>
-                      </div>
-                    </a>
-                  );
-                })
-              : d.landing.featuredServices.map((service, index) => (
-                  <a
-                    className="group relative min-h-48 overflow-hidden rounded-2xl bg-[#0B2D5C] shadow-[0_14px_36px_rgba(11,45,92,0.10)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_22px_50px_rgba(11,45,92,0.16)]"
-                    href="#featured-centers"
-                    key={service}
-                    onClick={() => setQuery(service)}
-                  >
-                    <img
-                      alt=""
-                      className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105"
-                      src={serviceVisuals[index % serviceVisuals.length]}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#0B2D5C]/82 via-[#0B2D5C]/24 to-transparent" />
-                    <div className="absolute bottom-0 w-full p-5">
-                      <h3 className="text-2xl font-black text-white">
-                        {service}
-                      </h3>
-                      <p className="mt-2 text-sm font-semibold text-white/80">
-                        {d.landing.exploreService}
-                      </p>
-                    </div>
-                  </a>
-                ))}
           </div>
         </section>
 
@@ -951,26 +1089,26 @@ export function CentersDirectoryPage() {
           </div>
         </section>
 
-        <section className="bg-[#0B2D5C] py-10 text-white sm:py-14" id="faq">
+        <section className="bg-[#EEF4F8] py-14 text-[#0B2D5C] sm:py-20" id="faq">
           <div className="mx-auto grid w-full max-w-6xl gap-6 px-4 sm:px-6 lg:grid-cols-2">
             <div>
-              <p className="text-xs font-bold uppercase text-[#D8BD7A]">
+              <p className="text-xs font-bold uppercase tracking-widest text-[#C8A45D]">
                 {d.landing.faqEyebrow}
               </p>
-              <h2 className="mt-2 text-2xl font-black sm:text-3xl">
+              <h2 className="mt-3 text-3xl font-black leading-tight sm:text-4xl">
                 {d.landing.faqTitle}
               </h2>
             </div>
             <div className="space-y-3">
               {d.landing.faq.map((item) => (
                 <details
-                  className="group rounded-2xl border border-white/15 bg-white/8 p-4 open:bg-white/12"
+                  className="group rounded-2xl border border-[#DDE6EF] bg-white/80 p-5 shadow-[0_12px_34px_rgba(11,45,92,0.06)] transition open:border-[#C8A45D]/45 open:bg-white"
                   key={item.question}
                 >
                   <summary className="cursor-pointer list-none text-sm font-black">
                     {item.question}
                   </summary>
-                  <p className="mt-3 text-sm leading-7 text-white/78">
+                  <p className="mt-3 text-sm leading-7 text-[#66758a]">
                     {item.answer}
                   </p>
                 </details>

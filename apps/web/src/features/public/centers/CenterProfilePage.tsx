@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { TenantMarketingInjector } from "@/components/marketing/TenantMarketingInjector";
 import { AdminState } from "@/components/ui/admin-surfaces";
+import { BeforeAfterPair } from "@/components/ui/before-after-pair";
 import { useLanguage } from "@/i18n/LanguageProvider";
 import { publicCentersDictionaries } from "@/i18n/dictionaries/public-centers";
 import type { SupportedLocale } from "@/i18n/locales";
@@ -22,6 +23,7 @@ import {
   type PublicServiceFull,
   type PublicTeamMember,
   type PublicOffer,
+  type PublicCenterBranch,
 } from "@/lib/api/public-centers";
 import { trackMarketingEvent } from "@/lib/marketing/track-event";
 import { trackCenterEvent } from "@/lib/marketing/track-center-event";
@@ -77,6 +79,8 @@ const fallbackLabels = {
   en: {
     aboutNav: "About",
     bookNow: "Book Now",
+    branchMain: "Main branch",
+    branchesTitle: "Branches & Contact",
     callButton: "Call",
     contactTitle: "Contact",
     homeNav: "Home",
@@ -140,6 +144,8 @@ const centerWebsiteLabels = {
     about: "About",
     aboutIntro: "Learn more about the center, its approach, and the information visitors need before booking.",
     bookNow: "Book Now",
+    branchMain: "Main branch",
+    branchesTitle: "Branches & Contact",
     callButton: "Call",
     centerInfo: "Center Info",
     contact: "Contact",
@@ -166,6 +172,8 @@ const centerWebsiteLabels = {
     about: "عن المركز",
     aboutIntro: "تعرّف على المركز وخدماته والمعلومات التي يحتاجها الزائر قبل الحجز.",
     bookNow: "احجز الآن",
+    branchMain: "الفرع الرئيسي",
+    branchesTitle: "الفروع والتواصل",
     callButton: "اتصال",
     centerInfo: "معلومات المركز",
     contact: "التواصل",
@@ -192,6 +200,8 @@ const centerWebsiteLabels = {
     about: "אודות",
     aboutIntro: "הכירו את המרכז, השירותים והמידע החשוב לפני קביעת תור.",
     bookNow: "קבע תור",
+    branchMain: "סניף ראשי",
+    branchesTitle: "סניפים ויצירת קשר",
     callButton: "התקשר",
     centerInfo: "מידע על המרכז",
     contact: "יצירת קשר",
@@ -215,6 +225,8 @@ const centerWebsiteLabels = {
     workingHoursTitle: "שעות פעילות",
   },
 } as const;
+
+type CenterWebsiteLabels = (typeof centerWebsiteLabels)[keyof typeof centerWebsiteLabels];
 
 const WA_ICON = (
   <svg aria-hidden="true" className="h-4 w-4 shrink-0" fill="currentColor" viewBox="0 0 24 24">
@@ -361,11 +373,9 @@ const TT_ICON = (
 
 function resolveLocalizedName(
   center: Pick<PublicCenterDetail, "name" | "nameAr" | "nameEn" | "nameHe">,
-  locale: SupportedLocale,
+  _locale: SupportedLocale,
 ): string {
-  if (locale === "ar") return center.nameAr || center.nameEn || center.name;
-  if (locale === "he") return center.nameHe || center.nameEn || center.name;
-  return center.nameEn || center.name;
+  return center.name || center.nameEn || center.nameAr || center.nameHe || "";
 }
 
 function resolveServiceFields(
@@ -375,13 +385,13 @@ function resolveServiceFields(
   if (locale === "ar") {
     return {
       description: service.descriptionAr || service.descriptionEn || null,
-      name: service.nameAr || service.nameEn,
+      name: service.nameEn || service.nameAr || service.nameHe,
     };
   }
   if (locale === "he") {
     return {
       description: service.descriptionHe || service.descriptionEn || null,
-      name: service.nameHe || service.nameEn,
+      name: service.nameEn || service.nameAr || service.nameHe,
     };
   }
   return {
@@ -404,6 +414,27 @@ function localizedBrandingValue(
     branding[`${key}Ar` as keyof typeof branding] ||
     ""
   ) as string;
+}
+
+function localizedBranchValue(
+  branch: PublicCenterBranch,
+  locale: SupportedLocale,
+  key: "address" | "city" | "workingHoursText",
+) {
+  const suffix = locale === "ar" ? "Ar" : locale === "he" ? "He" : "En";
+  const fallback = locale === "en" ? "Ar" : "En";
+  return (
+    branch[`${key}${suffix}` as keyof PublicCenterBranch] ||
+    branch[`${key}${fallback}` as keyof PublicCenterBranch] ||
+    branch[`${key}Ar` as keyof PublicCenterBranch] ||
+    branch[`${key}En` as keyof PublicCenterBranch] ||
+    branch[`${key}He` as keyof PublicCenterBranch] ||
+    ""
+  ) as string;
+}
+
+function getPublicBranches(center: PublicCenterDetail): PublicCenterBranch[] {
+  return Array.isArray(center.branches) ? center.branches : [];
 }
 
 function getWebsiteSectionOrder(branding: PublicCenterDetail["branding"]): WebsiteSectionKey[] {
@@ -431,6 +462,117 @@ function buildWhatsAppHref(message: string, phone?: string | null): string | nul
   const normalized = normalizeForWhatsApp(phone ?? "", readWhatsAppDefaultCode());
   if (!/^\d{7,15}$/.test(normalized)) return null;
   return `https://wa.me/${normalized}?text=${encodeURIComponent(message)}`;
+}
+
+function BranchesContactSection({
+  center,
+  displayName,
+  labels,
+  locale,
+  source,
+}: {
+  center: PublicCenterDetail;
+  displayName: string;
+  labels: CenterWebsiteLabels;
+  locale: SupportedLocale;
+  source: string;
+}) {
+  const branches = getPublicBranches(center);
+  if (branches.length === 0) return null;
+
+  return (
+    <Section title={labels.branchesTitle}>
+      <div className="grid min-w-0 gap-4 md:grid-cols-2">
+        {branches.map((branch) => {
+          const city = localizedBranchValue(branch, locale, "city");
+          const address = localizedBranchValue(branch, locale, "address");
+          const workingHours = localizedBranchValue(branch, locale, "workingHoursText");
+          const branchWhatsApp = branch.whatsapp || center.branding?.whatsappPhone || null;
+          const phone = branch.phone || branchWhatsApp;
+          const callHref = phone ? `tel:${phone.replace(/[^\d+]/g, "")}` : null;
+          const whatsAppHref = buildWhatsAppHref(
+            `${displayName} - ${branch.name}`,
+            branchWhatsApp,
+          );
+
+          return (
+            <article
+              className="min-w-0 rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-sm"
+              key={branch.id}
+            >
+              <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <h3 className="truncate text-base font-black text-[#0B2D5C]">{branch.name}</h3>
+                  {city ? <p className="mt-1 text-sm font-semibold text-[#526176]">{city}</p> : null}
+                </div>
+                {branch.isMain ? (
+                  <span className="rounded-full bg-[#FFF7E6] px-2.5 py-1 text-xs font-bold text-[#8A5A00]">
+                    {labels.branchMain}
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="mt-3 space-y-2 text-sm leading-6 text-[#526176]">
+                {address ? (
+                  <div className="flex min-w-0 items-start gap-2">
+                    {LOCATION_ICON}
+                    <span>{address}</span>
+                  </div>
+                ) : null}
+                {phone ? (
+                  <a
+                    className="flex min-w-0 items-center gap-2 transition hover:text-[#0B2D5C]"
+                    dir="ltr"
+                    href={callHref ?? "#"}
+                    onClick={() => trackCenterEvent(center.slug, "CLICK_PHONE", { page: source })}
+                  >
+                    {PHONE_ICON}
+                    <span>{phone}</span>
+                  </a>
+                ) : null}
+                {workingHours ? (
+                  <p className="whitespace-pre-line border-t border-[#EEF2F6] pt-2">{workingHours}</p>
+                ) : null}
+              </div>
+
+              <div className="mt-4 flex min-w-0 flex-wrap gap-2">
+                {whatsAppHref ? (
+                  <a
+                    className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 transition hover:bg-emerald-500 hover:text-white"
+                    href={whatsAppHref}
+                    onClick={() => {
+                      trackMarketingEvent("WhatsAppClick", {
+                        branchId: branch.id,
+                        centerName: displayName,
+                        centerSlug: center.slug,
+                        source,
+                      });
+                      trackCenterEvent(center.slug, "CLICK_WHATSAPP", { page: source });
+                    }}
+                    rel="noopener noreferrer"
+                    target="_blank"
+                  >
+                    {WA_ICON}
+                    <span>{labels.whatsapp}</span>
+                  </a>
+                ) : null}
+                {branch.mapsUrl ? (
+                  <a
+                    className="inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-[#F8FAFC] px-3 py-2 text-xs font-black text-[#0B2D5C] transition hover:border-[#C8A45D]"
+                    href={branch.mapsUrl}
+                    rel="noopener noreferrer"
+                    target="_blank"
+                  >
+                    {labels.mapLink} ↗
+                  </a>
+                ) : null}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </Section>
+  );
 }
 
 function initials(name: string) {
@@ -935,32 +1077,45 @@ function ServiceCard({
   return (
     <article className="group flex min-w-0 flex-col overflow-hidden rounded-2xl bg-white shadow-[0_4px_20px_rgba(0,0,0,0.08)] transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_20px_48px_rgba(0,0,0,0.15)]">
 
-      {/* Banner */}
-      <div
-        className="relative flex aspect-[3/2] items-center justify-center overflow-hidden"
-        style={{ background: `linear-gradient(135deg, rgba(${rgb},0.08) 0%, rgba(${rgb},0.18) 100%)` }}
-      >
-        {/* Decorative rings */}
-        <div
-          className="absolute -end-6 -top-6 h-24 w-24 rounded-full opacity-20"
-          style={{ background: `radial-gradient(circle, rgba(${rgb},0.6) 0%, transparent 70%)` }}
-        />
-        <div
-          className="absolute -bottom-4 -start-4 h-16 w-16 rounded-full opacity-15"
-          style={{ background: `radial-gradient(circle, rgba(${rgb},0.5) 0%, transparent 70%)` }}
-        />
-
-        {/* Icon container — glass pill */}
-        <div
-          className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-white/50 shadow-lg transition-transform duration-300 group-hover:scale-110 sm:h-20 sm:w-20"
-          style={{ backgroundColor: `rgba(${rgb},0.12)`, backdropFilter: "blur(12px)" }}
-        >
-          <ServiceCategoryIcon
-            category={category}
-            className="h-7 w-7 sm:h-9 sm:w-9"
-            style={{ color: primaryColor }}
+      {/* Banner — real cover image when available, elegant category fallback otherwise */}
+      <div className="relative aspect-[4/3] overflow-hidden">
+        {service.coverImageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            alt={service.coverImageAlt || fields.name}
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+            decoding="async"
+            loading="lazy"
+            src={service.coverImageUrl}
           />
-        </div>
+        ) : (
+          <div
+            className="absolute inset-0 flex items-center justify-center"
+            style={{ background: `linear-gradient(135deg, rgba(${rgb},0.08) 0%, rgba(${rgb},0.18) 100%)` }}
+          >
+            {/* Decorative rings */}
+            <div
+              className="absolute -end-6 -top-6 h-24 w-24 rounded-full opacity-20"
+              style={{ background: `radial-gradient(circle, rgba(${rgb},0.6) 0%, transparent 70%)` }}
+            />
+            <div
+              className="absolute -bottom-4 -start-4 h-16 w-16 rounded-full opacity-15"
+              style={{ background: `radial-gradient(circle, rgba(${rgb},0.5) 0%, transparent 70%)` }}
+            />
+
+            {/* Icon container — glass pill */}
+            <div
+              className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-white/50 shadow-lg transition-transform duration-300 group-hover:scale-110 sm:h-20 sm:w-20"
+              style={{ backgroundColor: `rgba(${rgb},0.12)`, backdropFilter: "blur(12px)" }}
+            >
+              <ServiceCategoryIcon
+                category={category}
+                className="h-7 w-7 sm:h-9 sm:w-9"
+                style={{ color: primaryColor }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Duration badge */}
         {service.durationMinutes != null ? (
@@ -970,7 +1125,7 @@ function ServiceCard({
         ) : null}
 
         {/* Bottom fade */}
-        <div className="absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-white/30 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-black/10 to-transparent" />
       </div>
 
       {/* Body */}
@@ -1020,12 +1175,13 @@ function GalleryGrid({
           key={image.id}
         >
           <div className="aspect-[4/3] overflow-hidden bg-[#F8FAFC]">
-            <img
-              alt={`${displayName} gallery ${index + 1}`}
-              className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
-              loading={index < 3 ? "eager" : "lazy"}
-              src={image.imageUrl}
-            />
+              <img
+                alt={`${displayName} gallery ${index + 1}`}
+                className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+                decoding="async"
+                loading={index < 3 ? "eager" : "lazy"}
+                src={image.imageUrl}
+              />
           </div>
         </figure>
       ))}
@@ -1104,37 +1260,22 @@ function BeforeAfterCompareCard({
   item: PublicCenterBeforeAfter;
   locale: SupportedLocale;
 }) {
-  const [position, setPosition] = useState(50);
   const fields = localizedBeforeAfterFields(item, locale);
   const labels = beforeAfterLabels[locale];
+
   return (
-    <article className="min-w-0 overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-[0_4px_16px_rgba(11,45,92,0.07)]">
-      <div className="relative aspect-[4/3] overflow-hidden bg-[#F8FAFC]">
-        <img alt={fields.title} className="absolute inset-0 h-full w-full object-cover" src={item.beforeImageUrl} />
-        <img
-          alt={fields.title}
-          className="absolute inset-0 h-full w-full object-cover"
-          src={item.afterImageUrl}
-          style={{ clipPath: `inset(0 0 0 ${position}%)` }}
-        />
-        <div className="absolute inset-y-0 w-0.5 bg-white shadow-lg" style={{ insetInlineStart: `${position}%` }} />
-        <div className="absolute inset-x-4 top-4 flex justify-between gap-3 text-xs font-black text-white">
-          <span className="rounded-full bg-black/45 px-3 py-1">{labels.before}</span>
-          <span className="rounded-full bg-black/45 px-3 py-1">{labels.after}</span>
-        </div>
-        <input
-          aria-label={labels.beforeAfter}
-          className="absolute inset-x-4 bottom-4 accent-[#C8A45D]"
-          max={95}
-          min={5}
-          onChange={(event) => setPosition(Number(event.target.value))}
-          type="range"
-          value={position}
-        />
-      </div>
-      <div className="p-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <h3 className="min-w-0 flex-1 truncate text-sm font-black text-[#0B2D5C]">{fields.title}</h3>
+    <article className="min-w-0 overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white p-3 shadow-[0_4px_16px_rgba(11,45,92,0.07)]">
+      <BeforeAfterPair
+        afterImageUrl={item.afterImageUrl}
+        afterLabel={labels.after}
+        beforeImageUrl={item.beforeImageUrl}
+        beforeLabel={labels.before}
+        enableLightbox
+        title={fields.title}
+      />
+      <div className="px-1 pb-1 pt-4">
+        <div className="flex min-w-0 flex-wrap items-start gap-2">
+          <h3 className="min-w-0 flex-1 text-sm font-black leading-6 text-[#0B2D5C]">{fields.title}</h3>
           <span className="rounded-full bg-[#F8FAFC] px-2.5 py-1 text-xs font-bold text-[#526176]">
             {labels.categories[item.category]}
           </span>
@@ -1231,6 +1372,8 @@ function CenterHomepage({
   const fullDescription = localizedBrandingValue(branding, locale, "fullDescription");
   const address = localizedBrandingValue(branding, locale, "address");
   const workingHours = localizedBrandingValue(branding, locale, "workingHours");
+  const branches = getPublicBranches(center);
+  const hasBranches = branches.length > 0;
   const phone = branding?.phone || branding?.whatsappPhone || null;
   const whatsAppHref = buildWhatsAppHref(d.profile.consultationMessage(displayName), branding?.whatsappPhone);
   const callHref = phone ? `tel:${phone.replace(/[^\d+]/g, "")}` : null;
@@ -1247,7 +1390,7 @@ function CenterHomepage({
     hero: canRender("hero") ? (
       <section id="home" className="relative min-h-[520px] scroll-mt-24 overflow-hidden rounded-3xl bg-[#0B2D5C] shadow-[0_18px_44px_rgba(11,45,92,0.18)]">
         {branding?.coverImageUrl ? (
-          <img alt="" className="absolute inset-0 h-full w-full object-cover" src={branding?.coverImageUrl ?? ""} />
+          <img alt="" className="absolute inset-0 h-full w-full object-cover" decoding="async" fetchPriority="high" src={branding?.coverImageUrl ?? ""} />
         ) : null}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/45 to-black/20" />
         <div className="relative flex min-h-[520px] flex-col justify-end p-5 text-white sm:p-8 lg:p-10">
@@ -1357,7 +1500,17 @@ function CenterHomepage({
         </Section>
       </div>
     ) : null,
-    workingHours: canRender("workingHours") && (workingHours || address || branding?.googleMapsUrl) ? (
+    workingHours: canRender("workingHours") && hasBranches ? (
+      <div id="working-hours" className="scroll-mt-24">
+        <BranchesContactSection
+          center={center}
+          displayName={displayName}
+          labels={labels}
+          locale={locale}
+          source="homepage_branches"
+        />
+      </div>
+    ) : canRender("workingHours") && (workingHours || address || branding?.googleMapsUrl) ? (
       <div id="working-hours" className="scroll-mt-24">
         <Section title={labels.workingHoursTitle}>
           <div className="space-y-4">
@@ -1834,6 +1987,8 @@ function CenterContactBody({
   const rgb = hexToRgb(primaryColor);
   const isRtlContact = locale === "ar" || locale === "he";
   const address = localizedBrandingValue(branding, locale, "address");
+  const branches = getPublicBranches(center);
+  const hasBranches = branches.length > 0;
   const phone = branding?.phone || branding?.whatsappPhone || null;
   const callHref = phone ? `tel:${phone.replace(/[^\d+]/g, "")}` : null;
   const whatsAppHref = buildWhatsAppHref(d.profile.consultationMessage(displayName), branding?.whatsappPhone);
@@ -1851,12 +2006,21 @@ function CenterContactBody({
 
   return (
     <div className="space-y-5">
+      {hasBranches ? (
+        <BranchesContactSection
+          center={center}
+          displayName={displayName}
+          labels={labels}
+          locale={locale}
+          source="contact_page"
+        />
+      ) : null}
       <Section intro={labels.contactIntro} title={labels.contactTitle}>
         <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.82fr)]">
 
           {/* Left column — contact details with icons */}
           <div className="space-y-3 text-sm">
-            {phone ? (
+            {!hasBranches && phone ? (
               <a
                 className="flex items-center gap-3 text-[#526176] transition hover:text-[#0B2D5C]"
                 dir="ltr"
@@ -1867,7 +2031,7 @@ function CenterContactBody({
                 <span>{phone}</span>
               </a>
             ) : null}
-            {branding?.whatsappPhone ? (
+            {!hasBranches && branding?.whatsappPhone ? (
               <a
                 className="flex items-center gap-3 text-emerald-600 transition hover:text-emerald-700"
                 dir="ltr"
@@ -1891,16 +2055,16 @@ function CenterContactBody({
                 <span className="break-all">{branding.email}</span>
               </a>
             ) : null}
-            {address ? (
+            {!hasBranches && address ? (
               <div className="flex items-start gap-3 text-[#526176]">
                 {LOCATION_ICON}
                 <span>{address}</span>
               </div>
             ) : null}
-            {!phone && !branding?.email && !address ? (
+            {!hasBranches && !phone && !branding?.email && !address ? (
               <p className="text-[#526176]">{labels.noContact}</p>
             ) : null}
-            {branding?.googleMapsUrl ? (
+            {!hasBranches && branding?.googleMapsUrl ? (
               <div className="pt-1">
                 <a
                   className="inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-[#F8FAFC] px-3 py-2 text-xs font-semibold text-[#0B2D5C] transition hover:border-[#C8A45D]"
@@ -2123,7 +2287,7 @@ function resolveTeamMemberFields(member: PublicTeamMember, locale: SupportedLoca
   if (locale === "ar") {
     return {
       bio: member.bioAr || member.bioEn || member.bioHe || "",
-      name: member.nameAr || member.nameEn || member.nameHe || "",
+      name: member.nameEn || member.nameAr || member.nameHe || "",
       specialty: member.specialtyAr || member.specialtyEn || member.specialtyHe || "",
       title: member.titleAr || member.titleEn || member.titleHe || "",
     };
@@ -2131,7 +2295,7 @@ function resolveTeamMemberFields(member: PublicTeamMember, locale: SupportedLoca
   if (locale === "he") {
     return {
       bio: member.bioHe || member.bioEn || member.bioAr || "",
-      name: member.nameHe || member.nameEn || member.nameAr || "",
+      name: member.nameEn || member.nameAr || member.nameHe || "",
       specialty: member.specialtyHe || member.specialtyEn || member.specialtyAr || "",
       title: member.titleHe || member.titleEn || member.titleAr || "",
     };
@@ -2167,6 +2331,7 @@ function TeamGrid({
               <img
                 alt={fields.name}
                 className="h-20 w-20 rounded-full border-2 border-[#E5E7EB] object-cover shadow"
+                decoding="async"
                 loading="lazy"
                 src={member.photoUrl}
               />
@@ -2322,6 +2487,7 @@ function OffersGrid({
                 <img
                   alt={fields.title}
                   className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+                  decoding="async"
                   loading="lazy"
                   src={offer.imageUrl}
                 />

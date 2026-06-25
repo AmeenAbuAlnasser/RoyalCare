@@ -32,6 +32,13 @@ const CENTER_STAFF_ROLES = [
 const ACTIVE_USER_ROLE_STATUS = 'ACTIVE';
 
 const ALL_PERMISSION_KEYS = [...tenantPermissionKeys];
+const EXPENSE_PERMISSION_KEYS = [
+  'expenses:view',
+  'expenses:create',
+  'expenses:edit',
+  'expenses:delete',
+  'expenses:reports',
+] as const;
 
 const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   CENTER_OWNER: [...ALL_PERMISSION_KEYS],
@@ -56,6 +63,10 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'billing:create',
     'payments:view',
     'payments:create',
+    'expenses:view',
+    'expenses:create',
+    'expenses:edit',
+    'expenses:reports',
   ],
   ACCOUNTANT: [
     'staff:view',
@@ -66,6 +77,10 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'billing:update',
     'payments:view',
     'payments:create',
+    'expenses:view',
+    'expenses:create',
+    'expenses:edit',
+    'expenses:reports',
   ],
   STAFF: [
     'staff:view',
@@ -76,6 +91,12 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   ],
 };
 const BLOCKED_CENTER_STATUSES = ['SUSPENDED', 'CANCELLED', 'ARCHIVED'];
+const PROFILE_LANGUAGES = ['AR', 'EN', 'HE'] as const;
+const PROFILE_SUBSCRIPTION_STATUSES = [
+  'ACTIVE',
+  'TRIALING',
+  'PAST_DUE',
+] as const;
 
 const safeCenterSelect = {
   id: true,
@@ -109,6 +130,41 @@ function invalidCredentials() {
       credentials: 'Email or password is incorrect.',
     },
   });
+}
+
+function cleanText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function cleanOptionalText(value: unknown): string | null {
+  const cleaned = cleanText(value);
+  return cleaned || null;
+}
+
+function isValidPhone(value: string): boolean {
+  const digits = value.replace(/\D/g, '');
+  return digits.length >= 7 && digits.length <= 20;
+}
+
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function isValidImageUrl(value: string): boolean {
+  if (!value) return true;
+  if (
+    value.startsWith('/uploads/') ||
+    value.startsWith('/images/') ||
+    value.startsWith('/assets/')
+  ) {
+    return true;
+  }
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 @Injectable()
@@ -406,6 +462,164 @@ export class CenterAuthService {
     return { success: true };
   }
 
+  async getAccountProfile(payload: CenterSessionPayload | null) {
+    const session = await this.getSession(payload);
+    const prisma = await this.prisma.getClient();
+    const center = await prisma.center.findUnique({
+      where: { id: session.center.id },
+      select: {
+        branding: { select: { logoUrl: true } },
+        primaryLanguage: true,
+        subscriptions: {
+          where: { status: { in: [...PROFILE_SUBSCRIPTION_STATUSES] } },
+          orderBy: { currentPeriodEnd: 'desc' },
+          select: { notificationPhone: true },
+          take: 1,
+        },
+      },
+    });
+
+    return {
+      avatarUrl: center?.branding?.logoUrl ?? null,
+      email: session.user.email ?? '',
+      fullName: session.user.fullName,
+      phone: session.user.phone ?? '',
+      preferredLanguage:
+        center?.primaryLanguage ?? session.center.primaryLanguage,
+      whatsappPhone: center?.subscriptions[0]?.notificationPhone ?? '',
+    };
+  }
+
+  async updateAccountProfile(
+    payload: CenterSessionPayload | null,
+    dto: unknown,
+  ) {
+    const session = await this.getSession(payload);
+
+    if (session.role.key !== 'CENTER_OWNER') {
+      throw new ForbiddenException({
+        message: 'Permission denied',
+        errors: {
+          profile:
+            'Only the center owner can update the center account profile.',
+        },
+      });
+    }
+
+    const source =
+      dto && typeof dto === 'object' ? (dto as Record<string, unknown>) : {};
+    const fullName = cleanText(source.fullName);
+    const phone = cleanText(source.phone);
+    const whatsappPhone = cleanText(source.whatsappPhone);
+    const email = cleanText(source.email).toLowerCase();
+    const preferredLanguage = cleanText(source.preferredLanguage).toUpperCase();
+    const avatarUrl = cleanOptionalText(source.avatarUrl);
+    const errors: Record<string, string> = {};
+
+    if (!fullName) errors.fullName = 'Full name is required.';
+    if (fullName.length > 160)
+      errors.fullName = 'Full name must be 160 characters or fewer.';
+    if (!phone) errors.phone = 'Main phone is required.';
+    else if (!isValidPhone(phone)) errors.phone = 'Phone must be 7-20 digits.';
+    if (!whatsappPhone) errors.whatsappPhone = 'Main WhatsApp is required.';
+    else if (!isValidPhone(whatsappPhone))
+      errors.whatsappPhone = 'WhatsApp must be 7-20 digits.';
+    if (!email) errors.email = 'Email is required.';
+    else if (!isValidEmail(email)) errors.email = 'Email must be valid.';
+    if (
+      !PROFILE_LANGUAGES.includes(
+        preferredLanguage as (typeof PROFILE_LANGUAGES)[number],
+      )
+    ) {
+      errors.preferredLanguage = 'Select a valid preferred language.';
+    }
+    if (avatarUrl && !isValidImageUrl(avatarUrl)) {
+      errors.avatarUrl = 'Image URL must be a valid upload or http(s) URL.';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      throw new BadRequestException({ message: 'Validation failed', errors });
+    }
+
+    const prisma = await this.prisma.getClient();
+    const subscription = await prisma.subscription.findFirst({
+      where: { centerId: session.center.id },
+      orderBy: [{ currentPeriodEnd: 'desc' }, { createdAt: 'desc' }],
+      select: { id: true },
+    });
+
+    if (!subscription) {
+      throw new BadRequestException({
+        message: 'Validation failed',
+        errors: {
+          whatsappPhone:
+            'A subscription is required before setting primary WhatsApp.',
+        },
+      });
+    }
+
+    try {
+      await prisma.$transaction([
+        prisma.user.update({
+          where: { id: session.user.id },
+          data: { email, fullName, phone },
+          select: { id: true },
+        }),
+        prisma.center.update({
+          where: { id: session.center.id },
+          data: {
+            primaryLanguage:
+              preferredLanguage as (typeof PROFILE_LANGUAGES)[number],
+          },
+          select: { id: true },
+        }),
+        prisma.subscription.update({
+          where: { id: subscription.id },
+          data: {
+            notificationLanguage:
+              preferredLanguage as (typeof PROFILE_LANGUAGES)[number],
+            notificationPhone: whatsappPhone,
+          },
+          select: { id: true },
+        }),
+        prisma.brandingSettings.upsert({
+          where: { centerId: session.center.id },
+          create: {
+            centerId: session.center.id,
+            defaultLanguage:
+              preferredLanguage as (typeof PROFILE_LANGUAGES)[number],
+            enabledLanguages: [preferredLanguage],
+            logoUrl: avatarUrl,
+          },
+          update: {
+            defaultLanguage:
+              preferredLanguage as (typeof PROFILE_LANGUAGES)[number],
+            logoUrl: avatarUrl,
+          },
+          select: { centerId: true },
+        }),
+      ]);
+    } catch (error) {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        (error as { code?: string }).code === 'P2002'
+      ) {
+        throw new BadRequestException({
+          message: 'Validation failed',
+          errors: {
+            email: 'Email or phone is already used by another account.',
+            phone: 'Email or phone is already used by another account.',
+          },
+        });
+      }
+      throw error;
+    }
+
+    return this.getAccountProfile(payload);
+  }
+
   private async getEffectivePermissions(
     centerId: string,
     roleKey: string,
@@ -438,9 +652,16 @@ export class CenterAuthService {
       );
     }
 
-    return normalizeTenantPermissionKeys(
-      rolePerms.map((rp) => rp.permission.key),
-    );
+    const storedPermissions = rolePerms.map((rp) => rp.permission.key);
+
+    if (roleKey === 'CENTER_MANAGER') {
+      return normalizeTenantPermissionKeys([
+        ...storedPermissions,
+        ...EXPENSE_PERMISSION_KEYS,
+      ]);
+    }
+
+    return normalizeTenantPermissionKeys(storedPermissions);
   }
 
   private formatSession(session: {

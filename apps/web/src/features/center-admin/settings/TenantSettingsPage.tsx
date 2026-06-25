@@ -2,7 +2,12 @@
 
 import { CenterAdminShell } from "../layout/CenterAdminShell";
 import {
+  createTenantCenterBranch,
+  deleteTenantCenterBranch,
   getTenantCenterPublicProfile,
+  listTenantCenterBranches,
+  reorderTenantCenterBranches,
+  updateTenantCenterBranch,
   updateTenantCenterPublicProfile,
   uploadTenantCenterPublicImage,
 } from "@/lib/api/center-public-profile";
@@ -32,6 +37,11 @@ export function TenantSettingsPage() {
                   await updateTenantCenterPublicProfile(data);
                 }}
                 onUploadImage={(file, type) => uploadTenantCenterPublicImage(file, type)}
+                onLoadBranches={listTenantCenterBranches}
+                onCreateBranch={createTenantCenterBranch}
+                onUpdateBranch={updateTenantCenterBranch}
+                onDeleteBranch={deleteTenantCenterBranch}
+                onReorderBranches={reorderTenantCenterBranches}
               />
             </div>
           </section>

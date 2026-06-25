@@ -83,15 +83,60 @@ export async function uploadPublicImage(
   return res.json() as Promise<{ url: string }>;
 }
 
+export async function getPlatformContact(): Promise<{
+  salesWhatsappNumber: string;
+}> {
+  const res = await fetch(`${API_BASE_URL}/public/platform-contact`, {
+    cache: "no-store",
+  });
+  if (!res.ok) return { salesWhatsappNumber: "" };
+  return res.json() as Promise<{ salesWhatsappNumber: string }>;
+}
+
+const PUBLIC_SETTINGS_CACHE_TTL_MS = 60_000;
+
+let publicSystemSettingsCache:
+  | {
+      expiresAt: number;
+      promise: Promise<{ settings: SystemSetting[] }>;
+    }
+  | null = null;
+
+export function clearPublicSystemSettingsCache() {
+  publicSystemSettingsCache = null;
+}
+
 export async function getPublicSystemSettings(): Promise<{
   settings: SystemSetting[];
 }> {
+  const now = Date.now();
+  if (
+    publicSystemSettingsCache &&
+    publicSystemSettingsCache.expiresAt > now
+  ) {
+    return publicSystemSettingsCache.promise;
+  }
+
   // cache: 'no-store' ensures the browser never serves a stale cached response
   // after an admin uploads new branding. next.revalidate only works in server
-  // components; this function runs in a client useEffect.
-  const res = await fetch(`${API_BASE_URL}/public/settings`, {
+  // components; this function runs in a client useEffect. The module cache only
+  // dedupes fast SPA navigations and expires quickly.
+  const promise = fetch(`${API_BASE_URL}/public/settings`, {
     cache: "no-store",
-  });
-  if (!res.ok) throw new Error("Failed to load public settings.");
-  return res.json() as Promise<{ settings: SystemSetting[] }>;
+  })
+    .then((res) => {
+      if (!res.ok) throw new Error("Failed to load public settings.");
+      return res.json() as Promise<{ settings: SystemSetting[] }>;
+    })
+    .catch((error) => {
+      clearPublicSystemSettingsCache();
+      throw error;
+    });
+
+  publicSystemSettingsCache = {
+    expiresAt: now + PUBLIC_SETTINGS_CACHE_TTL_MS,
+    promise,
+  };
+
+  return promise;
 }

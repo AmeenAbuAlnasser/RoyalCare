@@ -18,6 +18,8 @@ The UI should be:
 - Fully translatable across Arabic, Hebrew, and English
 - Acceptable for a paid enterprise SaaS platform
 
+Displayed tenant appointment/session times must use the shared deterministic helpers in `apps/web/src/i18n/formatters.ts`: `formatTime12h(time)` for time-only values and `formatAppointmentDateTime(date, time, locale)` for appointment/session labels. The tenant UI uses English `AM`/`PM` consistently in Arabic, Hebrew, and English.
+
 Avoid:
 - Complex unnecessary UI
 - Decorative dashboards with little operational value

@@ -17,44 +17,18 @@ function firstText(...values: Array<string | null | undefined>) {
 
 export function getLocalizedBusinessName(
   entity: LocalizedBusinessName | null | undefined,
-  locale: SupportedLocale,
+  _locale: SupportedLocale,
 ) {
   if (!entity) return "";
 
-  if (locale === "he") {
-    return firstText(
-      entity.nameHe,
-      entity.fullNameHe,
-      entity.nameEn,
-      entity.fullNameEn,
-      entity.nameAr,
-      entity.fullNameAr,
-      entity.name,
-      entity.fullName,
-    );
-  }
-
-  if (locale === "ar") {
-    return firstText(
-      entity.nameAr,
-      entity.fullNameAr,
-      entity.nameEn,
-      entity.fullNameEn,
-      entity.nameHe,
-      entity.fullNameHe,
-      entity.name,
-      entity.fullName,
-    );
-  }
-
   return firstText(
-    entity.nameEn,
-    entity.fullNameEn,
-    entity.nameHe,
-    entity.fullNameHe,
-    entity.nameAr,
-    entity.fullNameAr,
     entity.name,
     entity.fullName,
+    entity.nameEn,
+    entity.fullNameEn,
+    entity.nameAr,
+    entity.fullNameAr,
+    entity.nameHe,
+    entity.fullNameHe,
   );
 }

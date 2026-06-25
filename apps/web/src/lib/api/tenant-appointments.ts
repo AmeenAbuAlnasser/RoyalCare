@@ -1,5 +1,6 @@
 import { API_BASE_URL, ApiRequestError } from "./super-admin-centers";
 import type { CenterRoleKey } from "@/i18n/dictionaries/center-admin";
+import type { TenantPatientFollowUp } from "./tenant-follow-ups";
 
 export type AppointmentInvoiceStatus = "PENDING" | "PARTIAL" | "PAID" | "CANCELLED";
 
@@ -31,11 +32,29 @@ export type AppointmentPatient = {
 export type AppointmentService = {
   durationMinutes: number | null;
   followUpEnabled?: boolean;
-  followUpType?: "FIXED_INTERVAL" | "SESSION_PLAN";
+  followUpMode?: "NONE" | "SESSION_BASED_PLAN" | "RECURRING_CONTINUOUS";
   defaultIntervalDays?: number | null;
   totalRecommendedSessions?: number | null;
+  recurringIntervalValue?: number | null;
+  recurringIntervalUnit?: "DAY" | "WEEK" | "MONTH" | "YEAR" | null;
   autoCreateNextReminder?: boolean;
   followUpRules?: unknown;
+  treatmentTemplates?: Array<{
+    id: string;
+    nameAr: string;
+    nameEn: string;
+    nameHe: string;
+    totalSessions: number | null;
+    defaultIntervalDays: number | null;
+    phases: Array<{
+      fromSessionNumber: number;
+      toSessionNumber: number;
+      intervalDays: number;
+    }> | null;
+    isDefault: boolean;
+    isActive: boolean;
+    sortOrder: number;
+  }>;
   id: string;
   isActive: boolean;
   nameAr: string;
@@ -62,6 +81,22 @@ export type AppointmentBookingSource = {
   phone: string;
 };
 
+export type AppointmentBranch = {
+  id: string;
+  name: string;
+  cityAr: string | null;
+  cityEn: string | null;
+  cityHe: string | null;
+  addressAr: string | null;
+  addressEn: string | null;
+  addressHe: string | null;
+};
+
+export type AppointmentBranchOption = AppointmentBranch & {
+  isMain: boolean;
+  isActive: boolean;
+};
+
 export type TenantAppointment = {
   appointmentDate: string;
   cancellationReason: string | null;
@@ -76,6 +111,13 @@ export type TenantAppointment = {
   customServicePrice: string | null;
   customServiceCurrency: string | null;
   customServiceSaved: boolean;
+  treatmentTemplateId: string | null;
+  treatmentTemplateNameAr: string | null;
+  treatmentTemplateNameEn: string | null;
+  treatmentTemplateNameHe: string | null;
+  treatmentTemplateTotalSessions: number | null;
+  treatmentTemplateDefaultIntervalDays: number | null;
+  treatmentTemplatePhases: unknown;
   durationMinutes: number;
   endTime: string;
   id: string;
@@ -91,6 +133,8 @@ export type TenantAppointment = {
   reminder2hSent: boolean;
   service: AppointmentService | null;
   serviceId: string | null;
+  branch: AppointmentBranch | null;
+  branchId: string | null;
   offerTitle: string | null;
   offerPrice: string | null;
   offerCurrency: string | null;
@@ -101,6 +145,18 @@ export type TenantAppointment = {
   updatedAt: string;
   invoice: AppointmentInvoiceSummary | null;
   bookingSource: AppointmentBookingSource | null;
+  hasFollowUpPlan: boolean;
+  followUpPlanId: string | null;
+  followUpPlanSummary: {
+    type: "RECURRING_CONTINUOUS" | "SESSION_BASED_PLAN";
+    followUpCount: number;
+    totalSessions: number | null;
+    completedSessions: number;
+    nextFollowUpDate: string | null;
+    recurringIntervalValue: number | null;
+    recurringIntervalUnit: "DAY" | "WEEK" | "MONTH" | "YEAR" | null;
+  } | null;
+  followUpPlan?: TenantPatientFollowUp[];
   followUp: {
     id: string;
     dueDate: string;
@@ -111,7 +167,9 @@ export type TenantAppointment = {
 
 export type TenantAppointmentPayload = {
   appointmentDate: string;
+  branchId?: string | null;
   autoCreateNextReminder?: boolean;
+  recalculateFollowUpSchedule?: boolean;
   customServiceCurrency?: string | null;
   customServiceDuration?: number | string | null;
   customServiceName?: string | null;
@@ -120,6 +178,9 @@ export type TenantAppointmentPayload = {
   durationMinutes: number | string;
   endTime?: string;
   followUpEnabled?: boolean;
+  followUpId?: string | null;
+  treatmentTemplateId?: string | null;
+  followUpMode?: "NONE" | "SESSION_BASED_PLAN" | "RECURRING_CONTINUOUS";
   followUpRules?: Array<{
     fromSessionNumber: string;
     toSessionNumber: string;
@@ -130,7 +191,8 @@ export type TenantAppointmentPayload = {
     toSessionNumber: string;
     intervalDays: string;
   }> | null;
-  followUpType?: "FIXED_INTERVAL" | "SESSION_PLAN";
+  recurringIntervalValue?: string | number | null;
+  recurringIntervalUnit?: "DAY" | "WEEK" | "MONTH" | "YEAR" | null;
   internalNotes?: string | null;
   notes?: string | null;
   patientId: string;
@@ -163,6 +225,7 @@ export type AppointmentConflictDetails = {
 };
 
 export type TenantAppointmentOptions = {
+  branches: AppointmentBranchOption[];
   patients: Array<Pick<AppointmentPatient, "fullName" | "id" | "phone" | "status">>;
   providers: AppointmentProvider[];
   services: AppointmentService[];
@@ -226,13 +289,18 @@ async function request<T>(path: string, init?: RequestInit) {
 }
 
 export function getTenantAvailability(
-  serviceId: string,
+  serviceId: string | null | undefined,
   date: string,
   providerId?: string,
   excludeAppointmentId?: string,
+  durationMinutes?: number,
+  isCustomService?: boolean,
 ): Promise<TenantAvailabilityResponse> {
-  const params = new URLSearchParams({ serviceId, date });
+  const params = new URLSearchParams({ date });
+  if (serviceId) params.set("serviceId", serviceId);
   if (providerId) params.set("providerId", providerId);
+  if (durationMinutes) params.set("durationMinutes", durationMinutes.toString());
+  if (isCustomService) params.set("isCustomService", "true");
   if (excludeAppointmentId) params.set("excludeAppointmentId", excludeAppointmentId);
   return request<TenantAvailabilityResponse>(
     `/tenant/appointments/availability?${params.toString()}`,
@@ -242,6 +310,7 @@ export function getTenantAvailability(
 export function listTenantAppointments(filters?: {
   date?: string;
   provider?: string;
+  branch?: string;
   search?: string;
   status?: string;
 }) {
@@ -261,6 +330,10 @@ export function listTenantAppointments(filters?: {
 
   if (filters?.provider) {
     params.set("provider", filters.provider);
+  }
+
+  if (filters?.branch) {
+    params.set("branch", filters.branch);
   }
 
   const queryString = params.toString();

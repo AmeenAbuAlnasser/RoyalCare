@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { CenterAdminDictionary } from "@/i18n/dictionaries/center-admin";
+import { formatTime12h } from "@/i18n/formatters";
 import { localeDirections } from "@/i18n/locales";
 import type { SupportedLocale } from "@/i18n/locales";
 import type { AppointmentStatus, TenantAppointment } from "@/lib/api/tenant-appointments";
@@ -153,7 +154,7 @@ function DayColumn({
               width: `calc(${widthPct}% - 3px)`,
               left: `calc(${offsetPct}% + 1px)`,
             }}
-            title={`${appt.patient.fullName} · ${appt.startTime}–${appt.endTime}`}
+            title={`${appt.patient.fullName} · ${formatTime12h(appt.startTime)}–${formatTime12h(appt.endTime)}`}
           >
             <p
               className={`truncate text-[11px] font-bold leading-tight ${isCancelled ? "line-through opacity-60" : ""}`}
@@ -165,7 +166,7 @@ function DayColumn({
               <p className="truncate text-[10px] leading-tight opacity-70">{provName}</p>
             ) : null}
             <p className="text-[10px] leading-tight opacity-60" dir="ltr">
-              {appt.startTime}–{appt.endTime}
+              {formatTime12h(appt.startTime)}–{formatTime12h(appt.endTime)}
             </p>
           </Link>
         );
@@ -290,7 +291,7 @@ export function AppointmentCalendarView({
                     transform: "translateY(-50%)",
                   }}
                 >
-                  {String(GRID_START_H + i).padStart(2, "0")}:00
+                  {formatTime12h(`${GRID_START_H + i}:00`)}
                 </div>
               ))}
             </div>

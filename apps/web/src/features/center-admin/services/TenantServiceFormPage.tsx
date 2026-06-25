@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -12,7 +12,9 @@ import {
   updateTenantService,
 } from "@/lib/api/tenant-services";
 import { CenterAdminShell } from "../layout/CenterAdminShell";
+import { ServiceCoverUpload } from "./ServiceCoverUpload";
 import {
+  calculateTotalSessionsFromRules,
   formToPayload,
   serviceToForm,
   type TenantServiceFormErrors,
@@ -24,6 +26,159 @@ type FollowUpRuleField =
   | "fromSessionNumber"
   | "toSessionNumber"
   | "intervalDays";
+
+const recurringLabels = {
+  en: {
+    repeatEvery: "Repeat every",
+    helper: "A new follow-up will be created automatically after each completed session.",
+    day: "Day",
+    week: "Week",
+    month: "Month",
+    year: "Year",
+    autoWhatsapp: "Enable automatic WhatsApp reminder",
+    daysBefore: "Reminder days before due date",
+  },
+  ar: {
+    repeatEvery: "تتكرر كل",
+    helper: "سيتم إنشاء متابعة جديدة تلقائيًا بعد كل جلسة مكتملة.",
+    day: "يوم",
+    week: "أسبوع",
+    month: "شهر",
+    year: "سنة",
+    autoWhatsapp: "تفعيل تذكير واتساب تلقائي",
+    daysBefore: "أيام التذكير قبل تاريخ المتابعة",
+  },
+  he: {
+    repeatEvery: "חוזר כל",
+    helper: "מעקב חדש ייווצר אוטומטית לאחר כל טיפול שהושלם.",
+    day: "יום",
+    week: "שבוע",
+    month: "חודש",
+    year: "שנה",
+    autoWhatsapp: "הפעלת תזכורת וואטסאפ אוטומטית",
+    daysBefore: "ימי תזכורת לפני תאריך היעד",
+  },
+} as const;
+
+const treatmentTemplateCopy = {
+  en: {
+    active: "Active",
+    add: "Add template",
+    default: "Default",
+    delete: "Delete template",
+    empty: "No templates yet. Add protocols such as light, standard, or intensive plans.",
+    helper:
+      "Create selectable protocols for this service. Patient plans keep a snapshot of the selected template.",
+    sortOrder: "Sort order",
+    templateTitle: (index: number) => `Template ${index}`,
+    previewTitle: "Template plan preview",
+    title: "Treatment plan templates",
+    usesDefaultInterval:
+      "No phase rules set. The template will use its default interval.",
+  },
+  ar: {
+    active: "نشط",
+    add: "إضافة قالب",
+    default: "افتراضي",
+    delete: "حذف القالب",
+    empty: "لا توجد قوالب بعد. أضف خططًا مثل خفيفة أو عادية أو مكثفة.",
+    helper:
+      "أنشئ بروتوكولات قابلة للاختيار لهذه الخدمة. خطة المريض تحفظ نسخة مستقلة من القالب المختار.",
+    sortOrder: "ترتيب العرض",
+    templateTitle: (index: number) => `قالب ${index}`,
+    previewTitle: "معاينة الخطة الخاصة بهذا القالب",
+    title: "قوالب خطط العلاج",
+    usesDefaultInterval:
+      "لا توجد مراحل خاصة. سيستخدم القالب فترة التذكير الافتراضية.",
+  },
+  he: {
+    active: "פעיל",
+    add: "הוספת תבנית",
+    default: "ברירת מחדל",
+    delete: "מחיקת תבנית",
+    empty: "אין עדיין תבניות. הוסיפו פרוטוקולים כמו קל, רגיל או אינטנסיבי.",
+    helper:
+      "צרו פרוטוקולים לבחירה עבור שירות זה. תוכנית המטופל שומרת עותק עצמאי של התבנית שנבחרה.",
+    sortOrder: "סדר הצגה",
+    templateTitle: (index: number) => `תבנית ${index}`,
+    previewTitle: "תצוגה מקדימה של התבנית",
+    title: "תבניות תוכנית טיפול",
+    usesDefaultInterval:
+      "לא הוגדרו שלבים. התבנית תשתמש במרווח ברירת המחדל.",
+  },
+} as const;
+
+const sectionCopy = {
+  en: {
+    translations: "Optional translations",
+    description: "Service description",
+    whatsapp: "Optional WhatsApp messages",
+    advanced: "Advanced settings",
+    hasData: "Has data",
+  },
+  ar: {
+    translations: "ترجمات اختيارية",
+    description: "وصف الخدمة",
+    whatsapp: "رسائل واتساب اختيارية",
+    advanced: "إعدادات متقدمة",
+    hasData: "يحتوي بيانات",
+  },
+  he: {
+    translations: "תרגומים אופציונליים",
+    description: "תיאור השירות",
+    whatsapp: "הודעות וואטסאפ אופציונליות",
+    advanced: "הגדרות מתקדמות",
+    hasData: "מכיל נתונים",
+  },
+} as const;
+
+/**
+ * Collapsible container for optional/secondary fields. Closed by default so the
+ * service form stays short and focused; shows a small "has data" badge when any
+ * field inside already has a value (useful in edit mode). Matches the tenant admin
+ * design system and is RTL-safe (uses logical text-start / flex, no left/right).
+ */
+function CollapsibleSection({
+  title,
+  hasData,
+  hasDataLabel,
+  children,
+}: {
+  title: string;
+  hasData: boolean;
+  hasDataLabel: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="mt-4 overflow-hidden rounded-lg border border-[#E5E7EB] bg-white">
+      <button
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-start transition hover:bg-[#F8FAFC]"
+        onClick={() => setOpen((value) => !value)}
+        type="button"
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-sm font-bold text-[#0B2D5C]">{title}</span>
+          {hasData ? (
+            <span className="shrink-0 rounded-full border border-[#E4CE9B] bg-[#FBF6EA] px-2 py-0.5 text-[10px] font-bold text-[#8A6D1F]">
+              {hasDataLabel}
+            </span>
+          ) : null}
+        </span>
+        <span
+          aria-hidden="true"
+          className={`shrink-0 text-xs font-black text-[#66758a] transition-transform ${open ? "rotate-180" : ""}`}
+        >
+          ▾
+        </span>
+      </button>
+      {open ? (
+        <div className="border-t border-[#EEF1F5] px-4 py-4">{children}</div>
+      ) : null}
+    </section>
+  );
+}
 
 function requiredFieldsForLanguage(language: string) {
   if (language === "AR") {
@@ -78,30 +233,14 @@ function validateForm(
     nextErrors.bufferMinutes = dictionary.services.invalidBuffer;
   }
 
-  if (form.followUpEnabled) {
-    const intervalValue = Number(form.defaultIntervalDays);
-    const totalValue = Number(form.totalRecommendedSessions);
+  if (form.followUpMode === "SESSION_BASED_PLAN") {
+    const hasTreatmentTemplates = form.treatmentTemplates.length > 0;
 
-    if (
-      form.defaultIntervalDays &&
-      (!Number.isInteger(intervalValue) || intervalValue <= 0)
-    ) {
-      nextErrors.defaultIntervalDays = dictionary.services.invalidDuration;
-    }
-
-    if (
-      form.totalRecommendedSessions &&
-      (!Number.isInteger(totalValue) || totalValue <= 0)
-    ) {
-      nextErrors.totalRecommendedSessions =
-        dictionary.services.invalidDuration;
-    }
-
-    if (form.followUpType === "SESSION_PLAN") {
-      const hasInvalidRule = form.followUpRules.some((rule) => {
-        const from = Number(rule.fromSessionNumber);
-        const to = Number(rule.toSessionNumber);
-        const interval = Number(rule.intervalDays);
+      if (!hasTreatmentTemplates) {
+        const hasInvalidRule = form.followUpRules.some((rule) => {
+          const from = Number(rule.fromSessionNumber);
+          const to = Number(rule.toSessionNumber);
+          const interval = Number(rule.intervalDays);
 
         return (
           !Number.isInteger(from) ||
@@ -113,9 +252,52 @@ function validateForm(
         );
       });
 
-      if (hasInvalidRule) {
-        nextErrors.followUpRules = dictionary.services.invalidDuration;
+        if (form.followUpRules.length === 0 || hasInvalidRule) {
+          nextErrors.followUpRules = dictionary.services.invalidDuration;
+        }
+      } else {
+        const hasInvalidTemplate = form.treatmentTemplates.some((template) => {
+          const total = Number(template.totalSessions);
+          const defaultInterval = Number(template.defaultIntervalDays);
+          const hasInvalidTotal =
+            !Number.isInteger(total) ||
+            total <= 0 ||
+            (template.defaultIntervalDays !== "" &&
+              (!Number.isInteger(defaultInterval) || defaultInterval <= 0));
+          const hasInvalidPhase = template.phases.some((rule) => {
+            const from = Number(rule.fromSessionNumber);
+            const to = Number(rule.toSessionNumber);
+            const interval = Number(rule.intervalDays);
+
+            return (
+              !Number.isInteger(from) ||
+              !Number.isInteger(to) ||
+              !Number.isInteger(interval) ||
+              from <= 0 ||
+              to < from ||
+              interval <= 0
+            );
+          });
+
+          return hasInvalidTotal || hasInvalidPhase;
+        });
+
+        if (hasInvalidTemplate) {
+          nextErrors.treatmentTemplates = dictionary.services.invalidDuration;
+        }
       }
+    }
+
+  if (form.followUpMode === "RECURRING_CONTINUOUS") {
+    const recurringValue = Number(form.recurringIntervalValue);
+
+    if (
+      !form.recurringIntervalValue ||
+      !Number.isInteger(recurringValue) ||
+      recurringValue <= 0
+    ) {
+      nextErrors.recurringIntervalValue =
+        dictionary.services.invalidDuration;
     }
   }
 
@@ -166,7 +348,7 @@ function getRuleWarnings(
   form: TenantServiceFormState,
   dictionary: CenterAdminDictionary,
 ) {
-  if (!form.followUpEnabled || form.followUpType !== "SESSION_PLAN") {
+  if (form.followUpMode !== "SESSION_BASED_PLAN") {
     return [];
   }
 
@@ -183,11 +365,7 @@ function getRuleWarnings(
     )
     .sort((a, b) => a.from - b.from);
 
-  if (
-    normalized.some(
-      (rule) => rule.from <= 0 || rule.to <= 0 || rule.from > rule.to,
-    )
-  ) {
+  if (normalized.some((rule) => rule.from <= 0 || rule.to <= 0 || rule.from > rule.to)) {
     warnings.push(dictionary.services.invalidRangeOrder);
   }
 
@@ -195,76 +373,98 @@ function getRuleWarnings(
     warnings.push(dictionary.services.invalidIntervals);
   }
 
-  if (
-    normalized.some((rule, index) => {
-      const nextRule = normalized[index + 1];
-      return Boolean(nextRule && rule.to >= nextRule.from);
-    })
-  ) {
+  if (normalized.some((rule, index) => {
+    const next = normalized[index + 1];
+    return Boolean(next && rule.to >= next.from);
+  })) {
     warnings.push(dictionary.services.overlappingRanges);
   }
 
-  const totalSessions = parseRuleValue(form.totalRecommendedSessions);
-  if (totalSessions && normalized.length > 0) {
-    const uncovered: number[] = [];
+  if (normalized.length > 0 && normalized[0].from !== 1) {
+    warnings.push(dictionary.services.firstPhaseMustStartAtOne);
+  }
 
-    for (let session = 1; session <= totalSessions; session += 1) {
-      const covered = normalized.some(
-        (rule) => session >= rule.from && session <= rule.to,
-      );
-      if (!covered) uncovered.push(session);
-    }
-
-    if (uncovered.length > 0) {
-      const ranges: string[] = [];
-      let start = uncovered[0];
-      let previous = uncovered[0];
-
-      for (const session of uncovered.slice(1)) {
-        if (session === previous + 1) {
-          previous = session;
-        } else {
-          ranges.push(start === previous ? `${start}` : `${start} - ${previous}`);
-          start = session;
-          previous = session;
-        }
-      }
-
-      ranges.push(start === previous ? `${start}` : `${start} - ${previous}`);
-      warnings.push(dictionary.services.uncoveredSessions(ranges.join(", ")));
-    }
+  if (normalized.some((rule, index) => {
+    const next = normalized[index + 1];
+    return Boolean(next && next.from !== rule.to + 1);
+  })) {
+    warnings.push(dictionary.services.noGapsAllowed);
   }
 
   return warnings;
 }
 
 function getPlanPreview(form: TenantServiceFormState) {
-  const totalSessions = parseRuleValue(form.totalRecommendedSessions) ?? 8;
+  if (form.followUpMode !== "SESSION_BASED_PLAN") return [];
+
+  const totalSessions = calculateTotalSessionsFromRules(form.followUpRules) ?? 8;
+  const sessions = Array.from({ length: Math.min(totalSessions, 12) }, (_, i) => i + 1);
+
+  let cumulativeDays = 0;
+  return sessions
+    .map((session) => {
+      if (session === 1) {
+        return { session, interval: 0, cumulativeDays: 0 };
+      }
+      const match = form.followUpRules.find((r) => {
+        const from = parseRuleValue(r.fromSessionNumber);
+        const to = parseRuleValue(r.toSessionNumber);
+        return from !== null && to !== null && session >= from && session <= to;
+      });
+      const interval = match
+        ? parseRuleValue(match.intervalDays)
+        : parseRuleValue(form.defaultIntervalDays);
+      if (!interval || interval <= 0) return null;
+      cumulativeDays += interval;
+      return { session, interval, cumulativeDays };
+    })
+    .filter((item): item is { session: number; interval: number; cumulativeDays: number } => Boolean(item));
+}
+
+function getTemplatePlanPreview(
+  template: TenantServiceFormState["treatmentTemplates"][number],
+) {
+  const totalSessions =
+    calculateTotalSessionsFromRules(template.phases) ??
+    parseRuleValue(template.totalSessions) ??
+    0;
+
+  if (totalSessions <= 0) {
+    return [];
+  }
+
   const sessions = Array.from(
     { length: Math.min(totalSessions, 12) },
     (_, index) => index + 1,
   );
 
+  let cumulativeDays = 0;
   return sessions
     .map((session) => {
-      if (form.followUpType === "FIXED_INTERVAL") {
-        const interval = parseRuleValue(form.defaultIntervalDays);
-        return interval && interval > 0 ? { session, interval } : null;
+      if (session === 1) {
+        return { session, interval: 0, cumulativeDays: 0 };
       }
-
-      const match = form.followUpRules.find((rule) => {
+      const match = template.phases.find((rule) => {
         const from = parseRuleValue(rule.fromSessionNumber);
         const to = parseRuleValue(rule.toSessionNumber);
         return from !== null && to !== null && session >= from && session <= to;
       });
       const interval = match
         ? parseRuleValue(match.intervalDays)
-        : parseRuleValue(form.defaultIntervalDays);
+        : parseRuleValue(template.defaultIntervalDays);
 
-      return interval && interval > 0 ? { session, interval } : null;
+      if (!interval || interval <= 0) {
+        return null;
+      }
+
+      cumulativeDays += interval;
+      return { session, interval, cumulativeDays };
     })
-    .filter((item): item is { session: number; interval: number } =>
-      Boolean(item),
+    .filter(
+      (
+        item,
+      ): item is { session: number; interval: number; cumulativeDays: number } =>
+        Boolean(item),
     );
 }
 
@@ -334,9 +534,86 @@ export function TenantServiceFormPage({ mode }: { mode: "create" | "edit" }) {
     >
       {({ dictionary, session }) => {
         const primaryLanguage = session.center.primaryLanguage as ServiceLanguage;
+        const localeKey =
+          primaryLanguage === "AR" ? "ar" : primaryLanguage === "HE" ? "he" : "en";
+        const recurringText = recurringLabels[localeKey];
+        const templateText = treatmentTemplateCopy[localeKey];
         const requiredFields = requiredFieldsForLanguage(primaryLanguage);
-        const followUpWarnings = getRuleWarnings(form, dictionary);
-        const followUpPreview = getPlanPreview(form);
+        const hasTreatmentTemplates = (form.treatmentTemplates ?? []).length > 0;
+        const derivedTotalSessions = calculateTotalSessionsFromRules(form.followUpRules);
+        const sectionText = sectionCopy[localeKey];
+
+        // ── Name / description fields keyed by language, split into the primary
+        // (always visible / required) and the secondary translations (collapsible).
+        type NameKey = "nameAr" | "nameEn" | "nameHe";
+        type DescKey = "descriptionAr" | "descriptionEn" | "descriptionHe";
+        const setText = (key: NameKey | DescKey, value: string) =>
+          setForm({ ...form, [key]: value } as TenantServiceFormState);
+        const nameDefs: ReadonlyArray<{ key: NameKey; label: string; dir: "rtl" | "ltr" }> = [
+          { key: "nameAr", label: dictionary.services.nameAr, dir: "rtl" },
+          { key: "nameEn", label: dictionary.services.nameEn, dir: "ltr" },
+          { key: "nameHe", label: dictionary.services.nameHe, dir: "rtl" },
+        ];
+        const descDefs: ReadonlyArray<{ key: DescKey; label: string; dir: "rtl" | "ltr" }> = [
+          { key: "descriptionAr", label: dictionary.services.descriptionAr, dir: "rtl" },
+          { key: "descriptionEn", label: dictionary.services.descriptionEn, dir: "ltr" },
+          { key: "descriptionHe", label: dictionary.services.descriptionHe, dir: "rtl" },
+        ];
+        const primaryNameKey = requiredFields.name as NameKey;
+        const primaryDescKey: DescKey =
+          primaryLanguage === "AR"
+            ? "descriptionAr"
+            : primaryLanguage === "HE"
+              ? "descriptionHe"
+              : "descriptionEn";
+        const renderNameField = (def: { key: NameKey; label: string; dir: "rtl" | "ltr" }) => (
+          <Field
+            className="md:col-span-2"
+            error={errors[def.key]}
+            isRequired={def.key === primaryNameKey}
+            key={def.key}
+            label={def.label}
+            optionalLabel={def.key === primaryNameKey ? undefined : dictionary.services.optional}
+          >
+            <input
+              className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
+              dir={def.dir}
+              onChange={(event) => setText(def.key, event.target.value)}
+              value={form[def.key]}
+            />
+          </Field>
+        );
+        const renderDescField = (def: { key: DescKey; label: string; dir: "rtl" | "ltr" }) => (
+          <Field
+            className="md:col-span-2"
+            error={errors[def.key]}
+            key={def.key}
+            label={def.label}
+            optionalLabel={dictionary.services.optional}
+          >
+            <textarea
+              className="min-h-24 w-full rounded-md border border-[#D8DEE8] px-3 py-2 text-sm text-[#132238]"
+              dir={def.dir}
+              onChange={(event) => setText(def.key, event.target.value)}
+              value={form[def.key]}
+            />
+          </Field>
+        );
+        const secondaryNameDefs = nameDefs.filter((def) => def.key !== primaryNameKey);
+        const secondaryDescDefs = descDefs.filter((def) => def.key !== primaryDescKey);
+        const primaryDescDef = descDefs.find((def) => def.key === primaryDescKey)!;
+        const translationsHaveData = [...secondaryNameDefs, ...secondaryDescDefs].some(
+          (def) => form[def.key].trim().length > 0,
+        );
+        const descriptionHasData = form[primaryDescKey].trim().length > 0;
+        const whatsappHasData = Boolean(
+          form.reminderMessageAr.trim() ||
+            form.reminderMessageEn.trim() ||
+            form.reminderMessageHe.trim(),
+        );
+        const advancedHasData = Boolean(
+          form.bufferMinutes && form.bufferMinutes !== "0",
+        );
         const applyPreset = (
           preset: "LASER" | "HIJAMA" | "SKINCARE",
         ) => {
@@ -344,7 +621,7 @@ export function TenantServiceFormPage({ mode }: { mode: "create" | "edit" }) {
             setForm({
               ...form,
               followUpEnabled: true,
-              followUpType: "SESSION_PLAN",
+              followUpMode: "SESSION_BASED_PLAN",
               defaultIntervalDays: "30",
               totalRecommendedSessions: "8",
               followUpRules: [
@@ -366,9 +643,45 @@ export function TenantServiceFormPage({ mode }: { mode: "create" | "edit" }) {
           setForm({
             ...form,
             followUpEnabled: true,
-            followUpType: "FIXED_INTERVAL",
+            followUpMode: "SESSION_BASED_PLAN",
             defaultIntervalDays: preset === "HIJAMA" ? "90" : "30",
             totalRecommendedSessions: "",
+          });
+        };
+        const addTreatmentTemplate = () => {
+          const totalSessions = derivedTotalSessions?.toString() || "8";
+          setForm({
+            ...form,
+            treatmentTemplates: [
+              ...form.treatmentTemplates,
+              {
+                nameAr: "",
+                nameEn: "",
+                nameHe: "",
+                totalSessions,
+                defaultIntervalDays: form.defaultIntervalDays || "30",
+                phases: form.followUpRules.map((rule) => ({ ...rule })),
+                isDefault: form.treatmentTemplates.length === 0,
+                isActive: true,
+                sortOrder: form.treatmentTemplates.length.toString(),
+              },
+            ],
+          });
+        };
+        const updateTreatmentTemplate = (
+          index: number,
+          patch: Partial<TenantServiceFormState["treatmentTemplates"][number]>,
+        ) => {
+          setForm({
+            ...form,
+            treatmentTemplates: form.treatmentTemplates.map((template, itemIndex) => {
+              if (itemIndex !== index) {
+                return patch.isDefault === true
+                  ? { ...template, isDefault: false }
+                  : template;
+              }
+              return { ...template, ...patch };
+            }),
           });
         };
         const submit = async () => {
@@ -422,50 +735,22 @@ export function TenantServiceFormPage({ mode }: { mode: "create" | "edit" }) {
             {!isLoading && !loadError ? (
               <section className="mt-5 rounded-lg border border-[#E5E7EB] bg-white p-5 shadow-[0_12px_30px_rgba(11,45,92,0.04)]">
                 <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
-                  <Field
-                    error={errors.nameEn}
-                    isRequired={requiredFields.name === "nameEn"}
-                    label={dictionary.services.nameEn}
-                    optionalLabel={dictionary.services.optional}
-                  >
-                    <input
-                      className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
-                      onChange={(event) =>
-                        setForm({ ...form, nameEn: event.target.value })
+                  <div className="md:col-span-2">
+                    <ServiceCoverUpload
+                      alt={form.coverImageAlt}
+                      locale={localeKey}
+                      onAltChange={(alt) =>
+                        setForm({ ...form, coverImageAlt: alt })
                       }
-                      value={form.nameEn}
-                    />
-                  </Field>
-                  <Field
-                    error={errors.nameAr}
-                    isRequired={requiredFields.name === "nameAr"}
-                    label={dictionary.services.nameAr}
-                    optionalLabel={dictionary.services.optional}
-                  >
-                    <input
-                      className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
-                      dir="rtl"
-                      onChange={(event) =>
-                        setForm({ ...form, nameAr: event.target.value })
+                      onChange={(url) =>
+                        setForm({ ...form, coverImageUrl: url })
                       }
-                      value={form.nameAr}
+                      value={form.coverImageUrl}
                     />
-                  </Field>
-                  <Field
-                    error={errors.nameHe}
-                    isRequired={requiredFields.name === "nameHe"}
-                    label={dictionary.services.nameHe}
-                    optionalLabel={dictionary.services.optional}
-                  >
-                    <input
-                      className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
-                      dir="rtl"
-                      onChange={(event) =>
-                        setForm({ ...form, nameHe: event.target.value })
-                      }
-                      value={form.nameHe}
-                    />
-                  </Field>
+                  </div>
+                  {renderNameField(
+                    nameDefs.find((def) => def.key === primaryNameKey)!,
+                  )}
                   <Field
                     error={errors.durationMinutes}
                     label={dictionary.services.durationMinutes}
@@ -518,22 +803,6 @@ export function TenantServiceFormPage({ mode }: { mode: "create" | "edit" }) {
                     />
                   </Field>
                   <Field
-                    error={errors.bufferMinutes}
-                    label={dictionary.services.bufferMinutes}
-                  >
-                    <input
-                      className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
-                      max="240"
-                      min="0"
-                      onChange={(event) =>
-                        setForm({ ...form, bufferMinutes: event.target.value })
-                      }
-                      step="1"
-                      type="number"
-                      value={form.bufferMinutes}
-                    />
-                  </Field>
-                  <Field
                     error={errors.currency}
                     label={dictionary.services.currency}
                   >
@@ -557,60 +826,56 @@ export function TenantServiceFormPage({ mode }: { mode: "create" | "edit" }) {
                     />
                     {dictionary.serviceStatuses.ACTIVE}
                   </label>
-                  <Field
-                    className="md:col-span-2"
-                    error={errors.descriptionEn}
-                    label={dictionary.services.descriptionEn}
-                    optionalLabel={dictionary.services.optional}
-                  >
-                    <textarea
-                      className="min-h-24 w-full rounded-md border border-[#D8DEE8] px-3 py-2 text-sm text-[#132238]"
-                      onChange={(event) =>
-                        setForm({
-                          ...form,
-                          descriptionEn: event.target.value,
-                        })
-                      }
-                      value={form.descriptionEn}
-                    />
-                  </Field>
-                  <Field
-                    className="md:col-span-2"
-                    error={errors.descriptionAr}
-                    label={dictionary.services.descriptionAr}
-                    optionalLabel={dictionary.services.optional}
-                  >
-                    <textarea
-                      className="min-h-24 w-full rounded-md border border-[#D8DEE8] px-3 py-2 text-sm text-[#132238]"
-                      dir="rtl"
-                      onChange={(event) =>
-                        setForm({
-                          ...form,
-                          descriptionAr: event.target.value,
-                        })
-                      }
-                      value={form.descriptionAr}
-                    />
-                  </Field>
-                  <Field
-                    className="md:col-span-2"
-                    error={errors.descriptionHe}
-                    label={dictionary.services.descriptionHe}
-                    optionalLabel={dictionary.services.optional}
-                  >
-                    <textarea
-                      className="min-h-24 w-full rounded-md border border-[#D8DEE8] px-3 py-2 text-sm text-[#132238]"
-                      dir="rtl"
-                      onChange={(event) =>
-                        setForm({
-                          ...form,
-                          descriptionHe: event.target.value,
-                        })
-                      }
-                      value={form.descriptionHe}
-                    />
-                  </Field>
                 </div>
+
+                {/* وصف الخدمة — primary-language description (collapsible) */}
+                <CollapsibleSection
+                  hasData={descriptionHasData}
+                  hasDataLabel={sectionText.hasData}
+                  title={sectionText.description}
+                >
+                  <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
+                    {renderDescField(primaryDescDef)}
+                  </div>
+                </CollapsibleSection>
+
+                {/* ترجمات اختيارية — secondary names + descriptions (collapsible) */}
+                <CollapsibleSection
+                  hasData={translationsHaveData}
+                  hasDataLabel={sectionText.hasData}
+                  title={sectionText.translations}
+                >
+                  <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
+                    {secondaryNameDefs.map(renderNameField)}
+                    {secondaryDescDefs.map(renderDescField)}
+                  </div>
+                </CollapsibleSection>
+
+                {/* إعدادات متقدمة — rarely-used technical fields (collapsible) */}
+                <CollapsibleSection
+                  hasData={advancedHasData}
+                  hasDataLabel={sectionText.hasData}
+                  title={sectionText.advanced}
+                >
+                  <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
+                    <Field
+                      error={errors.bufferMinutes}
+                      label={dictionary.services.bufferMinutes}
+                    >
+                      <input
+                        className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
+                        max="240"
+                        min="0"
+                        onChange={(event) =>
+                          setForm({ ...form, bufferMinutes: event.target.value })
+                        }
+                        step="1"
+                        type="number"
+                        value={form.bufferMinutes}
+                      />
+                    </Field>
+                  </div>
+                </CollapsibleSection>
 
                 <section className="mt-6 rounded-lg border border-[#E5E7EB] bg-[#F8FAFC] p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -622,97 +887,98 @@ export function TenantServiceFormPage({ mode }: { mode: "create" | "edit" }) {
                         {dictionary.services.followUpDescription}
                       </p>
                     </div>
-                    <label className="flex min-h-11 items-center gap-3 rounded-md border border-[#D8DEE8] bg-white px-3 text-sm font-semibold text-[#24364f]">
-                      <input
-                        checked={form.followUpEnabled}
-                        onChange={(event) =>
-                          setForm({
-                            ...form,
-                            followUpEnabled: event.target.checked,
-                          })
-                        }
-                        type="checkbox"
-                      />
-                      {dictionary.services.enableFollowUpPlan}
-                    </label>
+                    <div className="grid min-w-0 grid-cols-1 gap-2 sm:min-w-[360px]">
+                      {[
+                        ["NONE", dictionary.services.followUp.none, ""],
+                        ["SESSION_BASED_PLAN", dictionary.services.followUp.sessionBasedPlan, dictionary.services.followUp.sessionBasedHelper],
+                        ["RECURRING_CONTINUOUS", dictionary.services.followUp.recurring, dictionary.services.followUp.recurringHelper],
+                      ].map(([modeValue, label, helper]) => (
+                        <label
+                          className="flex min-h-11 items-center gap-3 rounded-md border border-[#D8DEE8] bg-white px-3 text-sm font-semibold text-[#24364f]"
+                          key={modeValue}
+                        >
+                          <input
+                            checked={form.followUpMode === modeValue}
+                            onChange={() =>
+                              setForm({
+                                ...form,
+                                followUpEnabled: modeValue !== "NONE",
+                                followUpMode: modeValue as TenantServiceFormState["followUpMode"],
+                              })
+                            }
+                            type="radio"
+                          />
+                          <span className="min-w-0">
+                            <span className="block">{label}</span>
+                            {helper ? <span className="mt-0.5 block text-xs font-normal text-[#66758a]">{helper}</span> : null}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
 
-                  {form.followUpEnabled ? (
+                  {form.followUpMode !== "NONE" ? (
                     <div className="mt-4 grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
-                      <Field label={dictionary.services.planType}>
-                        <select
-                          className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm font-semibold text-[#132238]"
-                          onChange={(event) =>
-                            setForm({
-                              ...form,
-                              followUpType: event.target.value as
-                                | "FIXED_INTERVAL"
-                                | "SESSION_PLAN",
-                            })
-                          }
-                          value={form.followUpType}
-                        >
-                          <option value="FIXED_INTERVAL">
-                            {dictionary.services.fixedInterval}
-                          </option>
-                          <option value="SESSION_PLAN">
-                            {dictionary.services.sessionPlan}
-                          </option>
-                        </select>
-                      </Field>
-                      <Field
-                        error={errors.defaultIntervalDays}
-                        label={dictionary.services.defaultIntervalDays}
-                      >
-                        <input
-                          className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
-                          min="1"
-                          onChange={(event) =>
-                            setForm({
-                              ...form,
-                              defaultIntervalDays: event.target.value,
-                            })
-                          }
-                          step="1"
-                          type="number"
-                          value={form.defaultIntervalDays}
-                        />
-                      </Field>
-                      <Field
-                        error={errors.totalRecommendedSessions}
-                        label={
-                          dictionary.services.totalRecommendedSessions
-                        }
-                        optionalLabel={dictionary.services.optional}
-                      >
-                        <input
-                          className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
-                          min="1"
-                          onChange={(event) =>
-                            setForm({
-                              ...form,
-                              totalRecommendedSessions: event.target.value,
-                            })
-                          }
-                          step="1"
-                          type="number"
-                          value={form.totalRecommendedSessions}
-                        />
-                      </Field>
-                      <label className="flex min-h-11 items-center gap-3 rounded-md border border-[#D8DEE8] bg-white px-3 text-sm font-semibold text-[#24364f]">
-                        <input
-                          checked={form.autoCreateNextReminder}
-                          onChange={(event) =>
-                            setForm({
-                              ...form,
-                              autoCreateNextReminder: event.target.checked,
-                            })
-                          }
-                          type="checkbox"
-                        />
-                        {dictionary.services.createNextReminderAutomatically}
-                      </label>
+                      {form.followUpMode === "SESSION_BASED_PLAN" ? (
+                        <div className="md:col-span-2 space-y-4">
+                          <p className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800">
+                            {dictionary.services.followUp.sessionBasedHelper}
+                          </p>
+                          <label className="flex min-h-11 items-center gap-3 rounded-md border border-[#D8DEE8] bg-white px-3 text-sm font-semibold text-[#24364f]">
+                            <input
+                              checked={form.autoCreateNextReminder}
+                              onChange={(event) => setForm({ ...form, autoCreateNextReminder: event.target.checked })}
+                              type="checkbox"
+                            />
+                            {dictionary.services.createNextReminderAutomatically}
+                          </label>
+                        </div>
+                      ) : null}
 
+                      {form.followUpMode === "RECURRING_CONTINUOUS" ? (
+                        <>
+                          <p className="rounded-md border border-sky-100 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-800 md:col-span-2">
+                            {dictionary.services.followUp.recurringHelper}
+                          </p>
+                          <Field
+                            error={errors.recurringIntervalValue}
+                            label={dictionary.services.recurringIntervalLabel ?? recurringText.repeatEvery}
+                          >
+                            <div className="grid grid-cols-[minmax(0,1fr)_minmax(130px,0.8fr)] gap-2">
+                              <input
+                                className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
+                                min="1"
+                                onChange={(event) =>
+                                  setForm({
+                                    ...form,
+                                    recurringIntervalValue: event.target.value,
+                                  })
+                                }
+                                step="1"
+                                type="number"
+                                value={form.recurringIntervalValue}
+                              />
+                              <select
+                                className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm font-semibold text-[#132238]"
+                                onChange={(event) =>
+                                  setForm({
+                                    ...form,
+                                    recurringIntervalUnit: event.target.value as TenantServiceFormState["recurringIntervalUnit"],
+                                  })
+                                }
+                                value={form.recurringIntervalUnit}
+                              >
+                                <option value="DAY">{dictionary.services.recurringUnitDay ?? recurringText.day}</option>
+                                <option value="WEEK">{dictionary.services.recurringUnitWeek ?? recurringText.week}</option>
+                                <option value="MONTH">{dictionary.services.recurringUnitMonth ?? recurringText.month}</option>
+                                <option value="YEAR">{dictionary.services.recurringUnitYear ?? recurringText.year}</option>
+                              </select>
+                            </div>
+                          </Field>
+                        </>
+                      ) : null}
+
+                      {form.followUpMode === "SESSION_BASED_PLAN" ? (
                       <div className="md:col-span-2">
                         <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3">
                           {[
@@ -747,228 +1013,371 @@ export function TenantServiceFormPage({ mode }: { mode: "create" | "edit" }) {
                           ))}
                         </div>
                       </div>
+                      ) : null}
 
-                      {form.followUpType === "SESSION_PLAN" ? (
+                      {form.followUpMode === "SESSION_BASED_PLAN" &&
+                      !hasTreatmentTemplates &&
+                      form.followUpRules.length > 0 ? (
                         <div className="md:col-span-2">
-                          <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                            <div>
-                              <h3 className="text-sm font-bold text-[#24364f]">
-                              {dictionary.services.sessionPlan}
-                              </h3>
-                              <p className="mt-1 text-sm leading-6 text-[#66758a]">
-                                {dictionary.services.followUpRuleHelper}
-                              </p>
-                            </div>
+                          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-4">
+                            <p className="text-sm font-bold text-amber-800">
+                              تحويل المراحل الحالية إلى قالب
+                            </p>
+                            <p className="mt-1 text-xs font-semibold text-amber-700">
+                              هذه الخدمة تحتوي على مراحل علاج قديمة. لاستخدام قوالب خطط العلاج الجديدة، قم بتحويل المراحل إلى قالب.
+                            </p>
                             <button
-                              className={buttonClassName(
-                                "secondary",
-                                "sm",
-                                "shrink-0",
-                              )}
-                              onClick={() =>
-                                setForm({
-                                  ...form,
-                                  followUpRules: [
-                                    ...form.followUpRules,
-                                    {
-                                      fromSessionNumber: "",
-                                      toSessionNumber: "",
-                                      intervalDays: "",
-                                    },
-                                  ],
-                                })
-                              }
+                              className={buttonClassName("secondary", "sm", "mt-3")}
+                              onClick={addTreatmentTemplate}
                               type="button"
                             >
-                              {dictionary.services.addRule}
+                              + تحويل المراحل الحالية إلى قالب
                             </button>
-                          </div>
-                          <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-2">
-                            {form.followUpRules.map((rule, index) => (
-                              <div
-                                className="rounded-lg border border-[#D8DEE8] bg-white p-4 shadow-[0_10px_24px_rgba(11,45,92,0.04)]"
-                                key={`follow-up-rule-${index}`}
-                              >
-                                <div className="flex items-start justify-between gap-3">
-                                  <div>
-                                    <h4 className="text-sm font-bold text-[#0B2D5C]">
-                                      {dictionary.services.phaseTitle(index + 1)}
-                                    </h4>
-                                    <p className="mt-1 text-xs font-semibold text-[#66758a]">
-                                      {dictionary.services.sessionsFrom}{" "}
-                                      {rule.fromSessionNumber || "-"}{" "}
-                                      {dictionary.services.sessionsTo}{" "}
-                                      {rule.toSessionNumber || "-"}
-                                    </p>
-                                    {parseRuleValue(rule.intervalDays) ? (
-                                      <p className="mt-2 text-sm font-bold text-[#0B2D5C]">
-                                        <span aria-hidden="true">⏰ </span>
-                                        {dictionary.services.reminderAfterDays(
-                                          Number(rule.intervalDays),
-                                        )}
-                                      </p>
-                                    ) : null}
-                                  </div>
-                                  <button
-                                    className={buttonClassName(
-                                      "ghost",
-                                      "sm",
-                                      "shrink-0",
-                                    )}
-                                    onClick={(event) => {
-                                      const input =
-                                        event.currentTarget
-                                          .closest("div.rounded-lg")
-                                          ?.querySelector("input");
-                                      input?.focus();
-                                    }}
-                                    type="button"
-                                  >
-                                    {dictionary.services.editPhase}
-                                  </button>
-                                </div>
-                                <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3">
-                                  {([
-                                    "fromSessionNumber",
-                                    "toSessionNumber",
-                                    "intervalDays",
-                                  ] as FollowUpRuleField[]).map((field) => (
-                                    <label
-                                      className="block min-w-0"
-                                      key={field}
-                                    >
-                                      <span className="text-xs font-bold text-[#24364f]">
-                                        {ruleLabel(dictionary, field)}
-                                      </span>
-                                      <input
-                                        className="mt-1 min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
-                                        min="1"
-                                        onChange={(event) => {
-                                          const nextRules = [
-                                            ...form.followUpRules,
-                                          ];
-                                          nextRules[index] = {
-                                            ...nextRules[index],
-                                            [field]: event.target.value,
-                                          };
-                                          setForm({
-                                            ...form,
-                                            followUpRules: nextRules,
-                                          });
-                                        }}
-                                        type="number"
-                                        value={rule[field]}
-                                      />
-                                    </label>
-                                  ))}
-                                </div>
-                                <div className="mt-4 flex justify-end">
-                                  <button
-                                    className={buttonClassName("danger", "sm")}
-                                    onClick={() =>
-                                      setForm({
-                                        ...form,
-                                        followUpRules:
-                                          form.followUpRules.filter(
-                                            (_, ruleIndex) =>
-                                              ruleIndex !== index,
-                                          ),
-                                      })
-                                    }
-                                    type="button"
-                                  >
-                                    {dictionary.services.deletePhase}
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                          {followUpWarnings.length > 0 ? (
-                            <div className="mt-3 space-y-2 rounded-lg border border-[#F7DFA8] bg-[#FFF8E7] p-3">
-                              {followUpWarnings.map((warning) => (
-                                <p
-                                  className="text-sm font-semibold text-[#8A5A00]"
-                                  key={warning}
-                                >
-                                  {warning}
-                                </p>
-                              ))}
-                            </div>
-                          ) : null}
-                          <div className="mt-4 rounded-lg border border-[#D8DEE8] bg-white p-4">
-                            <h3 className="text-sm font-bold text-[#0B2D5C]">
-                              {dictionary.services.planPreview}
-                            </h3>
-                            <div className="mt-3 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                              {followUpPreview.map((item) => (
-                                <div
-                                  className="rounded-md bg-[#F8FAFC] px-3 py-2 text-sm font-semibold text-[#24364f]"
-                                  key={`preview-${item.session}`}
-                                >
-                                  {dictionary.services.previewSessionLine(
-                                    item.session,
-                                    item.interval,
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                            {errors.followUpRules ? (
-                              <p className="mt-3 text-xs font-semibold text-[#B42318]">
-                                {errors.followUpRules}
-                              </p>
-                            ) : null}
                           </div>
                         </div>
                       ) : null}
 
-                      <Field
-                        className="md:col-span-2"
-                        label={dictionary.services.whatsappMessageArabic}
-                        optionalLabel={dictionary.services.optional}
-                      >
-                        <textarea
-                          className="min-h-20 w-full rounded-md border border-[#D8DEE8] px-3 py-2 text-sm text-[#132238]"
-                          dir="rtl"
-                          onChange={(event) =>
-                            setForm({
-                              ...form,
-                              reminderMessageAr: event.target.value,
-                            })
-                          }
-                          value={form.reminderMessageAr}
-                        />
-                      </Field>
-                      <Field
-                        label={dictionary.services.whatsappMessageEnglish}
-                        optionalLabel={dictionary.services.optional}
-                      >
-                        <textarea
-                          className="min-h-20 w-full rounded-md border border-[#D8DEE8] px-3 py-2 text-sm text-[#132238]"
-                          onChange={(event) =>
-                            setForm({
-                              ...form,
-                              reminderMessageEn: event.target.value,
-                            })
-                          }
-                          value={form.reminderMessageEn}
-                        />
-                      </Field>
-                      <Field
-                        label={dictionary.services.whatsappMessageHebrew}
-                        optionalLabel={dictionary.services.optional}
-                      >
-                        <textarea
-                          className="min-h-20 w-full rounded-md border border-[#D8DEE8] px-3 py-2 text-sm text-[#132238]"
-                          dir="rtl"
-                          onChange={(event) =>
-                            setForm({
-                              ...form,
-                              reminderMessageHe: event.target.value,
-                            })
-                          }
-                          value={form.reminderMessageHe}
-                        />
-                      </Field>
+                      {form.followUpMode === "SESSION_BASED_PLAN" ? (
+                        <div className="md:col-span-2">
+                          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                              <h3 className="text-sm font-bold text-[#24364f]">
+                                {templateText.title}
+                              </h3>
+                              <p className="mt-0.5 text-xs text-[#66758a]">
+                                {templateText.helper}
+                              </p>
+                            </div>
+                            <button
+                              className={buttonClassName("primary", "sm", "shrink-0")}
+                              onClick={addTreatmentTemplate}
+                              type="button"
+                            >
+                              + {templateText.add}
+                            </button>
+                          </div>
+
+                          {form.treatmentTemplates.length === 0 ? (
+                            <p className="rounded-lg border border-dashed border-[#D8DEE8] bg-white px-4 py-5 text-sm font-semibold text-[#66758a]">
+                              {templateText.empty}
+                            </p>
+                          ) : (
+                            <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
+                              {form.treatmentTemplates.map((template, templateIndex) => (
+                                <div
+                                  className="rounded-lg border border-[#D8DEE8] bg-white p-4 shadow-[0_10px_24px_rgba(11,45,92,0.04)]"
+                                  key={template.id ?? `new-template-${templateIndex}`}
+                                >
+                                  <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                    <div>
+                                      <h4 className="text-sm font-bold text-[#0B2D5C]">
+                                        {templateText.templateTitle(templateIndex + 1)}
+                                      </h4>
+                                      <p className="mt-1 text-xs font-semibold text-[#66758a]">
+                                        {dictionary.services.totalSessionsSummary(
+                                          Number(template.totalSessions) || 0,
+                                        )}
+                                      </p>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-3">
+                                      <label className="flex items-center gap-2 text-xs font-bold text-[#24364f]">
+                                        <input
+                                          checked={template.isDefault}
+                                          onChange={() =>
+                                            updateTreatmentTemplate(templateIndex, {
+                                              isDefault: true,
+                                            })
+                                          }
+                                          type="radio"
+                                        />
+                                        {templateText.default}
+                                      </label>
+                                      <label className="flex items-center gap-2 text-xs font-bold text-[#24364f]">
+                                        <input
+                                          checked={template.isActive}
+                                          onChange={(event) =>
+                                            updateTreatmentTemplate(templateIndex, {
+                                              isActive: event.target.checked,
+                                            })
+                                          }
+                                          type="checkbox"
+                                        />
+                                        {templateText.active}
+                                      </label>
+                                    </div>
+                                  </div>
+
+                                  <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-3">
+                                    {(["nameAr", "nameEn", "nameHe"] as const).map((field) => (
+                                      <Field
+                                        key={field}
+                                        label={
+                                          field === "nameAr"
+                                            ? dictionary.services.nameAr
+                                            : field === "nameEn"
+                                              ? dictionary.services.nameEn
+                                              : dictionary.services.nameHe
+                                        }
+                                        optionalLabel={dictionary.services.optional}
+                                      >
+                                        <input
+                                          className="min-h-10 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
+                                          dir={field === "nameEn" ? "ltr" : "rtl"}
+                                          onChange={(event) =>
+                                            updateTreatmentTemplate(templateIndex, {
+                                              [field]: event.target.value,
+                                            })
+                                          }
+                                          value={template[field]}
+                                        />
+                                      </Field>
+                                    ))}
+                                    <Field label={dictionary.services.totalRecommendedSessions}>
+                                      <input
+                                        className="min-h-10 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
+                                        min="1"
+                                        onChange={(event) =>
+                                          updateTreatmentTemplate(templateIndex, {
+                                            totalSessions: event.target.value,
+                                          })
+                                        }
+                                        type="number"
+                                        value={template.totalSessions}
+                                      />
+                                    </Field>
+                                    <Field
+                                      label={dictionary.services.defaultIntervalDays}
+                                      optionalLabel={dictionary.services.optional}
+                                    >
+                                      <input
+                                        className="min-h-10 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
+                                        min="1"
+                                        onChange={(event) =>
+                                          updateTreatmentTemplate(templateIndex, {
+                                            defaultIntervalDays: event.target.value,
+                                          })
+                                        }
+                                        type="number"
+                                        value={template.defaultIntervalDays}
+                                      />
+                                    </Field>
+                                    <Field
+                                      label={templateText.sortOrder}
+                                      optionalLabel={dictionary.services.optional}
+                                    >
+                                      <input
+                                        className="min-h-10 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
+                                        min="0"
+                                        onChange={(event) =>
+                                          updateTreatmentTemplate(templateIndex, {
+                                            sortOrder: event.target.value,
+                                          })
+                                        }
+                                        type="number"
+                                        value={template.sortOrder}
+                                      />
+                                    </Field>
+                                  </div>
+
+                                  <div className="mt-4 rounded-lg border border-[#EEF1F5] bg-[#F8FAFC] p-3">
+                                    <div className="mb-3 flex items-center justify-between gap-3">
+                                      <p className="text-xs font-bold text-[#24364f]">
+                                        {dictionary.services.treatmentPhases}
+                                      </p>
+                                      <button
+                                        className={buttonClassName("secondary", "sm", "bg-white")}
+                                        onClick={() =>
+                                          updateTreatmentTemplate(templateIndex, {
+                                            phases: [
+                                              ...template.phases,
+                                              {
+                                                fromSessionNumber: "",
+                                                toSessionNumber: "",
+                                                intervalDays: "",
+                                              },
+                                            ],
+                                          })
+                                        }
+                                        type="button"
+                                      >
+                                        + {dictionary.services.addRule}
+                                      </button>
+                                    </div>
+
+                                    {template.phases.length === 0 ? (
+                                      <p className="text-xs font-semibold text-[#66758a]">
+                                        {templateText.usesDefaultInterval}
+                                      </p>
+                                    ) : (
+                                      <div className="space-y-2">
+                                        {template.phases.map((rule, ruleIndex) => (
+                                          <div
+                                            className="grid min-w-0 grid-cols-1 gap-2 rounded-md border border-[#E5E7EB] bg-white p-3 md:grid-cols-4"
+                                            key={`template-${templateIndex}-phase-${ruleIndex}`}
+                                          >
+                                            {(["fromSessionNumber", "toSessionNumber", "intervalDays"] as FollowUpRuleField[]).map((field) => (
+                                              <label className="block min-w-0" key={field}>
+                                                <span className="text-[11px] font-bold text-[#66758a]">
+                                                  {ruleLabel(dictionary, field)}
+                                                </span>
+                                                <input
+                                                  className="mt-1 min-h-9 w-full rounded-md border border-[#D8DEE8] px-2 text-sm text-[#132238]"
+                                                  min="1"
+                                                  onChange={(event) => {
+                                                    const nextPhases = [...template.phases];
+                                                    nextPhases[ruleIndex] = {
+                                                      ...rule,
+                                                      [field]: event.target.value,
+                                                    };
+                                                    updateTreatmentTemplate(templateIndex, {
+                                                      phases: nextPhases,
+                                                    });
+                                                  }}
+                                                  type="number"
+                                                  value={rule[field]}
+                                                />
+                                              </label>
+                                            ))}
+                                            <div className="flex items-end">
+                                              <button
+                                                className={buttonClassName("danger", "sm", "w-full")}
+                                                onClick={() =>
+                                                  updateTreatmentTemplate(templateIndex, {
+                                                    phases: template.phases.filter(
+                                                      (_, itemIndex) => itemIndex !== ruleIndex,
+                                                    ),
+                                                  })
+                                                }
+                                                type="button"
+                                              >
+                                                {dictionary.services.deletePhase}
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="mt-4 rounded-lg border border-[#D8DEE8] bg-white p-3">
+                                    <h5 className="text-xs font-bold text-[#0B2D5C]">
+                                      {templateText.previewTitle}
+                                    </h5>
+                                    {getTemplatePlanPreview(template).length > 0 ? (
+                                      <div className="mt-3 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+                                        {getTemplatePlanPreview(template).map((item) => (
+                                          <div
+                                            className="rounded-md bg-[#F8FAFC] px-3 py-2"
+                                            key={`template-${templateIndex}-preview-${item.session}`}
+                                          >
+                                            <div className="text-xs font-bold text-[#24364f]">
+                                              {dictionary.services.previewSessionLine(
+                                                item.session,
+                                                item.interval,
+                                              )}
+                                            </div>
+                                            <div
+                                              className="text-[10px] font-bold text-[#C8A45D]"
+                                              dir="ltr"
+                                            >
+                                              +{item.cumulativeDays}d
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <p className="mt-2 text-xs font-semibold text-[#66758a]">
+                                        {templateText.usesDefaultInterval}
+                                      </p>
+                                    )}
+                                  </div>
+
+                                  <div className="mt-4 flex justify-end">
+                                    <button
+                                      className={buttonClassName("danger", "sm")}
+                                      onClick={() =>
+                                        setForm({
+                                          ...form,
+                                          treatmentTemplates: form.treatmentTemplates.filter(
+                                            (_, itemIndex) => itemIndex !== templateIndex,
+                                          ),
+                                        })
+                                      }
+                                      type="button"
+                                    >
+                                      {templateText.delete}
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {errors.treatmentTemplates ? (
+                            <p className="mt-3 rounded-md border border-[#F3B8B8] bg-[#FFF7F7] px-3 py-2 text-sm font-semibold text-[#B42318]">
+                              {errors.treatmentTemplates}
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      <div className="md:col-span-2">
+                        <CollapsibleSection
+                          hasData={whatsappHasData}
+                          hasDataLabel={sectionText.hasData}
+                          title={sectionText.whatsapp}
+                        >
+                          <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
+                            <Field
+                              className="md:col-span-2"
+                              label={dictionary.services.whatsappMessageArabic}
+                              optionalLabel={dictionary.services.optional}
+                            >
+                              <textarea
+                                className="min-h-20 w-full rounded-md border border-[#D8DEE8] px-3 py-2 text-sm text-[#132238]"
+                                dir="rtl"
+                                onChange={(event) =>
+                                  setForm({
+                                    ...form,
+                                    reminderMessageAr: event.target.value,
+                                  })
+                                }
+                                value={form.reminderMessageAr}
+                              />
+                            </Field>
+                            <Field
+                              label={dictionary.services.whatsappMessageEnglish}
+                              optionalLabel={dictionary.services.optional}
+                            >
+                              <textarea
+                                className="min-h-20 w-full rounded-md border border-[#D8DEE8] px-3 py-2 text-sm text-[#132238]"
+                                onChange={(event) =>
+                                  setForm({
+                                    ...form,
+                                    reminderMessageEn: event.target.value,
+                                  })
+                                }
+                                value={form.reminderMessageEn}
+                              />
+                            </Field>
+                            <Field
+                              label={dictionary.services.whatsappMessageHebrew}
+                              optionalLabel={dictionary.services.optional}
+                            >
+                              <textarea
+                                className="min-h-20 w-full rounded-md border border-[#D8DEE8] px-3 py-2 text-sm text-[#132238]"
+                                dir="rtl"
+                                onChange={(event) =>
+                                  setForm({
+                                    ...form,
+                                    reminderMessageHe: event.target.value,
+                                  })
+                                }
+                                value={form.reminderMessageHe}
+                              />
+                            </Field>
+                          </div>
+                        </CollapsibleSection>
+                      </div>
                     </div>
                   ) : null}
                 </section>
@@ -999,6 +1408,42 @@ export function TenantServiceFormPage({ mode }: { mode: "create" | "edit" }) {
         );
       }}
     </CenterAdminShell>
+  );
+}
+
+function getTotalSessionsSummary(
+  dictionary: CenterAdminDictionary,
+  _locale: "en" | "ar" | "he",
+  count: number,
+) {
+  return dictionary.services.totalSessionsSummary(count);
+}
+
+function getTotalSessionsCalculated(
+  dictionary: CenterAdminDictionary,
+  _locale: "en" | "ar" | "he",
+) {
+  return dictionary.services.totalSessionsCalculated;
+}
+
+function SessionTotalSummary({
+  count,
+  dictionary,
+  locale,
+}: {
+  count: number;
+  dictionary: CenterAdminDictionary;
+  locale: "en" | "ar" | "he";
+}) {
+  return (
+    <div className="min-w-0 rounded-lg border border-sky-100 bg-sky-50 px-4 py-3">
+      <p className="text-sm font-bold text-[#0B2D5C]">
+        {getTotalSessionsSummary(dictionary, locale, count)}
+      </p>
+      <p className="mt-1 text-xs font-medium leading-5 text-[#66758a]">
+        {getTotalSessionsCalculated(dictionary, locale)}
+      </p>
+    </div>
   );
 }
 

@@ -23,7 +23,8 @@ export type PlatformEventName =
   | "StartSubscription"
   | "SubmitLead"
   | "ContactSales"
-  | "LoginAttempt";
+  | "LoginAttempt"
+  | "PricingPlanWhatsAppClick";
 
 export function trackPlatformEvent(
   eventName: PlatformEventName,

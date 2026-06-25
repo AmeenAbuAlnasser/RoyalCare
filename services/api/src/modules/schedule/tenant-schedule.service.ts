@@ -26,8 +26,6 @@ const daysOfWeek: DayOfWeek[] = [
   'SUNDAY',
 ];
 
-const providerRoleKeys = ['CENTER_MANAGER', 'DOCTOR', 'STAFF'] as const;
-
 function forbidden(permission: string) {
   return new ForbiddenException({
     message: 'Permission denied',
@@ -151,8 +149,12 @@ export class TenantScheduleService {
     const prisma = await this.prisma.getClient();
     await this.ensureDefaultCenterHours(centerId);
 
-    const [centerHours, closedDays, providers, providerHours, providerLeave] =
+    const [center, centerHours, closedDays, providerHours, providerLeave] =
       await Promise.all([
+        prisma.center.findUnique({
+          where: { id: centerId },
+          select: { ownerUserId: true },
+        }),
         prisma.centerWorkingHours.findMany({
           where: { centerId },
           orderBy: { dayOfWeek: 'asc' },
@@ -169,14 +171,6 @@ export class TenantScheduleService {
           orderBy: { date: 'asc' },
           select: { date: true, id: true, reason: true },
           take: 100,
-        }),
-        prisma.userRole.findMany({
-          where: { centerId, role: { key: { in: [...providerRoleKeys] } } },
-          orderBy: { user: { fullName: 'asc' } },
-          select: {
-            role: { select: { key: true, name: true } },
-            user: { select: { fullName: true, id: true } },
-          },
         }),
         prisma.providerWorkingHours.findMany({
           where: { centerId },
@@ -202,8 +196,32 @@ export class TenantScheduleService {
           take: 200,
         }),
       ]);
+      const providers = await prisma.userRole.findMany({
+        where: {
+          centerId,
+          OR: [
+            { providerEnabled: true },
+            ...(center?.ownerUserId ? [{ userId: center.ownerUserId }] : []),
+          ],
+          role: { status: 'ACTIVE' },
+          status: 'ACTIVE',
+          user: { deletedAt: null, status: 'ACTIVE' },
+        },
+        orderBy: { user: { fullName: 'asc' } },
+        select: {
+          providerEnabled: true,
+          role: { select: { key: true, name: true } },
+          user: { select: { fullName: true, id: true } },
+        },
+      });
+      const uniqueProviders = new Map<string, (typeof providers)[number]>();
+      for (const provider of providers) {
+        if (!uniqueProviders.has(provider.user.id)) {
+          uniqueProviders.set(provider.user.id, provider);
+        }
+      }
 
-    return {
+      return {
       centerHours: daysOfWeek.map((day) =>
         mapCenterHour(
           centerHours.find((hour) => hour.dayOfWeek === day),
@@ -222,7 +240,7 @@ export class TenantScheduleService {
         providerName: leave.staffUser.fullName,
         reason: leave.reason,
       })),
-      providers: providers.map((provider) => ({
+      providers: Array.from(uniqueProviders.values()).map((provider) => ({
         id: provider.user.id,
         name: provider.user.fullName,
         roleKey: provider.role.key,
@@ -496,10 +514,20 @@ export class TenantScheduleService {
 
   private async ensureProvider(centerId: string, providerId: string) {
     const prisma = await this.prisma.getClient();
+    const center = await prisma.center.findUnique({
+      where: { id: centerId },
+      select: { ownerUserId: true },
+    });
     const provider = await prisma.userRole.findFirst({
       where: {
         centerId,
-        role: { key: { in: [...providerRoleKeys] } },
+        OR: [
+          { providerEnabled: true },
+          ...(center?.ownerUserId ? [{ userId: center.ownerUserId }] : []),
+        ],
+        role: { status: 'ACTIVE' },
+        status: 'ACTIVE',
+        user: { deletedAt: null, status: 'ACTIVE' },
         userId: providerId,
       },
       select: { userId: true },

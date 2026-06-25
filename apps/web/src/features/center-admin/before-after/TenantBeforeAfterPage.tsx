@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AdminState } from "@/components/ui/admin-surfaces";
+import { BeforeAfterPair } from "@/components/ui/before-after-pair";
 import { buttonClassName } from "@/components/ui/button-styles";
 import { useLanguage } from "@/i18n/LanguageProvider";
 import type { SupportedLocale } from "@/i18n/locales";
@@ -158,45 +159,6 @@ function localizedTitle(item: Pick<TenantBeforeAfterPayload, "titleAr" | "titleE
   return item.titleEn || item.titleAr || item.titleHe || "";
 }
 
-function BeforeAfterPreview({
-  afterImageUrl,
-  beforeImageUrl,
-}: {
-  afterImageUrl?: string | null;
-  beforeImageUrl?: string | null;
-}) {
-  const [position, setPosition] = useState(50);
-  if (!beforeImageUrl && !afterImageUrl) {
-    return <div className="flex aspect-[4/3] items-center justify-center rounded-2xl bg-[#F8FAFC] text-sm font-bold text-[#8A94A6]">Preview</div>;
-  }
-
-  return (
-    <div className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-[#E5E7EB] bg-[#F8FAFC]">
-      {beforeImageUrl ? (
-        <img alt="" className="absolute inset-0 h-full w-full object-cover" src={beforeImageUrl} />
-      ) : null}
-      {afterImageUrl ? (
-        <img
-          alt=""
-          className="absolute inset-0 h-full w-full object-cover"
-          src={afterImageUrl}
-          style={{ clipPath: `inset(0 0 0 ${position}%)` }}
-        />
-      ) : null}
-      <div className="absolute inset-y-0 w-0.5 bg-white shadow" style={{ insetInlineStart: `${position}%` }} />
-      <input
-        aria-label="Before after comparison"
-        className="absolute inset-x-4 bottom-4 accent-[#C8A45D]"
-        max={95}
-        min={5}
-        onChange={(event) => setPosition(Number(event.target.value))}
-        type="range"
-        value={position}
-      />
-    </div>
-  );
-}
-
 function ImageField({
   label,
   onChange,
@@ -229,8 +191,14 @@ function ImageField({
   return (
     <div className="grid gap-2 rounded-2xl border border-[#E5E7EB] bg-[#F8FAFC] p-3">
       <p className="text-sm font-black text-[#0B2D5C]">{label}</p>
-      <div className="aspect-[4/3] overflow-hidden rounded-xl border border-[#E5E7EB] bg-white">
-        {value ? <img alt="" className="h-full w-full object-cover" src={value} /> : null}
+      <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-xl border border-[#E5E7EB] bg-white">
+        {value ? (
+          <img alt="" className="h-full w-full object-cover" decoding="async" src={value} />
+        ) : (
+          <span className="px-4 text-center text-sm font-bold text-[#8A94A6]">
+            {label}
+          </span>
+        )}
       </div>
       <p className="text-[11px] leading-5 text-[#8A94A6]">{t.imageHint}</p>
       <div className="flex flex-col gap-2 sm:flex-row">
@@ -354,6 +322,35 @@ export function TenantBeforeAfterPage() {
     if (editingId === id) resetForm();
   }
 
+  async function togglePublished(item: TenantBeforeAfterItem) {
+    const nextItem = { ...item, isPublished: !item.isPublished };
+    setItems((prev) =>
+      prev.map((current) => (current.id === item.id ? nextItem : current)),
+    );
+    try {
+      const saved = await updateTenantBeforeAfter(item.id, {
+        afterImageUrl: item.afterImageUrl,
+        beforeImageUrl: item.beforeImageUrl,
+        category: item.category,
+        descriptionAr: item.descriptionAr,
+        descriptionEn: item.descriptionEn,
+        descriptionHe: item.descriptionHe,
+        isPublished: nextItem.isPublished,
+        sortOrder: item.sortOrder,
+        titleAr: item.titleAr,
+        titleEn: item.titleEn,
+        titleHe: item.titleHe,
+      });
+      setItems((prev) =>
+        prev.map((current) => (current.id === item.id ? saved : current)),
+      );
+    } catch {
+      setItems((prev) =>
+        prev.map((current) => (current.id === item.id ? item : current)),
+      );
+    }
+  }
+
   async function reorder(droppedOnId: string) {
     if (!draggingId || draggingId === droppedOnId) return;
     const fromIndex = sortedItems.findIndex((item) => item.id === draggingId);
@@ -475,7 +472,15 @@ export function TenantBeforeAfterPage() {
               </div>
               <div className="rounded-2xl border border-[#E5E7EB] bg-[#F8FAFC] p-3">
                 <p className="mb-3 text-sm font-black text-[#0B2D5C]">{t.livePreview}</p>
-                <BeforeAfterPreview afterImageUrl={form.afterImageUrl} beforeImageUrl={form.beforeImageUrl} />
+                <BeforeAfterPair
+                  afterImageUrl={form.afterImageUrl}
+                  afterLabel={t.afterImage}
+                  beforeImageUrl={form.beforeImageUrl}
+                  beforeLabel={t.beforeImage}
+                  enableLightbox
+                  missingLabel={t.upload}
+                  title={localizedTitle(form, activeLocale) || t.livePreview}
+                />
               </div>
               {error ? <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
               <div className="flex flex-col gap-2 sm:flex-row">
@@ -504,8 +509,16 @@ export function TenantBeforeAfterPage() {
                     onDragStart={() => setDraggingId(item.id)}
                     onDrop={() => void reorder(item.id)}
                   >
-                    <div className="grid gap-4 md:grid-cols-[160px_minmax(0,1fr)]">
-                      <BeforeAfterPreview afterImageUrl={item.afterImageUrl} beforeImageUrl={item.beforeImageUrl} />
+                    <div className="grid gap-4 lg:grid-cols-[minmax(280px,0.9fr)_minmax(0,1fr)]">
+                      <BeforeAfterPair
+                        afterImageUrl={item.afterImageUrl}
+                        afterLabel={t.afterImage}
+                        beforeImageUrl={item.beforeImageUrl}
+                        beforeLabel={t.beforeImage}
+                        enableLightbox
+                        missingLabel={t.upload}
+                        title={localizedTitle(item, activeLocale) || t.title}
+                      />
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="truncate text-sm font-black text-[#0B2D5C]">
@@ -524,6 +537,9 @@ export function TenantBeforeAfterPage() {
                         <div className="mt-3 flex flex-wrap gap-2">
                           <button className={buttonClassName("secondary", "sm")} onClick={() => editItem(item)} type="button">
                             {t.edit}
+                          </button>
+                          <button className={buttonClassName("secondary", "sm")} onClick={() => void togglePublished(item)} type="button">
+                            {item.isPublished ? t.unpublished : t.published}
                           </button>
                           <button className={buttonClassName("danger", "sm")} onClick={() => void removeItem(item.id)} type="button">
                             {t.delete}

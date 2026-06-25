@@ -53,6 +53,7 @@ export class TenantBillingController {
     @Query('search') search?: string,
     @Query('status') status?: string,
     @Query('appointmentId') appointmentId?: string,
+    @Query('branchId') branchId?: string,
   ) {
     const session = await this.getSession(request);
 
@@ -63,6 +64,7 @@ export class TenantBillingController {
         search,
         status,
         appointmentId,
+        branchId,
       },
     );
   }

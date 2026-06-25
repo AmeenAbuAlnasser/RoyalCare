@@ -14,6 +14,7 @@ const bookingRequestSelect = {
   id: true,
   centerId: true,
   serviceId: true,
+  branchId: true,
   offerId: true,
   offerTitle: true,
   offerPrice: true,
@@ -22,9 +23,11 @@ const bookingRequestSelect = {
   appointmentId: true,
   fullName: true,
   phone: true,
+  patientArea: true,
   notes: true,
   requestedDate: true,
   requestedTime: true,
+  source: true,
   status: true,
   createdAt: true,
   updatedAt: true,
@@ -35,6 +38,21 @@ const bookingRequestSelect = {
       nameAr: true,
       nameHe: true,
       durationMinutes: true,
+    },
+  },
+  branch: {
+    select: {
+      id: true,
+      name: true,
+      cityAr: true,
+      cityEn: true,
+      cityHe: true,
+      addressAr: true,
+      addressEn: true,
+      addressHe: true,
+      mapsUrl: true,
+      phone: true,
+      whatsapp: true,
     },
   },
   provider: {
@@ -70,7 +88,12 @@ export class BookingRequestsService {
     private readonly scheduleService: ScheduleService,
   ) {}
 
-  async list(centerId: string, permissions: string[], statusFilter?: string) {
+  async list(
+    centerId: string,
+    permissions: string[],
+    statusFilter?: string,
+    branchId?: string,
+  ) {
     if (!hasTenantPermission(permissions, 'appointments:view')) {
       throw forbidden('appointments:view');
     }
@@ -78,6 +101,10 @@ export class BookingRequestsService {
     const prisma = await this.prisma.getClient();
 
     const where: Prisma.BookingRequestWhereInput = { centerId };
+
+    if (branchId) {
+      where.branchId = branchId;
+    }
 
     if (statusFilter && statusFilter !== 'ALL') {
       where.status = statusFilter as 'PENDING' | 'ACCEPTED' | 'REJECTED';
@@ -93,7 +120,37 @@ export class BookingRequestsService {
       prisma.bookingRequest.count({ where }),
     ]);
 
-    return { items, total };
+    // Flag whether each request's phone already maps to a patient in this
+    // center. Uses the SAME exact-phone match as prepareConversion so the card
+    // badge/label always reflects what the action will actually do (and we
+    // never offer "create patient" for someone who already exists).
+    const phones = Array.from(
+      new Set(items.map((item) => item.phone).filter(Boolean)),
+    );
+    const existingPatients = phones.length
+      ? await prisma.patient.findMany({
+          where: { centerId, phone: { in: phones } },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true, phone: true },
+        })
+      : [];
+    const patientByPhone = new Map<string, string>();
+    for (const patient of existingPatients) {
+      if (!patientByPhone.has(patient.phone)) {
+        patientByPhone.set(patient.phone, patient.id);
+      }
+    }
+
+    const itemsWithPatient = items.map((item) => {
+      const existingPatientId = patientByPhone.get(item.phone) ?? null;
+      return {
+        ...item,
+        existingPatientId,
+        patientExists: existingPatientId !== null,
+      };
+    });
+
+    return { items: itemsWithPatient, total };
   }
 
   async accept(
@@ -184,6 +241,14 @@ export class BookingRequestsService {
     // Duration: from service if available, else 30-minute fallback.
     const duration = bookingRequest.service?.durationMinutes ?? 30;
 
+    if (!bookingRequest.requestedDate) {
+      throw validationFailed({
+        requestedDate:
+          'This request does not include a date. Contact the patient and create an appointment manually.',
+      });
+    }
+    const requestedDate = bookingRequest.requestedDate;
+
     // Start time: use requested time if present, else default to 09:00 for offer bookings.
     const startTime = bookingRequest.requestedTime ?? '09:00';
     const hadRequestedTime = Boolean(bookingRequest.requestedTime);
@@ -198,7 +263,7 @@ export class BookingRequestsService {
     if (bookingRequest.serviceId && hadRequestedTime) {
       const isSlotAvailable = await this.scheduleService.isSlotAvailable({
         centerId,
-        date: bookingRequest.requestedDate.toISOString().slice(0, 10),
+        date: requestedDate.toISOString().slice(0, 10),
         excludeBookingRequestId: bookingRequest.id,
         providerId: appointmentProviderId,
         serviceId: bookingRequest.serviceId,
@@ -267,7 +332,7 @@ export class BookingRequestsService {
           offerCurrency: bookingRequest.offerCurrency ?? null,
           staffUserId: appointmentProviderId,
           createdByUserId: actorUserId,
-          appointmentDate: bookingRequest.requestedDate,
+          appointmentDate: requestedDate,
           startTime,
           endTime,
           durationMinutes: duration,
@@ -294,13 +359,191 @@ export class BookingRequestsService {
         appointmentId: appointment.id,
         patientName: bookingRequest.fullName,
         phone: bookingRequest.phone,
+        patientArea: bookingRequest.patientArea,
+        branchId: bookingRequest.branchId,
         patientResolution: patientResolution ?? 'AUTO',
         providerId: appointmentProviderId,
         requestedProviderId: bookingRequest.providerId,
         serviceId: bookingRequest.serviceId,
         offerId: bookingRequest.offerId,
-        requestedDate: bookingRequest.requestedDate.toISOString().slice(0, 10),
+        requestedDate: requestedDate.toISOString().slice(0, 10),
         requestedTime: bookingRequest.requestedTime,
+      },
+    });
+
+    const updated = await prisma.bookingRequest.findFirst({
+      where: { id: requestId, centerId },
+      select: bookingRequestSelect,
+    });
+
+    return updated;
+  }
+
+  /**
+   * Resolves the patient for a SIMPLE_REQUEST conversion without creating an
+   * appointment yet. Matches on phone within the center to avoid duplicates;
+   * creates a new patient (folding the requested area into notes) only when no
+   * match exists. The appointment itself is created afterwards through the
+   * normal appointment form, then linked via {@link linkAppointment}.
+   */
+  async prepareConversion(
+    centerId: string,
+    permissions: string[],
+    actorUserId: string,
+    requestId: string,
+  ) {
+    if (!hasTenantPermission(permissions, 'appointments:create')) {
+      throw forbidden('appointments:create');
+    }
+
+    const prisma = await this.prisma.getClient();
+
+    const bookingRequest = await prisma.bookingRequest.findFirst({
+      where: { id: requestId, centerId },
+      select: {
+        id: true,
+        status: true,
+        fullName: true,
+        phone: true,
+        patientArea: true,
+        notes: true,
+        serviceId: true,
+        appointmentId: true,
+      },
+    });
+
+    if (!bookingRequest) {
+      throw new NotFoundException({
+        message: 'Booking request not found',
+        errors: { request: 'Booking request not found.' },
+      });
+    }
+
+    if (bookingRequest.status !== 'PENDING' || bookingRequest.appointmentId) {
+      throw validationFailed({
+        status: 'This booking request has already been processed.',
+      });
+    }
+
+    const existingPatient = await prisma.patient.findFirst({
+      where: { centerId, phone: bookingRequest.phone },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+
+    if (existingPatient) {
+      return {
+        patientId: existingPatient.id,
+        serviceId: bookingRequest.serviceId,
+        created: false,
+      };
+    }
+
+    const areaLine = bookingRequest.patientArea
+      ? `${bookingRequest.patientArea}`
+      : '';
+    const patientNotes =
+      [areaLine, bookingRequest.notes?.trim()].filter(Boolean).join('\n') ||
+      null;
+
+    const createdPatient = await prisma.patient.create({
+      data: {
+        centerId,
+        fullName: bookingRequest.fullName,
+        phone: bookingRequest.phone,
+        notes: patientNotes,
+        status: 'ACTIVE',
+      },
+      select: { id: true },
+    });
+
+    await this.auditService.log({
+      action: 'BOOKING_REQUEST_PATIENT_CREATED',
+      actorUserId,
+      centerId,
+      metadata: {
+        bookingRequestId: requestId,
+        patientId: createdPatient.id,
+        patientName: bookingRequest.fullName,
+        phone: bookingRequest.phone,
+        patientArea: bookingRequest.patientArea,
+      },
+    });
+
+    return {
+      patientId: createdPatient.id,
+      serviceId: bookingRequest.serviceId,
+      created: true,
+    };
+  }
+
+  /**
+   * Links an already-created appointment back to a SIMPLE_REQUEST booking
+   * request and marks it ACCEPTED. The appointment must belong to the center.
+   */
+  async linkAppointment(
+    centerId: string,
+    permissions: string[],
+    actorUserId: string,
+    requestId: string,
+    appointmentId: string,
+  ) {
+    if (!hasTenantPermission(permissions, 'appointments:create')) {
+      throw forbidden('appointments:create');
+    }
+
+    if (!appointmentId) {
+      throw validationFailed({
+        appointmentId: 'An appointment is required to link this request.',
+      });
+    }
+
+    const prisma = await this.prisma.getClient();
+
+    const bookingRequest = await prisma.bookingRequest.findFirst({
+      where: { id: requestId, centerId },
+      select: { id: true, status: true, appointmentId: true },
+    });
+
+    if (!bookingRequest) {
+      throw new NotFoundException({
+        message: 'Booking request not found',
+        errors: { request: 'Booking request not found.' },
+      });
+    }
+
+    if (bookingRequest.status !== 'PENDING' || bookingRequest.appointmentId) {
+      throw validationFailed({
+        status: 'This booking request has already been processed.',
+      });
+    }
+
+    const appointment = await prisma.appointment.findFirst({
+      where: { id: appointmentId, centerId },
+      select: { id: true, patientId: true },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException({
+        message: 'Appointment not found',
+        errors: { appointment: 'Appointment not found.' },
+      });
+    }
+
+    await prisma.bookingRequest.update({
+      where: { id: requestId },
+      data: { status: 'ACCEPTED', appointmentId: appointment.id },
+    });
+
+    await this.auditService.log({
+      action: 'BOOKING_REQUEST_ACCEPTED',
+      actorUserId,
+      centerId,
+      metadata: {
+        bookingRequestId: requestId,
+        appointmentId: appointment.id,
+        patientId: appointment.patientId,
+        conversion: 'SIMPLE_REQUEST_MANUAL',
       },
     });
 
@@ -326,7 +569,14 @@ export class BookingRequestsService {
 
     const bookingRequest = await prisma.bookingRequest.findFirst({
       where: { id: requestId, centerId },
-      select: { id: true, status: true, fullName: true, phone: true },
+      select: {
+        id: true,
+        status: true,
+        fullName: true,
+        phone: true,
+        patientArea: true,
+        branchId: true,
+      },
     });
 
     if (!bookingRequest) {
@@ -355,6 +605,8 @@ export class BookingRequestsService {
         bookingRequestId: requestId,
         patientName: bookingRequest.fullName,
         phone: bookingRequest.phone,
+        patientArea: bookingRequest.patientArea,
+        branchId: bookingRequest.branchId,
       },
     });
 

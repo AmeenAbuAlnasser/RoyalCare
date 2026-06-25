@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { AdminCard, AdminSectionHeader, AdminState } from "@/components/ui/admin-surfaces";
+import {
+  AdminCard,
+  AdminSectionHeader,
+  AdminState,
+} from "@/components/ui/admin-surfaces";
 import { buttonClassName } from "@/components/ui/button-styles";
 import { useLanguage } from "@/i18n/LanguageProvider";
 import type { SupportedLocale } from "@/i18n/locales";
@@ -33,6 +37,7 @@ type Copy = {
   preview: string;
   previewHint: string;
   helper: string;
+  whatsappFallbackHelper: string;
   sections: {
     branding: string;
     brandingHint: string;
@@ -75,6 +80,7 @@ type WebsiteForm = {
   workingHoursAr: string;
   workingHoursEn: string;
   workingHoursHe: string;
+  publicBookingMode: "SIMPLE_REQUEST" | "DIRECT_BOOKING";
 };
 
 type WebsiteSectionKey =
@@ -122,6 +128,7 @@ const emptyForm: WebsiteForm = {
   workingHoursAr: "",
   workingHoursEn: "",
   workingHoursHe: "",
+  publicBookingMode: "SIMPLE_REQUEST",
 };
 
 const defaultWebsiteSectionOrder: WebsiteSectionKey[] = [
@@ -152,7 +159,9 @@ const defaultWebsiteSectionVisibility: Record<WebsiteSectionKey, boolean> = {
   workingHours: true,
 };
 
-function normalizeBuilder(data: Partial<CenterPublicProfileData> | null | undefined): WebsiteBuilderSettings {
+function normalizeBuilder(
+  data: Partial<CenterPublicProfileData> | null | undefined,
+): WebsiteBuilderSettings {
   const incomingOrder = Array.isArray(data?.websiteSectionOrder)
     ? data.websiteSectionOrder.filter((key): key is WebsiteSectionKey =>
         defaultWebsiteSectionOrder.includes(key as WebsiteSectionKey),
@@ -163,7 +172,8 @@ function normalizeBuilder(data: Partial<CenterPublicProfileData> | null | undefi
     ...defaultWebsiteSectionOrder.filter((key) => !incomingOrder.includes(key)),
   ];
   const rawVisibility =
-    data?.websiteSectionVisibility && typeof data.websiteSectionVisibility === "object"
+    data?.websiteSectionVisibility &&
+    typeof data.websiteSectionVisibility === "object"
       ? data.websiteSectionVisibility
       : {};
   return {
@@ -191,7 +201,8 @@ const builderCopy: Record<
 > = {
   en: {
     hidden: "Hidden",
-    sectionHint: "Choose which homepage sections appear and drag them into the order visitors should see.",
+    sectionHint:
+      "Choose which homepage sections appear and drag them into the order visitors should see.",
     sectionTitle: "Homepage sections",
     shown: "Shown",
     labels: {
@@ -251,13 +262,15 @@ const builderCopy: Record<
 const copy: Record<SupportedLocale, Copy> = {
   en: {
     title: "Website Settings",
-    subtitle: "Prepare your center website content, branding, and contact details.",
+    subtitle:
+      "Prepare your center website content, branding, and contact details.",
     loading: "Loading website settings...",
     loadError: "Could not load website settings. Please try again.",
     save: "Save website settings",
     saving: "Saving...",
     saved: "Website settings saved.",
-    saveError: "Could not save website settings. Please check the fields and try again.",
+    saveError:
+      "Could not save website settings. Please check the fields and try again.",
     noChanges: "No unsaved changes.",
     unsaved: "You have unsaved changes.",
     upload: "Upload image",
@@ -266,17 +279,23 @@ const copy: Record<SupportedLocale, Copy> = {
     uploadError: "Image upload failed.",
     clear: "Clear",
     preview: "Live preview",
-    previewHint: "This is a draft preview. Public website pages will use these settings later.",
-    helper: "These settings belong to this center only and are the foundation for future public website pages.",
+    previewHint:
+      "This is a draft preview. Public website pages will use these settings later.",
+    helper:
+      "These settings belong to this center only and are the foundation for future public website pages.",
+    whatsappFallbackHelper:
+      "If left empty, the primary center WhatsApp will be used.",
     sections: {
       branding: "Branding",
-      brandingHint: "Logo, hero image, and brand colors used by your public website.",
+      brandingHint:
+        "Logo, hero image, and brand colors used by your public website.",
       content: "Center content",
       contentHint: "Localized website copy for Arabic, English, and Hebrew.",
       contact: "Contact",
       contactHint: "Public contact details and address shown to visitors.",
       business: "Business info",
-      businessHint: "Working hours text and social links for the website footer/profile.",
+      businessHint:
+        "Working hours text and social links for the website footer/profile.",
     },
     fields: {
       addressAr: "Address Arabic",
@@ -301,10 +320,11 @@ const copy: Record<SupportedLocale, Copy> = {
       sloganEn: "Slogan English",
       sloganHe: "Slogan Hebrew",
       tiktokUrl: "TikTok URL",
-      whatsappPhone: "WhatsApp",
+      whatsappPhone: "Website WhatsApp (optional)",
       workingHoursAr: "Working hours Arabic",
       workingHoursEn: "Working hours English",
       workingHoursHe: "Working hours Hebrew",
+      publicBookingMode: "Public booking mode",
     },
     langs: { ar: "Arabic", en: "English", he: "Hebrew" },
     imageHint: "PNG, JPG, WebP, or SVG. Images are optimized automatically.",
@@ -326,8 +346,12 @@ const copy: Record<SupportedLocale, Copy> = {
     uploadError: "فشل رفع الصورة.",
     clear: "مسح",
     preview: "معاينة مباشرة",
-    previewHint: "هذه معاينة أولية. صفحات الموقع العامة ستستخدم هذه الإعدادات لاحقاً.",
-    helper: "هذه الإعدادات خاصة بهذا المركز وهي أساس صفحات الموقع العامة القادمة.",
+    previewHint:
+      "هذه معاينة أولية. صفحات الموقع العامة ستستخدم هذه الإعدادات لاحقاً.",
+    helper:
+      "هذه الإعدادات خاصة بهذا المركز وهي أساس صفحات الموقع العامة القادمة.",
+    whatsappFallbackHelper:
+      "في حال تركه فارغًا سيتم استخدام رقم واتساب المركز الأساسي.",
     sections: {
       branding: "الهوية والعلامة",
       brandingHint: "الشعار وصورة الهيرو وألوان العلامة في موقعك العام.",
@@ -361,10 +385,11 @@ const copy: Record<SupportedLocale, Copy> = {
       sloganEn: "الشعار النصي بالإنجليزية",
       sloganHe: "الشعار النصي بالعبرية",
       tiktokUrl: "رابط تيك توك",
-      whatsappPhone: "واتساب",
+      whatsappPhone: "واتساب الموقع (اختياري)",
       workingHoursAr: "ساعات العمل بالعربية",
       workingHoursEn: "ساعات العمل بالإنجليزية",
       workingHoursHe: "ساعات العمل بالعبرية",
+      publicBookingMode: "نمط الحجز العام",
     },
     langs: { ar: "العربية", en: "English", he: "עברית" },
     imageHint: "PNG أو JPG أو WebP أو SVG. يتم تحسين الصور تلقائياً.",
@@ -386,8 +411,11 @@ const copy: Record<SupportedLocale, Copy> = {
     uploadError: "העלאת התמונה נכשלה.",
     clear: "נקה",
     preview: "תצוגה מקדימה",
-    previewHint: "זו תצוגת טיוטה. עמודי האתר הציבוריים ישתמשו בהגדרות האלה בהמשך.",
-    helper: "ההגדרות שייכות למרכז הזה בלבד ומהוות בסיס לעמודי האתר הציבוריים העתידיים.",
+    previewHint:
+      "זו תצוגת טיוטה. עמודי האתר הציבוריים ישתמשו בהגדרות האלה בהמשך.",
+    helper:
+      "ההגדרות שייכות למרכז הזה בלבד ומהוות בסיס לעמודי האתר הציבוריים העתידיים.",
+    whatsappFallbackHelper: "אם השדה יישאר ריק, ייעשה שימוש ב-WhatsApp המרכזי.",
     sections: {
       branding: "מיתוג",
       brandingHint: "לוגו, תמונת הירו וצבעי מותג לאתר הציבורי.",
@@ -421,10 +449,11 @@ const copy: Record<SupportedLocale, Copy> = {
       sloganEn: "סלוגן באנגלית",
       sloganHe: "סלוגן בעברית",
       tiktokUrl: "קישור TikTok",
-      whatsappPhone: "WhatsApp",
+      whatsappPhone: "WhatsApp לאתר (אופציונלי)",
       workingHoursAr: "שעות פעילות בערבית",
       workingHoursEn: "שעות פעילות באנגלית",
       workingHoursHe: "שעות פעילות בעברית",
+      publicBookingMode: "מצב הזמנה ציבורי",
     },
     langs: { ar: "العربية", en: "English", he: "עברית" },
     imageHint: "PNG, JPG, WebP או SVG. התמונות עוברות אופטימיזציה אוטומטית.",
@@ -472,7 +501,40 @@ const websiteLinkCopy: Record<
   },
 };
 
-function normalizeForm(data: Partial<CenterPublicProfileData> | null | undefined): WebsiteForm {
+const bookingModeCopy = {
+  en: {
+    title: "Public booking mode",
+    hint: "Choose how visitors submit booking requests from the public website.",
+    simple: "Simple request",
+    simpleHint:
+      "Visitors leave name, phone, and an optional note. Your team confirms the appointment later.",
+    direct: "Direct booking",
+    directHint:
+      "Visitors choose service, provider, date, time, and patient details.",
+  },
+  ar: {
+    title: "نمط الحجز العام",
+    hint: "اختر طريقة إرسال طلبات الحجز من الموقع العام.",
+    simple: "طلب بسيط",
+    simpleHint:
+      "يترك الزائر الاسم ورقم الهاتف وملاحظة اختيارية، ثم يتواصل الفريق لتأكيد الموعد.",
+    direct: "حجز مباشر",
+    directHint: "يختار الزائر الخدمة والمقدم والتاريخ والوقت وبياناته.",
+  },
+  he: {
+    title: "מצב הזמנה ציבורי",
+    hint: "בחרו איך מבקרים שולחים בקשות תור מהאתר הציבורי.",
+    simple: "בקשה פשוטה",
+    simpleHint:
+      "המבקר משאיר שם, טלפון והערה אופציונלית, והצוות מאשר את התור בהמשך.",
+    direct: "הזמנה ישירה",
+    directHint: "המבקר בוחר שירות, מטפל, תאריך, שעה ופרטים אישיים.",
+  },
+} as const;
+
+function normalizeForm(
+  data: Partial<CenterPublicProfileData> | null | undefined,
+): WebsiteForm {
   return {
     ...emptyForm,
     addressAr: data?.addressAr ?? "",
@@ -501,12 +563,22 @@ function normalizeForm(data: Partial<CenterPublicProfileData> | null | undefined
     workingHoursAr: data?.workingHoursAr ?? "",
     workingHoursEn: data?.workingHoursEn ?? "",
     workingHoursHe: data?.workingHoursHe ?? "",
+    publicBookingMode:
+      data?.publicBookingMode === "DIRECT_BOOKING"
+        ? "DIRECT_BOOKING"
+        : "SIMPLE_REQUEST",
   };
 }
 
-function toPayload(form: WebsiteForm, builder?: WebsiteBuilderSettings): CenterPublicProfileData {
+function toPayload(
+  form: WebsiteForm,
+  builder?: WebsiteBuilderSettings,
+): CenterPublicProfileData {
   const payload = Object.fromEntries(
-    Object.entries(form).map(([key, value]) => [key, value.trim() || null]),
+    Object.entries(form).map(([key, value]) => [
+      key,
+      key === "publicBookingMode" ? value : value.trim() || null,
+    ]),
   ) as CenterPublicProfileData;
   if (builder) {
     payload.websiteSectionOrder = builder.order;
@@ -515,7 +587,16 @@ function toPayload(form: WebsiteForm, builder?: WebsiteBuilderSettings): CenterP
   return payload;
 }
 
-function localizedValue(form: WebsiteForm, locale: SupportedLocale, key: "address" | "fullDescription" | "publicDescription" | "slogan" | "workingHours") {
+function localizedValue(
+  form: WebsiteForm,
+  locale: SupportedLocale,
+  key:
+    | "address"
+    | "fullDescription"
+    | "publicDescription"
+    | "slogan"
+    | "workingHours",
+) {
   const suffix = locale === "ar" ? "Ar" : locale === "he" ? "He" : "En";
   const fallback = locale === "en" ? "Ar" : "En";
   return (
@@ -528,12 +609,14 @@ function localizedValue(form: WebsiteForm, locale: SupportedLocale, key: "addres
 
 function Field({
   dir,
+  helper,
   label,
   onChange,
   type = "text",
   value,
 }: {
   dir?: "ltr" | "rtl";
+  helper?: string;
   label: string;
   onChange: (value: string) => void;
   type?: string;
@@ -549,6 +632,9 @@ function Field({
         type={type}
         value={value}
       />
+      {helper ? (
+        <p className="mt-1 text-xs font-medium text-[#66758a]">{helper}</p>
+      ) : null}
     </label>
   );
 }
@@ -594,7 +680,9 @@ function ImageField({
   onChange: (url: string) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [status, setStatus] = useState<"done" | "error" | "idle" | "uploading">("idle");
+  const [status, setStatus] = useState<"done" | "error" | "idle" | "uploading">(
+    "idle",
+  );
   const [message, setMessage] = useState("");
 
   async function handleFile(event: ChangeEvent<HTMLInputElement>) {
@@ -609,7 +697,11 @@ function ImageField({
       setMessage(t.uploaded);
     } catch (error) {
       setStatus("error");
-      setMessage(error instanceof UploadFailedError ? (error.details ?? error.message) : t.uploadError);
+      setMessage(
+        error instanceof UploadFailedError
+          ? (error.details ?? error.message)
+          : t.uploadError,
+      );
     } finally {
       if (inputRef.current) inputRef.current.value = "";
     }
@@ -620,9 +712,15 @@ function ImageField({
       <div className="flex min-w-0 items-start gap-3">
         <div className="flex h-16 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[#E5E7EB] bg-white">
           {currentUrl ? (
-            <img alt="" className="h-full w-full object-contain" src={currentUrl} />
+            <img
+              alt=""
+              className="h-full w-full object-contain"
+              src={currentUrl}
+            />
           ) : (
-            <span className="text-xs font-semibold text-[#9AABB8]">{label}</span>
+            <span className="text-xs font-semibold text-[#9AABB8]">
+              {label}
+            </span>
           )}
         </div>
         <div className="min-w-0 flex-1">
@@ -655,7 +753,9 @@ function ImageField({
             ) : null}
           </div>
           {message ? (
-            <p className={`mt-2 text-xs font-semibold ${status === "error" ? "text-rose-700" : "text-emerald-700"}`}>
+            <p
+              className={`mt-2 text-xs font-semibold ${status === "error" ? "text-rose-700" : "text-emerald-700"}`}
+            >
               {message}
             </p>
           ) : null}
@@ -673,12 +773,12 @@ function PublicWebsiteLinkCard({
   locale: SupportedLocale;
 }) {
   const labels = websiteLinkCopy[locale] ?? websiteLinkCopy.en;
-  const [copyStatus, setCopyStatus] = useState<"error" | "idle" | "success">("idle");
+  const [copyStatus, setCopyStatus] = useState<"error" | "idle" | "success">(
+    "idle",
+  );
   const path = `/c/${centerSlug}`;
   const websiteUrl =
-    typeof window === "undefined"
-      ? path
-      : `${window.location.origin}${path}`;
+    typeof window === "undefined" ? path : `${window.location.origin}${path}`;
 
   async function handleCopy() {
     try {
@@ -696,7 +796,9 @@ function PublicWebsiteLinkCard({
           <p className="text-sm font-black text-[#0B2D5C]">{labels.title}</p>
           <p className="mt-1 text-sm leading-6 text-[#66758a]">{labels.hint}</p>
           <div className="mt-3 rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] px-3 py-2.5">
-            <p className="text-xs font-bold text-[#66758a]">{labels.urlLabel}</p>
+            <p className="text-xs font-bold text-[#66758a]">
+              {labels.urlLabel}
+            </p>
             <p
               className="mt-1 break-all text-sm font-bold text-[#132238]"
               dir="ltr"
@@ -732,6 +834,79 @@ function PublicWebsiteLinkCard({
             {labels.copyLink}
           </button>
         </div>
+      </div>
+    </AdminCard>
+  );
+}
+
+function BookingModeCard({
+  locale,
+  mode,
+  onChange,
+}: {
+  locale: SupportedLocale;
+  mode: WebsiteForm["publicBookingMode"];
+  onChange: (mode: WebsiteForm["publicBookingMode"]) => void;
+}) {
+  const labels = bookingModeCopy[locale] ?? bookingModeCopy.en;
+  const options: Array<{
+    hint: string;
+    label: string;
+    value: WebsiteForm["publicBookingMode"];
+  }> = [
+    {
+      hint: labels.simpleHint,
+      label: labels.simple,
+      value: "SIMPLE_REQUEST",
+    },
+    {
+      hint: labels.directHint,
+      label: labels.direct,
+      value: "DIRECT_BOOKING",
+    },
+  ];
+
+  return (
+    <AdminCard className="p-4 sm:p-5">
+      <AdminSectionHeader subtitle={labels.hint} title={labels.title} />
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {options.map((option) => {
+          const selected = mode === option.value;
+          return (
+            <button
+              className={`min-w-0 rounded-xl border-2 px-4 py-3 text-start transition ${
+                selected
+                  ? "border-[#0B2D5C] bg-[#0B2D5C]/5"
+                  : "border-[#E5E7EB] bg-[#F8FAFC] hover:border-[#0B2D5C]/35"
+              }`}
+              key={option.value}
+              onClick={() => onChange(option.value)}
+              type="button"
+            >
+              <span className="flex min-w-0 items-start gap-3">
+                <span
+                  className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${
+                    selected
+                      ? "border-[#0B2D5C] bg-[#0B2D5C]"
+                      : "border-[#C8CDD4] bg-white"
+                  }`}
+                >
+                  {selected ? (
+                    <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                  ) : null}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-black text-[#0B2D5C]">
+                    {option.label}
+                  </span>
+                  <span className="mt-1 block text-xs font-semibold leading-5 text-[#66758a]">
+                    {option.hint}
+                  </span>
+                </span>
+              </span>
+            </button>
+          );
+        })}
       </div>
     </AdminCard>
   );
@@ -788,8 +963,12 @@ function WebsiteSectionBuilder({
                   =
                 </span>
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-black text-[#0B2D5C]">{t.labels[key]}</p>
-                  <p className={`text-xs font-bold ${visible ? "text-emerald-700" : "text-slate-500"}`}>
+                  <p className="truncate text-sm font-black text-[#0B2D5C]">
+                    {t.labels[key]}
+                  </p>
+                  <p
+                    className={`text-xs font-bold ${visible ? "text-emerald-700" : "text-slate-500"}`}
+                  >
                     {visible ? t.shown : t.hidden}
                   </p>
                 </div>
@@ -797,7 +976,9 @@ function WebsiteSectionBuilder({
               <label className="inline-flex items-center gap-2 text-sm font-bold text-[#0B2D5C]">
                 <input
                   checked={visible}
-                  onChange={(event) => updateVisibility(key, event.target.checked)}
+                  onChange={(event) =>
+                    updateVisibility(key, event.target.checked)
+                  }
                   type="checkbox"
                 />
                 {visible ? t.shown : t.hidden}
@@ -831,7 +1012,9 @@ function WebsitePreview({
         className="h-28 bg-[#0B2D5C]"
         style={{
           backgroundColor: form.primaryColor || "#0B2D5C",
-          backgroundImage: form.coverImageUrl ? `url(${form.coverImageUrl})` : undefined,
+          backgroundImage: form.coverImageUrl
+            ? `url(${form.coverImageUrl})`
+            : undefined,
           backgroundPosition: "center",
           backgroundSize: "cover",
         }}
@@ -840,7 +1023,11 @@ function WebsitePreview({
         <div className="-mt-10 flex items-end gap-3">
           <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-4 border-white bg-white shadow">
             {form.logoUrl ? (
-              <img alt="" className="h-full w-full object-contain" src={form.logoUrl} />
+              <img
+                alt=""
+                className="h-full w-full object-contain"
+                src={form.logoUrl}
+              />
             ) : (
               <span className="text-sm font-black text-[#0B2D5C]">
                 {centerName.slice(0, 2).toUpperCase()}
@@ -848,21 +1035,35 @@ function WebsitePreview({
             )}
           </div>
           <div className="min-w-0 pb-1">
-            <p className="truncate text-base font-black text-[#0B2D5C]">{centerName}</p>
-            {slogan ? <p className="truncate text-xs font-semibold text-[#C8A45D]">{slogan}</p> : null}
+            <p className="truncate text-base font-black text-[#0B2D5C]">
+              {centerName}
+            </p>
+            {slogan ? (
+              <p className="truncate text-xs font-semibold text-[#C8A45D]">
+                {slogan}
+              </p>
+            ) : null}
           </div>
         </div>
         <p className="mt-4 line-clamp-3 text-sm leading-6 text-[#526176]">
           {description || t.previewHint}
         </p>
         <div className="mt-4 space-y-2 text-xs font-semibold text-[#66758a]">
-          {form.whatsappPhone ? <p dir="ltr">WhatsApp: {form.whatsappPhone}</p> : null}
+          {form.whatsappPhone ? (
+            <p dir="ltr">WhatsApp: {form.whatsappPhone}</p>
+          ) : null}
           {form.phone ? <p dir="ltr">Phone: {form.phone}</p> : null}
           {address ? <p>{address}</p> : null}
         </div>
         <div className="mt-4 flex gap-2">
-          <span className="h-5 w-5 rounded-full border border-[#E5E7EB]" style={{ backgroundColor: form.primaryColor }} />
-          <span className="h-5 w-5 rounded-full border border-[#E5E7EB]" style={{ backgroundColor: form.secondaryColor }} />
+          <span
+            className="h-5 w-5 rounded-full border border-[#E5E7EB]"
+            style={{ backgroundColor: form.primaryColor }}
+          />
+          <span
+            className="h-5 w-5 rounded-full border border-[#E5E7EB]"
+            style={{ backgroundColor: form.secondaryColor }}
+          />
         </div>
       </div>
     </AdminCard>
@@ -876,10 +1077,17 @@ export function TenantWebsiteSettingsPage() {
   const [state, setState] = useState<"error" | "loading" | "ready">("loading");
   const [form, setForm] = useState<WebsiteForm>(emptyForm);
   const [saved, setSaved] = useState<WebsiteForm>(emptyForm);
-  const [builder, setBuilder] = useState<WebsiteBuilderSettings>(() => normalizeBuilder(null));
-  const [savedBuilder, setSavedBuilder] = useState<WebsiteBuilderSettings>(() => normalizeBuilder(null));
+  const [builder, setBuilder] = useState<WebsiteBuilderSettings>(() =>
+    normalizeBuilder(null),
+  );
+  const [savedBuilder, setSavedBuilder] = useState<WebsiteBuilderSettings>(() =>
+    normalizeBuilder(null),
+  );
   const [saveState, setSaveState] = useState<"idle" | "saving">("idle");
-  const [message, setMessage] = useState<{ tone: "error" | "success"; text: string } | null>(null);
+  const [message, setMessage] = useState<{
+    tone: "error" | "success";
+    text: string;
+  } | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -903,7 +1111,9 @@ export function TenantWebsiteSettingsPage() {
   }, []);
 
   const isDirty = useMemo(
-    () => JSON.stringify(toPayload(form, builder)) !== JSON.stringify(toPayload(saved, savedBuilder)),
+    () =>
+      JSON.stringify(toPayload(form, builder)) !==
+      JSON.stringify(toPayload(saved, savedBuilder)),
     [builder, form, saved, savedBuilder],
   );
 
@@ -916,7 +1126,9 @@ export function TenantWebsiteSettingsPage() {
     setSaveState("saving");
     setMessage(null);
     try {
-      const response = await updateTenantCenterPublicProfile(toPayload(form, builder));
+      const response = await updateTenantCenterPublicProfile(
+        toPayload(form, builder),
+      );
       const next = normalizeForm(response.branding);
       const nextBuilder = normalizeBuilder(response.branding);
       setForm(next);
@@ -939,15 +1151,27 @@ export function TenantWebsiteSettingsPage() {
       title={() => t.title}
     >
       {({ session }) => {
-        if (state === "loading") return <AdminState className="mt-5" loading title={t.loading} />;
-        if (state === "error") return <AdminState className="mt-5" title={t.loadError} tone="error" />;
+        if (state === "loading")
+          return <AdminState className="mt-5" loading title={t.loading} />;
+        if (state === "error")
+          return (
+            <AdminState className="mt-5" title={t.loadError} tone="error" />
+          );
 
         return (
           <div className="mt-5 min-w-0 space-y-5">
             <p className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold leading-6 text-[#0B2D5C]">
               {t.helper}
             </p>
-            <PublicWebsiteLinkCard centerSlug={session.center.slug} locale={activeLocale} />
+            <PublicWebsiteLinkCard
+              centerSlug={session.center.slug}
+              locale={activeLocale}
+            />
+            <BookingModeCard
+              locale={activeLocale}
+              mode={form.publicBookingMode}
+              onChange={(nextMode) => setField("publicBookingMode", nextMode)}
+            />
             <WebsiteSectionBuilder
               builder={builder}
               locale={activeLocale}
@@ -971,7 +1195,10 @@ export function TenantWebsiteSettingsPage() {
             <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
               <div className="min-w-0 space-y-5">
                 <AdminCard className="p-4 sm:p-5">
-                  <AdminSectionHeader subtitle={t.sections.brandingHint} title={t.sections.branding} />
+                  <AdminSectionHeader
+                    subtitle={t.sections.brandingHint}
+                    title={t.sections.branding}
+                  />
                   <div className="mt-4 grid gap-4 lg:grid-cols-2">
                     <ImageField
                       currentUrl={form.logoUrl}
@@ -987,23 +1214,91 @@ export function TenantWebsiteSettingsPage() {
                       t={t}
                       type="cover"
                     />
-                    <Field label={t.fields.primaryColor} onChange={(value) => setField("primaryColor", value)} type="color" value={form.primaryColor} />
-                    <Field label={t.fields.secondaryColor} onChange={(value) => setField("secondaryColor", value)} type="color" value={form.secondaryColor} />
+                    <Field
+                      label={t.fields.primaryColor}
+                      onChange={(value) => setField("primaryColor", value)}
+                      type="color"
+                      value={form.primaryColor}
+                    />
+                    <Field
+                      label={t.fields.secondaryColor}
+                      onChange={(value) => setField("secondaryColor", value)}
+                      type="color"
+                      value={form.secondaryColor}
+                    />
                   </div>
                 </AdminCard>
 
                 <AdminCard className="p-4 sm:p-5">
-                  <AdminSectionHeader subtitle={t.sections.contentHint} title={t.sections.content} />
+                  <AdminSectionHeader
+                    subtitle={t.sections.contentHint}
+                    title={t.sections.content}
+                  />
                   <div className="mt-4 grid gap-4 lg:grid-cols-3">
                     {(["ar", "en", "he"] as const).map((lang) => {
-                      const suffix = lang === "ar" ? "Ar" : lang === "he" ? "He" : "En";
+                      const suffix =
+                        lang === "ar" ? "Ar" : lang === "he" ? "He" : "En";
                       const dir = lang === "en" ? "ltr" : "rtl";
                       return (
-                        <div className="min-w-0 space-y-4 rounded-xl border border-[#E5E7EB] p-3" key={lang}>
-                          <p className="text-sm font-black text-[#0B2D5C]">{t.langs[lang]}</p>
-                          <Field dir={dir} label={t.fields[`slogan${suffix}` as keyof WebsiteForm]} onChange={(value) => setField(`slogan${suffix}` as keyof WebsiteForm, value)} value={form[`slogan${suffix}` as keyof WebsiteForm]} />
-                          <TextArea dir={dir} label={t.fields[`publicDescription${suffix}` as keyof WebsiteForm]} onChange={(value) => setField(`publicDescription${suffix}` as keyof WebsiteForm, value)} value={form[`publicDescription${suffix}` as keyof WebsiteForm]} />
-                          <TextArea dir={dir} label={t.fields[`fullDescription${suffix}` as keyof WebsiteForm]} onChange={(value) => setField(`fullDescription${suffix}` as keyof WebsiteForm, value)} rows={5} value={form[`fullDescription${suffix}` as keyof WebsiteForm]} />
+                        <div
+                          className="min-w-0 space-y-4 rounded-xl border border-[#E5E7EB] p-3"
+                          key={lang}
+                        >
+                          <p className="text-sm font-black text-[#0B2D5C]">
+                            {t.langs[lang]}
+                          </p>
+                          <Field
+                            dir={dir}
+                            label={
+                              t.fields[`slogan${suffix}` as keyof WebsiteForm]
+                            }
+                            onChange={(value) =>
+                              setField(
+                                `slogan${suffix}` as keyof WebsiteForm,
+                                value,
+                              )
+                            }
+                            value={form[`slogan${suffix}` as keyof WebsiteForm]}
+                          />
+                          <TextArea
+                            dir={dir}
+                            label={
+                              t.fields[
+                                `publicDescription${suffix}` as keyof WebsiteForm
+                              ]
+                            }
+                            onChange={(value) =>
+                              setField(
+                                `publicDescription${suffix}` as keyof WebsiteForm,
+                                value,
+                              )
+                            }
+                            value={
+                              form[
+                                `publicDescription${suffix}` as keyof WebsiteForm
+                              ]
+                            }
+                          />
+                          <TextArea
+                            dir={dir}
+                            label={
+                              t.fields[
+                                `fullDescription${suffix}` as keyof WebsiteForm
+                              ]
+                            }
+                            onChange={(value) =>
+                              setField(
+                                `fullDescription${suffix}` as keyof WebsiteForm,
+                                value,
+                              )
+                            }
+                            rows={5}
+                            value={
+                              form[
+                                `fullDescription${suffix}` as keyof WebsiteForm
+                              ]
+                            }
+                          />
                         </div>
                       );
                     })}
@@ -1011,35 +1306,112 @@ export function TenantWebsiteSettingsPage() {
                 </AdminCard>
 
                 <AdminCard className="p-4 sm:p-5">
-                  <AdminSectionHeader subtitle={t.sections.contactHint} title={t.sections.contact} />
+                  <AdminSectionHeader
+                    subtitle={t.sections.contactHint}
+                    title={t.sections.contact}
+                  />
                   <div className="mt-4 grid gap-4 md:grid-cols-2">
-                    <Field dir="ltr" label={t.fields.whatsappPhone} onChange={(value) => setField("whatsappPhone", value)} value={form.whatsappPhone} />
-                    <Field dir="ltr" label={t.fields.phone} onChange={(value) => setField("phone", value)} value={form.phone} />
-                    <Field dir="ltr" label={t.fields.email} onChange={(value) => setField("email", value)} type="email" value={form.email} />
-                    <Field dir="ltr" label={t.fields.googleMapsUrl} onChange={(value) => setField("googleMapsUrl", value)} value={form.googleMapsUrl} />
-                    <TextArea dir="rtl" label={t.fields.addressAr} onChange={(value) => setField("addressAr", value)} value={form.addressAr} />
-                    <TextArea dir="ltr" label={t.fields.addressEn} onChange={(value) => setField("addressEn", value)} value={form.addressEn} />
-                    <TextArea dir="rtl" label={t.fields.addressHe} onChange={(value) => setField("addressHe", value)} value={form.addressHe} />
+                    <Field
+                      dir="ltr"
+                      helper={t.whatsappFallbackHelper}
+                      label={t.fields.whatsappPhone}
+                      onChange={(value) => setField("whatsappPhone", value)}
+                      value={form.whatsappPhone}
+                    />
+                    <Field
+                      dir="ltr"
+                      label={t.fields.phone}
+                      onChange={(value) => setField("phone", value)}
+                      value={form.phone}
+                    />
+                    <Field
+                      dir="ltr"
+                      label={t.fields.email}
+                      onChange={(value) => setField("email", value)}
+                      type="email"
+                      value={form.email}
+                    />
+                    <Field
+                      dir="ltr"
+                      label={t.fields.googleMapsUrl}
+                      onChange={(value) => setField("googleMapsUrl", value)}
+                      value={form.googleMapsUrl}
+                    />
+                    <TextArea
+                      dir="rtl"
+                      label={t.fields.addressAr}
+                      onChange={(value) => setField("addressAr", value)}
+                      value={form.addressAr}
+                    />
+                    <TextArea
+                      dir="ltr"
+                      label={t.fields.addressEn}
+                      onChange={(value) => setField("addressEn", value)}
+                      value={form.addressEn}
+                    />
+                    <TextArea
+                      dir="rtl"
+                      label={t.fields.addressHe}
+                      onChange={(value) => setField("addressHe", value)}
+                      value={form.addressHe}
+                    />
                   </div>
                 </AdminCard>
 
                 <AdminCard className="p-4 sm:p-5">
-                  <AdminSectionHeader subtitle={t.sections.businessHint} title={t.sections.business} />
+                  <AdminSectionHeader
+                    subtitle={t.sections.businessHint}
+                    title={t.sections.business}
+                  />
                   <div className="mt-4 grid gap-4 md:grid-cols-2">
-                    <TextArea dir="rtl" label={t.fields.workingHoursAr} onChange={(value) => setField("workingHoursAr", value)} value={form.workingHoursAr} />
-                    <TextArea dir="ltr" label={t.fields.workingHoursEn} onChange={(value) => setField("workingHoursEn", value)} value={form.workingHoursEn} />
-                    <TextArea dir="rtl" label={t.fields.workingHoursHe} onChange={(value) => setField("workingHoursHe", value)} value={form.workingHoursHe} />
-                    <Field dir="ltr" label={t.fields.facebookUrl} onChange={(value) => setField("facebookUrl", value)} value={form.facebookUrl} />
-                    <Field dir="ltr" label={t.fields.instagramUrl} onChange={(value) => setField("instagramUrl", value)} value={form.instagramUrl} />
-                    <Field dir="ltr" label={t.fields.tiktokUrl} onChange={(value) => setField("tiktokUrl", value)} value={form.tiktokUrl} />
+                    <TextArea
+                      dir="rtl"
+                      label={t.fields.workingHoursAr}
+                      onChange={(value) => setField("workingHoursAr", value)}
+                      value={form.workingHoursAr}
+                    />
+                    <TextArea
+                      dir="ltr"
+                      label={t.fields.workingHoursEn}
+                      onChange={(value) => setField("workingHoursEn", value)}
+                      value={form.workingHoursEn}
+                    />
+                    <TextArea
+                      dir="rtl"
+                      label={t.fields.workingHoursHe}
+                      onChange={(value) => setField("workingHoursHe", value)}
+                      value={form.workingHoursHe}
+                    />
+                    <Field
+                      dir="ltr"
+                      label={t.fields.facebookUrl}
+                      onChange={(value) => setField("facebookUrl", value)}
+                      value={form.facebookUrl}
+                    />
+                    <Field
+                      dir="ltr"
+                      label={t.fields.instagramUrl}
+                      onChange={(value) => setField("instagramUrl", value)}
+                      value={form.instagramUrl}
+                    />
+                    <Field
+                      dir="ltr"
+                      label={t.fields.tiktokUrl}
+                      onChange={(value) => setField("tiktokUrl", value)}
+                      value={form.tiktokUrl}
+                    />
                   </div>
                 </AdminCard>
               </div>
 
               <aside className="min-w-0 space-y-4">
                 <div>
-                  <h3 className="text-sm font-black text-[#0B2D5C]">{t.preview}</h3>
-                  <p className="mt-1 text-xs leading-5 text-[#66758a]">{t.previewHint}</p>
+                  <h3 className="text-sm font-black text-[#0B2D5C]">
+                    {t.preview}
+                  </h3>
+                  <p className="mt-1 text-xs leading-5 text-[#66758a]">
+                    {t.previewHint}
+                  </p>
                 </div>
                 <WebsitePreview
                   centerName={session.center.name}

@@ -58,6 +58,7 @@ type SubscriptionTimelineItem = {
 const safeSubscriptionSelect = {
   id: true,
   centerId: true,
+  planId: true,
   planCode: true,
   planName: true,
   status: true,

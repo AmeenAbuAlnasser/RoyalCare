@@ -43,6 +43,27 @@ import {
 } from "./appointment-display";
 import { hasTenantAppointmentPermission } from "./appointment-permissions";
 
+type ServiceFollowUpPhaseRule = {
+  fromSessionNumber: number;
+  toSessionNumber: number;
+  intervalDays: number;
+};
+
+function parseServiceFollowUpRules(rules: unknown): ServiceFollowUpPhaseRule[] {
+  if (!Array.isArray(rules)) return [];
+  return rules.reduce<ServiceFollowUpPhaseRule[]>((acc, r) => {
+    if (!r || typeof r !== "object") return acc;
+    const obj = r as Record<string, unknown>;
+    const from = Number(obj.fromSessionNumber);
+    const to = Number(obj.toSessionNumber);
+    const interval = Number(obj.intervalDays);
+    if (Number.isInteger(from) && Number.isInteger(to) && Number.isInteger(interval) && from > 0 && to >= from && interval > 0) {
+      acc.push({ fromSessionNumber: from, toSessionNumber: to, intervalDays: interval });
+    }
+    return acc;
+  }, []).sort((a, b) => a.fromSessionNumber - b.fromSessionNumber);
+}
+
 const appointmentStatusKeys: AppointmentStatus[] = [
   "SCHEDULED",
   "CONFIRMED",
@@ -119,6 +140,10 @@ export function TenantAppointmentDetailsPage() {
     return () => { isMounted = false; };
   }, [appointmentId]);
 
+  // The details endpoint resolves this from the appointment's persisted Prisma
+  // relations, which is also the source used by appointment cards/actions.
+  const followUpPlan = appointment?.followUpPlan ?? [];
+
   // Auto-dismiss notice
   useEffect(() => {
     if (!notice) return;
@@ -178,6 +203,17 @@ export function TenantAppointmentDetailsPage() {
             const updated = await updateTenantAppointmentStatus(appointment.id, status);
             setAppointment(updated);
             setNotice(dictionary.appointments.statusUpdated);
+            if (status === "COMPLETED") {
+              getTenantInvoiceForAppointment(appointment.id)
+                .then(async (found) => {
+                  setInvoice(found);
+                  if (found) {
+                    const summary = await listTenantPayments(found.id);
+                    setPaymentSummary(summary);
+                  }
+                })
+                .catch(() => {});
+            }
           } finally {
             setIsSaving(false);
           }
@@ -586,11 +622,206 @@ export function TenantAppointmentDetailsPage() {
               </section>
             ) : null}
 
+            {/* ── Follow-up Plan section ── */}
+            {appointment && !isLoading ? (
+              <section className="mt-6 rounded-lg border border-[#E1E7EF] bg-white p-5">
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <h3 className="text-sm font-bold text-[#0B2D5C]">
+                    {dictionary.appointments.followUpPlanSection}
+                  </h3>
+                  <Link
+                    className={buttonClassName("secondary", "sm")}
+                    href={`/tenant/follow-ups?patientId=${appointment.patientId}`}
+                  >
+                    {dictionary.appointments.viewInFollowUps}
+                  </Link>
+                </div>
+
+                {!appointment.hasFollowUpPlan || !appointment.followUpPlanSummary ? (
+                  <p className="mt-4 text-sm text-[#66758a]">
+                    {dictionary.appointments.followUpPlanNoRecord}
+                  </p>
+                ) : appointment.followUpPlanSummary.type === "RECURRING_CONTINUOUS" ? (
+                  /* ── Recurring follow-up view ── */
+                  (() => {
+                    const activeRecurring = followUpPlan.find(
+                      (f) => f.isRecurring && !["COMPLETED", "CANCELLED"].includes(f.status),
+                    );
+                    const completedItems = followUpPlan.filter((f) => f.status === "COMPLETED");
+                    const lastCompleted = completedItems.length > 0 ? completedItems[completedItems.length - 1] : null;
+                    const intervalValue =
+                      appointment.followUpPlanSummary?.recurringIntervalValue ??
+                      activeRecurring?.recurringIntervalValue ??
+                      appointment.service?.recurringIntervalValue;
+                    const intervalUnit =
+                      appointment.followUpPlanSummary?.recurringIntervalUnit ??
+                      activeRecurring?.recurringIntervalUnit ??
+                      appointment.service?.recurringIntervalUnit;
+
+                    const unitText = (n: number, unit: string | null | undefined) => {
+                      if (unit === "DAY") return dictionary.appointments.followUpIntervalDay(n);
+                      if (unit === "WEEK") return dictionary.appointments.followUpIntervalWeek(n);
+                      if (unit === "MONTH") return dictionary.appointments.followUpIntervalMonth(n);
+                      if (unit === "YEAR") return dictionary.appointments.followUpIntervalYear(n);
+                      return "";
+                    };
+
+                    return (
+                      <div className="mt-4 space-y-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="inline-flex rounded-full border border-[#C7D2FE] bg-[#EEF0FF] px-2.5 py-0.5 text-xs font-bold text-[#3730A3]">
+                            {dictionary.appointments.followUpRecurringBadge}
+                          </span>
+                          {intervalValue && intervalUnit ? (
+                            <span className="text-sm font-semibold text-[#24364f]">
+                              {dictionary.appointments.followUpEvery} {intervalValue} {unitText(intervalValue, intervalUnit)}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          {activeRecurring ? (
+                            <div className="rounded-md bg-[#F8FAFC] p-3">
+                              <p className="text-xs font-semibold text-[#66758a]">
+                                {dictionary.appointments.followUpNextDue}
+                              </p>
+                              <p className="mt-1 text-sm font-semibold text-[#0B2D5C]">
+                                {formatDate(activeRecurring.dueDate, locale)}
+                              </p>
+                              <FollowUpStatusBadge locale={locale} status={activeRecurring.status} />
+                            </div>
+                          ) : null}
+                          {lastCompleted ? (
+                            <div className="rounded-md bg-[#F8FAFC] p-3">
+                              <p className="text-xs font-semibold text-[#66758a]">
+                                {dictionary.appointments.followUpLastCompleted}
+                              </p>
+                              <p className="mt-1 text-sm font-semibold text-[#24364f]">
+                                {formatDate(lastCompleted.dueDate, locale)}
+                              </p>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })()
+                ) : followUpPlan.length === 0 ? (
+                  <div className="mt-4 rounded-lg border border-dashed border-[#D8DEE8] bg-[#F8FAFC] p-4">
+                    <p className="text-sm text-[#66758a]">{dictionary.appointments.followUpPlanNoRecord}</p>
+                  </div>
+                ) : (
+                  /* ── SESSION_BASED_PLAN session timeline ── */
+                  (() => {
+                    const sorted = [...followUpPlan].sort((a, b) => {
+                      if (a.sessionNumber !== null && b.sessionNumber !== null) return a.sessionNumber - b.sessionNumber;
+                      return a.dueDate.localeCompare(b.dueDate);
+                    });
+                    // Use stored plan phases from the first row when available (most accurate),
+                    // then fall back to the appointment's template snapshot, then to service rules.
+                    const firstPlanPhases = sorted[0]?.planPhases ?? null;
+                    const hasTemplateSnapshot = appointment.treatmentTemplateId !== null;
+                    const phaseSource =
+                      firstPlanPhases ??
+                      (hasTemplateSnapshot
+                        ? appointment.treatmentTemplatePhases
+                        : appointment.service?.followUpRules);
+                    const rules = parseServiceFollowUpRules(phaseSource);
+
+                    // Detect next actionable session
+                    const today = new Date().toISOString().slice(0, 10);
+                    const actionable = sorted.filter(s => !["COMPLETED", "CANCELLED", "BOOKED"].includes(s.status));
+                    const nextId = (actionable.find(s => (s.dueDate.slice(0, 10)) >= today) ?? actionable[0])?.id ?? null;
+
+                    // Relative time label + card color per session
+                    const getRelative = (dueDate: string) => {
+                      const due = dueDate.slice(0, 10);
+                      if (due === today) return { label: dictionary.appointments.followUpRelativeToday, cls: "text-[#854D0E] font-bold" };
+                      const diff = Math.round((new Date(due + "T00:00:00Z").getTime() - new Date(today + "T00:00:00Z").getTime()) / 86400000);
+                      if (diff < 0) return { label: dictionary.appointments.followUpRelativeOverdue(Math.abs(diff)), cls: "text-[#B42318] font-semibold" };
+                      return { label: dictionary.appointments.followUpRelativeRemaining(diff), cls: "text-[#3B82F6] font-semibold" };
+                    };
+
+                    const cardBorder = (status: string, isNext: boolean) => {
+                      if (isNext) return "border-[#3B82F6] bg-[#EFF6FF]";
+                      switch (status) {
+                        case "COMPLETED": return "border-[#BBF7D0] bg-[#F0FDF4]";
+                        case "BOOKED":    return "border-[#DDD6FE] bg-[#F5F3FF]";
+                        case "CONTACTED": return "border-[#BAE6FD] bg-[#F0F9FF]";
+                        case "DUE":       return "border-[#FECACA] bg-[#FEF2F2]";
+                        case "MISSED":    return "border-[#E5E7EB] bg-[#F9FAFB] opacity-60";
+                        case "CANCELLED": return "border-[#E5E7EB] bg-[#F9FAFB] opacity-40";
+                        default:          return "border-[#E8ECF2] bg-[#F8FAFC]";
+                      }
+                    };
+
+                    const renderRow = (item: typeof sorted[0]) => {
+                      const isNext = item.id === nextId;
+                      const { label: relLabel, cls: relCls } = getRelative(item.dueDate);
+                      return (
+                        <div
+                          className={`flex min-w-0 flex-col gap-1.5 rounded-md border px-3 py-2.5 sm:flex-row sm:items-center sm:gap-3 ${cardBorder(item.status, isNext)}`}
+                          key={item.id}
+                        >
+                          {/* Session number + next badge */}
+                          <div className="flex shrink-0 flex-wrap items-center gap-2 sm:w-24">
+                            <span className="text-xs font-black text-[#0B2D5C]">
+                              {item.sessionNumber != null ? dictionary.appointments.followUpSession(item.sessionNumber) : "—"}
+                            </span>
+                            {isNext ? (
+                              <span className="rounded-full bg-[#3B82F6] px-2 py-0.5 text-[10px] font-black text-white">
+                                {dictionary.appointments.followUpNextSessionBadge}
+                              </span>
+                            ) : null}
+                          </div>
+                          {/* Date */}
+                          <span className="min-w-[90px] text-sm text-[#66758a]" dir="ltr">
+                            {formatDate(item.dueDate, locale)}
+                          </span>
+                          {/* Relative time */}
+                          <span className={`text-xs ${relCls}`}>{relLabel}</span>
+                          {/* Status badge */}
+                          <FollowUpStatusBadge locale={locale} status={item.status} />
+                        </div>
+                      );
+                    };
+
+                    const ungrouped = sorted.filter(s => s.sessionNumber === null || !rules.some(r => s.sessionNumber! >= r.fromSessionNumber && s.sessionNumber! <= r.toSessionNumber));
+
+                    if (rules.length === 0) {
+                      return <div className="mt-4 space-y-1.5">{sorted.map(renderRow)}</div>;
+                    }
+
+                    return (
+                      <div className="mt-4 space-y-4">
+                        {rules.map((rule, i) => {
+                          const group = sorted.filter(s => s.sessionNumber !== null && s.sessionNumber >= rule.fromSessionNumber && s.sessionNumber <= rule.toSessionNumber);
+                          if (group.length === 0) return null;
+                          return (
+                            <div key={i}>
+                              <div className="mb-2 rounded-md bg-[#EEF4FF] px-3 py-2">
+                                <p className="text-xs font-black text-[#0B2D5C]">
+                                  {dictionary.appointments.followUpPhaseTitle(i + 1)}
+                                </p>
+                                <p className="mt-0.5 text-[11px] text-[#66758a]">
+                                  {dictionary.appointments.followUpPhaseSubtitle(rule.fromSessionNumber, rule.toSessionNumber, rule.intervalDays)}
+                                </p>
+                              </div>
+                              <div className="space-y-1.5">{group.map(renderRow)}</div>
+                            </div>
+                          );
+                        })}
+                        {ungrouped.length > 0 ? <div className="space-y-1.5">{ungrouped.map(renderRow)}</div> : null}
+                      </div>
+                    );
+                  })()
+                )}
+              </section>
+            ) : null}
+
             {/* ── Reminder section ── */}
             {appointment && !isLoading && hasTenantAppointmentPermission(session.permissions, "appointments:update") ? (
               <section className="mt-6 rounded-lg border border-[#D8DEE8] bg-white p-5">
                 <h3 className="text-sm font-bold text-[#0B2D5C]">
-                  {dictionary.appointments.reminderSection}
+                  {dictionary.appointments.reminderMessagesSection}
                 </h3>
 
                 <dl className="mt-4 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3">
@@ -749,11 +980,16 @@ export function TenantAppointmentDetailsPage() {
                     {dictionary.appointments.invoiceSection}
                   </h2>
                   {invoice ? (
-                    <div className="flex min-w-0 flex-wrap items-center gap-3">
-                      <InvoiceStatusBadge
-                        label={dictionary.billingStatuses[invoice.status as keyof typeof dictionary.billingStatuses]}
-                        status={invoice.status}
-                      />
+                    <div className="flex min-w-0 flex-wrap items-start gap-3">
+                      <div className="min-w-0">
+                        <InvoiceStatusBadge
+                          label={dictionary.billingStatuses[invoice.status as keyof typeof dictionary.billingStatuses]}
+                          status={invoice.status}
+                        />
+                        <InvoiceStatusDescription
+                          description={getInvoiceStatusDescription(invoice.status, dictionary)}
+                        />
+                      </div>
                       <Link
                         className={buttonClassName("secondary", "sm")}
                         href={`/tenant/billing/${invoice.id}`}
@@ -812,27 +1048,47 @@ export function TenantAppointmentDetailsPage() {
                 {!invoiceLoading && invoice && paymentSummary ? (
                   <>
                     {/* Financial summary */}
-                    <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3">
-                      <SummaryCard
-                        label={dictionary.billing.invoiceTotal}
-                        value={`${paymentSummary.invoiceTotal} ${paymentSummary.currency}`}
-                        variant="neutral"
-                      />
-                      <SummaryCard
-                        label={dictionary.billing.paidAmount}
-                        value={`${paymentSummary.paidAmount} ${paymentSummary.currency}`}
-                        variant={
-                          parseFloat(paymentSummary.paidAmount) >= parseFloat(paymentSummary.invoiceTotal)
-                            ? "settled"
-                            : "paid"
-                        }
-                      />
-                      <SummaryCard
-                        label={dictionary.billing.balanceDue}
-                        value={`${paymentSummary.balanceDue} ${paymentSummary.currency}`}
-                        variant={parseFloat(paymentSummary.balanceDue) <= 0 ? "settled" : "due"}
-                      />
-                    </div>
+                    {(() => {
+                      const hasCredit = parseFloat(paymentSummary.patientCreditBalance ?? "0") > 0;
+                      const gridCls = hasCredit
+                        ? "mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+                        : "mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3";
+                      return (
+                        <div className={gridCls}>
+                          <SummaryCard
+                            label={dictionary.billing.invoiceTotal}
+                            value={`${paymentSummary.invoiceTotal} ${paymentSummary.currency}`}
+                            variant="neutral"
+                            description={dictionary.billing.invoiceTotalDesc}
+                          />
+                          <SummaryCard
+                            label={dictionary.billing.paidAmount}
+                            value={`${paymentSummary.paidAmount} ${paymentSummary.currency}`}
+                            variant={
+                              parseFloat(paymentSummary.paidAmount) >= parseFloat(paymentSummary.invoiceTotal)
+                                ? "settled"
+                                : "paid"
+                            }
+                            description={dictionary.billing.paidAmountDesc}
+                          />
+                          <SummaryCard
+                            label={dictionary.billing.balanceDue}
+                            value={`${paymentSummary.balanceDue} ${paymentSummary.currency}`}
+                            variant={parseFloat(paymentSummary.balanceDue) <= 0 ? "settled" : "due"}
+                            description={dictionary.billing.balanceDueDesc}
+                            tooltip={dictionary.billing.balanceDueTooltip}
+                          />
+                          {hasCredit ? (
+                            <SummaryCard
+                              label={dictionary.billing.creditBalance}
+                              value={`${paymentSummary.patientCreditBalance} ${paymentSummary.currency}`}
+                              variant="credit"
+                              description={dictionary.billing.creditBalanceDesc}
+                            />
+                          ) : null}
+                        </div>
+                      );
+                    })()}
 
                     {/* Paid notice */}
                     {invoice.status === "PAID" ? (
@@ -1208,6 +1464,31 @@ function TextBlock({
   );
 }
 
+function getInvoiceStatusDescription(
+  status: InvoiceStatus,
+  dictionary: {
+    billing: {
+      statusPaidDesc: string;
+      statusPartialDesc: string;
+      statusPendingDesc: string;
+    };
+  },
+) {
+  if (status === "PAID") return dictionary.billing.statusPaidDesc;
+  if (status === "PARTIAL") return dictionary.billing.statusPartialDesc;
+  if (status === "PENDING") return dictionary.billing.statusPendingDesc;
+  return "";
+}
+
+function InvoiceStatusDescription({ description }: { description: string }) {
+  if (!description) return null;
+  return (
+    <p className="mt-1 max-w-md text-xs leading-5 text-[#66758a]">
+      {description}
+    </p>
+  );
+}
+
 function InvoiceStatusBadge({
   status,
   label,
@@ -1226,8 +1507,8 @@ function InvoiceStatusBadge({
     status === "PAID"
       ? "bg-emerald-100 text-emerald-800 border-emerald-200"
       : status === "PARTIAL"
-        ? "bg-indigo-100 text-indigo-800 border-indigo-200"
-        : "bg-amber-100 text-amber-800 border-amber-200";
+        ? "bg-amber-100 text-amber-800 border-amber-200"
+        : "bg-red-50 text-red-700 border-red-200";
 
   return (
     <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${cls}`}>
@@ -1262,32 +1543,62 @@ function SummaryCard({
   label,
   value,
   variant,
+  description,
+  tooltip,
 }: {
   label: string;
   value: string;
-  variant: "neutral" | "paid" | "due" | "settled";
+  variant: "neutral" | "paid" | "due" | "settled" | "credit";
+  description?: string;
+  tooltip?: string;
 }) {
   const cls =
-    variant === "paid"
-      ? "bg-emerald-50 border-emerald-200"
-      : variant === "due"
-        ? "bg-amber-50 border-amber-200"
-        : variant === "settled"
-          ? "bg-emerald-50 border-emerald-200"
-          : "bg-[#F8FAFC] border-[#E5E7EB]";
+    variant === "paid"    ? "bg-emerald-50 border-emerald-200" :
+    variant === "due"     ? "bg-amber-50 border-amber-200" :
+    variant === "settled" ? "bg-emerald-50 border-emerald-200" :
+    variant === "credit"  ? "bg-indigo-50 border-indigo-200" :
+                            "bg-[#F8FAFC] border-[#E5E7EB]";
 
   const textCls =
-    variant === "paid" || variant === "settled"
-      ? "text-emerald-800"
-      : variant === "due"
-        ? "text-amber-800"
-        : "text-[#24364f]";
+    variant === "paid" || variant === "settled" ? "text-emerald-800" :
+    variant === "due"                           ? "text-amber-800" :
+    variant === "credit"                        ? "text-indigo-700" :
+                                                  "text-[#24364f]";
+
+  const labelCls =
+    variant === "credit" ? "text-indigo-500" : "text-[#66758a]";
 
   return (
-    <div className={`min-w-0 rounded-lg border p-4 ${cls}`}>
-      <p className="text-xs font-semibold text-[#66758a]">{label}</p>
-      <p className={`mt-1 text-lg font-bold ${textCls}`}>{value}</p>
+    <div className={`min-w-0 rounded-lg border p-4 ${cls}`} title={tooltip}>
+      <p className={`text-xs font-semibold ${labelCls}`}>{label}</p>
+      <p className={`mt-1 text-lg font-bold leading-tight ${textCls}`}>{value}</p>
+      {description ? (
+        <p className="mt-1.5 text-[11px] leading-snug text-[#8B98AA]">{description}</p>
+      ) : null}
     </div>
+  );
+}
+
+function FollowUpStatusBadge({ status, locale }: { status: string; locale: string }) {
+  const labels: Record<string, Record<string, string>> = {
+    en: { DUE: "Due", UPCOMING: "Upcoming", CONTACTED: "Contacted", BOOKED: "Booked", COMPLETED: "Completed", MISSED: "Missed", CANCELLED: "Cancelled" },
+    ar: { DUE: "مستحقة", UPCOMING: "قادمة", CONTACTED: "تم التواصل", BOOKED: "محجوزة", COMPLETED: "مكتملة", MISSED: "فائتة", CANCELLED: "ملغاة" },
+    he: { DUE: "לפירעון", UPCOMING: "קרוב", CONTACTED: "נוצר קשר", BOOKED: "נקבע", COMPLETED: "הושלם", MISSED: "פוספס", CANCELLED: "בוטל" },
+  };
+  const cls: Record<string, string> = {
+    COMPLETED: "border-emerald-200 bg-emerald-100 text-emerald-800",
+    BOOKED:    "border-violet-200 bg-violet-100 text-violet-800",
+    CONTACTED: "border-blue-200 bg-blue-100 text-blue-800",
+    DUE:       "border-red-200 bg-red-100 text-red-800",
+    UPCOMING:  "border-sky-200 bg-sky-100 text-sky-800",
+    MISSED:    "border-gray-200 bg-gray-100 text-gray-500",
+    CANCELLED: "border-gray-200 bg-gray-100 text-gray-400",
+  };
+  const localeLabels = labels[locale] ?? labels.en;
+  return (
+    <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${cls[status] ?? cls.UPCOMING}`}>
+      {localeLabels[status] ?? status}
+    </span>
   );
 }
 

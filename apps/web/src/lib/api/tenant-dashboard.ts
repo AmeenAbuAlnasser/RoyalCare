@@ -34,6 +34,7 @@ export type TenantDashboardStats = {
   staff: number;
   todayActivity: {
     appointmentsToday: number;
+    completedToday: number;
     noShow: number;
     upcomingNextTwoHours: number;
   };
@@ -96,6 +97,12 @@ async function request<T>(path: string) {
   return (await response.json()) as T;
 }
 
-export function getTenantDashboardStats() {
-  return request<TenantDashboardStats>("/tenant/dashboard/stats");
+export function getTenantDashboardStats(branchId?: string) {
+  const now = new Date();
+  const params = new URLSearchParams({
+    clientNow: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
+    clientDate: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`,
+  });
+  if (branchId) params.set("branchId", branchId);
+  return request<TenantDashboardStats>(`/tenant/dashboard/stats?${params.toString()}`);
 }

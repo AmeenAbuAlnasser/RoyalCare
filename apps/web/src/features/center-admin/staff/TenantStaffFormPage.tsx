@@ -265,6 +265,29 @@ export function TenantStaffFormPage({ mode }: { mode: "create" | "edit" }) {
                       </option>
                     </select>
                   </Field>
+                  <label className="min-w-0 rounded-lg border border-[#E5E7EB] bg-[#F8FAFC] px-4 py-3 md:col-span-2">
+                    <span className="flex min-w-0 items-start gap-3">
+                      <input
+                        checked={form.providerEnabled}
+                        className="mt-1 h-4 w-4 shrink-0 accent-[#0B2D5C]"
+                        onChange={(event) =>
+                          setForm({
+                            ...form,
+                            providerEnabled: event.target.checked,
+                          })
+                        }
+                        type="checkbox"
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold text-[#24364f]">
+                          {dictionary.staff.providerEnabled}
+                        </span>
+                        <span className="mt-1 block text-xs leading-5 text-[#66758a]">
+                          {dictionary.staff.providerEnabledHelper}
+                        </span>
+                      </span>
+                    </span>
+                  </label>
                 </div>
 
                 <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">

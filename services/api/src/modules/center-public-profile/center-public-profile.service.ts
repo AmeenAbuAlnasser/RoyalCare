@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 import { hasTenantPermission } from '../../common/permissions/tenant-permissions';
+import { startOfDay } from '../../common/subscriptions/subscription-lifecycle';
 
 export interface UpdatePublicProfileDto {
   logoUrl?: string | null;
@@ -41,6 +42,36 @@ export interface UpdatePublicProfileDto {
   longitude?: number | null;
   websiteSectionOrder?: unknown;
   websiteSectionVisibility?: unknown;
+  publicBookingMode?: 'SIMPLE_REQUEST' | 'DIRECT_BOOKING' | null;
+}
+
+const GLOBAL_WHATSAPP_SUBSCRIPTION_STATUSES = [
+  'ACTIVE',
+  'TRIALING',
+  'PAST_DUE',
+] as const;
+
+export interface UpsertCenterBranchDto {
+  name?: string | null;
+  cityAr?: string | null;
+  cityEn?: string | null;
+  cityHe?: string | null;
+  addressAr?: string | null;
+  addressEn?: string | null;
+  addressHe?: string | null;
+  phone?: string | null;
+  whatsapp?: string | null;
+  mapsUrl?: string | null;
+  workingHoursTextAr?: string | null;
+  workingHoursTextEn?: string | null;
+  workingHoursTextHe?: string | null;
+  isMain?: boolean | null;
+  isActive?: boolean | null;
+  sortOrder?: number | null;
+}
+
+export interface ReorderCenterBranchesDto {
+  branches?: Array<{ id?: string | null; sortOrder?: number | null }>;
 }
 
 type WebsiteSectionOrderValue = string[];
@@ -90,6 +121,7 @@ const brandingSelect = {
   workingHoursHe: true,
   websiteSectionOrder: true,
   websiteSectionVisibility: true,
+  publicBookingMode: true,
 } as const;
 
 const baseBrandingSelect = {
@@ -108,6 +140,29 @@ const baseBrandingSelect = {
   publicDescriptionHe: true,
   secondaryColor: true,
   whatsappPhone: true,
+} as const;
+
+const branchSelect = {
+  addressAr: true,
+  addressEn: true,
+  addressHe: true,
+  centerId: true,
+  cityAr: true,
+  cityEn: true,
+  cityHe: true,
+  createdAt: true,
+  id: true,
+  isActive: true,
+  isMain: true,
+  mapsUrl: true,
+  name: true,
+  phone: true,
+  sortOrder: true,
+  updatedAt: true,
+  whatsapp: true,
+  workingHoursTextAr: true,
+  workingHoursTextEn: true,
+  workingHoursTextHe: true,
 } as const;
 
 const migrationOptionalKeys = [
@@ -130,6 +185,7 @@ const migrationOptionalKeys = [
   'workingHoursHe',
   'websiteSectionOrder',
   'websiteSectionVisibility',
+  'publicBookingMode',
 ] as const;
 
 function isValidImageUrl(value: string): boolean {
@@ -296,9 +352,122 @@ function validateProfile(data: UpdatePublicProfileDto): void {
       'Website section visibility must be a map of section keys to true or false.';
   }
 
+  if (
+    data.publicBookingMode != null &&
+    data.publicBookingMode !== 'SIMPLE_REQUEST' &&
+    data.publicBookingMode !== 'DIRECT_BOOKING'
+  ) {
+    errors.publicBookingMode =
+      'Public booking mode must be SIMPLE_REQUEST or DIRECT_BOOKING.';
+  }
+
   if (Object.keys(errors).length > 0) {
     throw new BadRequestException({ message: 'Validation failed', errors });
   }
+}
+
+function cleanNullableString(value: unknown): string | null {
+  return typeof value === 'string' ? value.trim() || null : null;
+}
+
+function firstNonBlank(...values: Array<string | null | undefined>) {
+  for (const value of values) {
+    const trimmed = cleanNullableString(value);
+    if (trimmed) return trimmed;
+  }
+  return null;
+}
+
+function validateBranch(data: UpsertCenterBranchDto, isCreate: boolean): void {
+  const errors: Record<string, string> = {};
+  const name = cleanNullableString(data.name);
+  if (isCreate && !name) {
+    errors.name = 'Branch name is required.';
+  }
+  if (name && name.length > 160) {
+    errors.name = 'Branch name must be 160 characters or fewer.';
+  }
+
+  for (const key of ['cityAr', 'cityEn', 'cityHe'] as const) {
+    const val = cleanNullableString(data[key]);
+    if (val && val.length > 160) {
+      errors[key] = 'City must be 160 characters or fewer.';
+    }
+  }
+
+  for (const key of ['addressAr', 'addressEn', 'addressHe'] as const) {
+    const val = cleanNullableString(data[key]);
+    if (val && val.length > 300) {
+      errors[key] = 'Address must be 300 characters or fewer.';
+    }
+  }
+
+  for (const key of [
+    'workingHoursTextAr',
+    'workingHoursTextEn',
+    'workingHoursTextHe',
+  ] as const) {
+    const val = cleanNullableString(data[key]);
+    if (val && val.length > 800) {
+      errors[key] = 'Working hours text must be 800 characters or fewer.';
+    }
+  }
+
+  for (const key of ['phone', 'whatsapp'] as const) {
+    const val = cleanNullableString(data[key]);
+    if (val) {
+      const digits = val.replace(/\D/g, '');
+      if (digits.length < 7 || digits.length > 20) {
+        errors[key] = 'Phone must be 7-20 digits.';
+      }
+    }
+  }
+
+  const mapsUrl = cleanNullableString(data.mapsUrl);
+  if (mapsUrl && !isValidPublicUrl(mapsUrl)) {
+    errors.mapsUrl = 'URL must start with http:// or https://.';
+  }
+
+  if (data.sortOrder != null && !Number.isInteger(Number(data.sortOrder))) {
+    errors.sortOrder = 'Sort order must be a whole number.';
+  }
+
+  if (Object.keys(errors).length > 0) {
+    throw new BadRequestException({ message: 'Validation failed', errors });
+  }
+}
+
+function branchDataFromDto(data: UpsertCenterBranchDto) {
+  const out: Record<string, string | number | boolean | null> = {};
+  for (const key of [
+    'name',
+    'cityAr',
+    'cityEn',
+    'cityHe',
+    'addressAr',
+    'addressEn',
+    'addressHe',
+    'phone',
+    'whatsapp',
+    'mapsUrl',
+    'workingHoursTextAr',
+    'workingHoursTextEn',
+    'workingHoursTextHe',
+  ] as const) {
+    if (Object.prototype.hasOwnProperty.call(data, key)) {
+      out[key] = cleanNullableString(data[key]);
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(data, 'isMain')) {
+    out.isMain = Boolean(data.isMain);
+  }
+  if (Object.prototype.hasOwnProperty.call(data, 'isActive')) {
+    out.isActive = data.isActive == null ? true : Boolean(data.isActive);
+  }
+  if (Object.prototype.hasOwnProperty.call(data, 'sortOrder')) {
+    out.sortOrder = data.sortOrder == null ? 0 : Number(data.sortOrder);
+  }
+  return out;
 }
 
 @Injectable()
@@ -319,18 +488,39 @@ export class CenterPublicProfileService {
       const db = await this.prisma.getClient();
       const center = await db.center.findUnique({
         where: { id: centerId },
-        select: { id: true },
+        select: {
+          id: true,
+          owner: { select: { phone: true } },
+          subscriptions: {
+            where: {
+              currentPeriodEnd: { gte: startOfDay() },
+              status: { in: [...GLOBAL_WHATSAPP_SUBSCRIPTION_STATUSES] },
+            },
+            select: { notificationPhone: true },
+            orderBy: { currentPeriodEnd: 'desc' },
+            take: 1,
+          },
+        },
       });
       if (!center) {
         return { centerId, branding: null };
       }
+      const globalWhatsappPhone = firstNonBlank(
+        center.subscriptions[0]?.notificationPhone,
+        center.owner?.phone,
+      );
 
       try {
         const branding = await db.brandingSettings.findUnique({
           where: { centerId },
           select: brandingSelect,
         });
-        return { centerId, branding: branding ?? null };
+        return {
+          centerId,
+          branding: branding
+            ? { ...branding, globalWhatsappPhone }
+            : { globalWhatsappPhone },
+        };
       } catch (brandingError) {
         console.error(
           '[tenant-public-profile] full branding query failed - retrying with base columns (migration may be pending):',
@@ -344,8 +534,13 @@ export class CenterPublicProfileService {
         return {
           centerId,
           branding: branding
-            ? { ...branding, latitude: null, longitude: null }
-            : null,
+            ? {
+                ...branding,
+                globalWhatsappPhone,
+                latitude: null,
+                longitude: null,
+              }
+            : { globalWhatsappPhone, latitude: null, longitude: null },
         };
       }
     } catch (error) {
@@ -368,6 +563,9 @@ export class CenterPublicProfileService {
         key === 'websiteSectionVisibility'
       ) {
         cleaned[key] = normalizeWebsiteBuilderValue(key, value);
+      } else if (key === 'publicBookingMode') {
+        cleaned[key] =
+          value === 'DIRECT_BOOKING' ? 'DIRECT_BOOKING' : 'SIMPLE_REQUEST';
       } else {
         cleaned[key] = typeof value === 'string' ? value.trim() || null : null;
       }
@@ -406,5 +604,129 @@ export class CenterPublicProfileService {
         },
       };
     }
+  }
+
+  async listBranches(centerId: string, activeOnly = false) {
+    const db = await this.prisma.getClient();
+    return db.centerBranch.findMany({
+      where: { centerId, ...(activeOnly ? { isActive: true } : {}) },
+      orderBy: [{ isMain: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
+      select: branchSelect,
+    });
+  }
+
+  async createBranch(centerId: string, data: UpsertCenterBranchDto) {
+    const db = await this.prisma.getClient();
+    validateBranch(data, true);
+    const cleaned = branchDataFromDto(data);
+    const wantsMain = Boolean(cleaned.isMain);
+    return db.$transaction(async (tx) => {
+      if (wantsMain) {
+        await tx.centerBranch.updateMany({
+          where: { centerId },
+          data: { isMain: false },
+        });
+      }
+      return tx.centerBranch.create({
+        data: {
+          centerId,
+          name: String(cleaned.name),
+          cityAr: (cleaned.cityAr as string | null | undefined) ?? null,
+          cityEn: (cleaned.cityEn as string | null | undefined) ?? null,
+          cityHe: (cleaned.cityHe as string | null | undefined) ?? null,
+          addressAr: (cleaned.addressAr as string | null | undefined) ?? null,
+          addressEn: (cleaned.addressEn as string | null | undefined) ?? null,
+          addressHe: (cleaned.addressHe as string | null | undefined) ?? null,
+          phone: (cleaned.phone as string | null | undefined) ?? null,
+          whatsapp: (cleaned.whatsapp as string | null | undefined) ?? null,
+          mapsUrl: (cleaned.mapsUrl as string | null | undefined) ?? null,
+          workingHoursTextAr:
+            (cleaned.workingHoursTextAr as string | null | undefined) ?? null,
+          workingHoursTextEn:
+            (cleaned.workingHoursTextEn as string | null | undefined) ?? null,
+          workingHoursTextHe:
+            (cleaned.workingHoursTextHe as string | null | undefined) ?? null,
+          isMain: wantsMain,
+          isActive: cleaned.isActive == null ? true : Boolean(cleaned.isActive),
+          sortOrder: Number(cleaned.sortOrder ?? 0),
+        },
+        select: branchSelect,
+      });
+    });
+  }
+
+  async updateBranch(
+    centerId: string,
+    branchId: string,
+    data: UpsertCenterBranchDto,
+  ) {
+    const db = await this.prisma.getClient();
+    validateBranch(data, false);
+    const existing = await db.centerBranch.findFirst({
+      where: { centerId, id: branchId },
+      select: { id: true },
+    });
+    if (!existing) {
+      throw new BadRequestException({
+        message: 'Validation failed',
+        errors: { branchId: 'Branch not found.' },
+      });
+    }
+    const cleaned = branchDataFromDto(data);
+    const wantsMain = cleaned.isMain === true;
+    return db.$transaction(async (tx) => {
+      if (wantsMain) {
+        await tx.centerBranch.updateMany({
+          where: { centerId, id: { not: branchId } },
+          data: { isMain: false },
+        });
+      }
+      return tx.centerBranch.update({
+        where: { id: branchId },
+        data: cleaned,
+        select: branchSelect,
+      });
+    });
+  }
+
+  async deactivateBranch(centerId: string, branchId: string) {
+    const db = await this.prisma.getClient();
+    const existing = await db.centerBranch.findFirst({
+      where: { centerId, id: branchId },
+      select: { id: true },
+    });
+    if (!existing) {
+      throw new BadRequestException({
+        message: 'Validation failed',
+        errors: { branchId: 'Branch not found.' },
+      });
+    }
+    return db.centerBranch.update({
+      where: { id: branchId },
+      data: { isActive: false, isMain: false },
+      select: branchSelect,
+    });
+  }
+
+  async reorderBranches(centerId: string, data: ReorderCenterBranchesDto) {
+    const db = await this.prisma.getClient();
+    const rows = data.branches ?? [];
+    if (!Array.isArray(rows)) {
+      throw new BadRequestException({
+        message: 'Validation failed',
+        errors: { branches: 'Branches must be a list.' },
+      });
+    }
+    await db.$transaction(
+      rows
+        .filter((row) => row.id && Number.isInteger(Number(row.sortOrder)))
+        .map((row) =>
+          db.centerBranch.updateMany({
+            where: { centerId, id: String(row.id) },
+            data: { sortOrder: Number(row.sortOrder) },
+          }),
+        ),
+    );
+    return this.listBranches(centerId);
   }
 }

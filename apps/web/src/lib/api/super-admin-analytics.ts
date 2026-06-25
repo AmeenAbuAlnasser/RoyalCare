@@ -122,6 +122,14 @@ export type SuperAdminAnalyticsDashboard = {
     recommendations: SuperAdminAnalyticsInsight[];
   };
   charts: SuperAdminAnalyticsCharts;
+  platformUsage?: {
+    totalPatients: number;
+    totalAppointments: number;
+    appointmentsLast30Days: number;
+    totalInvoices: number;
+    totalUsers: number;
+    activeCenters: number;
+  };
   subscriptions?: {
     activeCentersWithActiveSub?: number;
     activeSubscriptions: number;

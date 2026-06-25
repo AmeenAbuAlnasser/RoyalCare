@@ -39,6 +39,11 @@ import {
 } from "@/lib/api/admin-centers";
 import {
   getSuperAdminCenterPublicProfile,
+  createSuperAdminCenterBranch,
+  deleteSuperAdminCenterBranch,
+  listSuperAdminCenterBranches,
+  reorderSuperAdminCenterBranches,
+  updateSuperAdminCenterBranch,
   updateSuperAdminCenterPublicProfile,
   uploadSuperAdminCenterPublicImage,
 } from "@/lib/api/center-public-profile";
@@ -2351,6 +2356,15 @@ export function SuperAdminCenterDetailsPage({
               }}
               onUploadImage={async (file, type) =>
                 uploadSuperAdminCenterPublicImage(centerId, file, type)
+              }
+              onLoadBranches={() => listSuperAdminCenterBranches(centerId)}
+              onCreateBranch={(data) => createSuperAdminCenterBranch(centerId, data)}
+              onUpdateBranch={(branchId, data) =>
+                updateSuperAdminCenterBranch(centerId, branchId, data)
+              }
+              onDeleteBranch={(branchId) => deleteSuperAdminCenterBranch(centerId, branchId)}
+              onReorderBranches={(branches) =>
+                reorderSuperAdminCenterBranches(centerId, branches)
               }
             />
           </div>

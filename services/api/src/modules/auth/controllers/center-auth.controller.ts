@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Req, Res } from '@nestjs/common';
 import type { ChangePasswordDto } from '../dto/change-password.dto';
 import type { Request, Response } from 'express';
 import { CenterLoginDto } from '../dto/center-login.dto';
@@ -67,6 +67,23 @@ export class CenterAuthController {
   changePassword(@Req() request: Request, @Body() dto: ChangePasswordDto) {
     const token = getCookie(request, centerSessionCookieName);
     return this.centerAuthService.changePassword(
+      verifyCenterSessionToken(token),
+      dto,
+    );
+  }
+
+  @Get('account-profile')
+  getAccountProfile(@Req() request: Request) {
+    const token = getCookie(request, centerSessionCookieName);
+    return this.centerAuthService.getAccountProfile(
+      verifyCenterSessionToken(token),
+    );
+  }
+
+  @Patch('account-profile')
+  updateAccountProfile(@Req() request: Request, @Body() dto: unknown) {
+    const token = getCookie(request, centerSessionCookieName);
+    return this.centerAuthService.updateAccountProfile(
       verifyCenterSessionToken(token),
       dto,
     );

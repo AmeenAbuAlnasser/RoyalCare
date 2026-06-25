@@ -53,6 +53,41 @@ const linkedRecordCountSelect = {
   creditTransactions: true,
 } as const;
 
+type LinkedRecordCounts = {
+  appointments: number;
+  invoices: number;
+  payments: number;
+  followUps: number;
+  creditTransactions: number;
+};
+
+type PatientSummaryAppointment = {
+  appointmentId: string;
+  appointmentDate: string;
+  startTime: string;
+  status: string;
+  serviceName: string | null;
+};
+
+type PatientSummary = {
+  latestSession: PatientSummaryAppointment | null;
+  upcomingSession: PatientSummaryAppointment | null;
+  treatmentPlansCount: number;
+  overdueSessionsCount: number;
+  outstandingBalance: string;
+  outstandingCurrency: string;
+  upcomingAppointmentsCount: number;
+  linkedRecordsCount: number;
+};
+
+type PatientSummaryAccumulator = Omit<
+  PatientSummary,
+  'outstandingBalance' | 'treatmentPlansCount'
+> & {
+  outstandingAmount: number;
+  planKeys: Set<string>;
+};
+
 function computeCanDelete(count: {
   appointments: number;
   invoices: number;
@@ -67,6 +102,100 @@ function computeCanDelete(count: {
     count.followUps === 0 &&
     count.creditTransactions === 0
   );
+}
+
+function computeLinkedRecordsCount(count: LinkedRecordCounts) {
+  return (
+    count.appointments +
+    count.invoices +
+    count.payments +
+    count.followUps +
+    count.creditTransactions
+  );
+}
+
+function makeSummaryAccumulator(
+  counts?: LinkedRecordCounts,
+): PatientSummaryAccumulator {
+  return {
+    latestSession: null,
+    linkedRecordsCount: counts ? computeLinkedRecordsCount(counts) : 0,
+    overdueSessionsCount: 0,
+    outstandingAmount: 0,
+    outstandingCurrency: 'ILS',
+    planKeys: new Set<string>(),
+    upcomingAppointmentsCount: 0,
+    upcomingSession: null,
+  };
+}
+
+function serializeAppointmentSummary(appointment: {
+  appointmentDate: Date;
+  id: string;
+  startTime: string;
+  status: string;
+  customServiceName: string | null;
+  service: { nameAr: string; nameEn: string; nameHe: string } | null;
+}): PatientSummaryAppointment {
+  const serviceName =
+    appointment.service?.nameAr?.trim() ||
+    appointment.service?.nameEn?.trim() ||
+    appointment.service?.nameHe?.trim() ||
+    appointment.customServiceName?.trim() ||
+    null;
+  return {
+    appointmentDate: appointment.appointmentDate.toISOString(),
+    appointmentId: appointment.id,
+    startTime: appointment.startTime,
+    status: appointment.status,
+    serviceName,
+  };
+}
+
+function toDecimalString(value: number) {
+  return Math.max(0, value).toFixed(2);
+}
+
+function getFollowUpPlanKey(followUp: {
+  appointmentId: string | null;
+  id: string;
+  originFollowUpId: string | null;
+  planTotalSessions: number | null;
+  serviceId: string | null;
+  treatmentTemplateId: string | null;
+}) {
+  if (followUp.originFollowUpId) {
+    return `origin:${followUp.originFollowUpId}`;
+  }
+
+  if (followUp.appointmentId) {
+    return `appointment:${followUp.appointmentId}`;
+  }
+
+  if (followUp.treatmentTemplateId && followUp.serviceId) {
+    return `template:${followUp.serviceId}:${followUp.treatmentTemplateId}`;
+  }
+
+  if (followUp.serviceId) {
+    return `service:${followUp.serviceId}:${followUp.planTotalSessions ?? 'open'}`;
+  }
+
+  return `follow-up:${followUp.id}`;
+}
+
+function finalizePatientSummary(
+  accumulator: PatientSummaryAccumulator,
+): PatientSummary {
+  return {
+    latestSession: accumulator.latestSession,
+    linkedRecordsCount: accumulator.linkedRecordsCount,
+    overdueSessionsCount: accumulator.overdueSessionsCount,
+    outstandingBalance: toDecimalString(accumulator.outstandingAmount),
+    outstandingCurrency: accumulator.outstandingCurrency,
+    treatmentPlansCount: accumulator.planKeys.size,
+    upcomingAppointmentsCount: accumulator.upcomingAppointmentsCount,
+    upcomingSession: accumulator.upcomingSession,
+  };
 }
 
 function optionalTrimmed(value?: string | null) {
@@ -175,6 +304,15 @@ export class PatientsService {
       prisma.patient.count({ where }),
     ]);
 
+    const countsByPatientId = new Map(
+      rawItems.map(({ _count, id }) => [id, _count]),
+    );
+    const summaries = await this.buildPatientSummaryMap(
+      centerId,
+      rawItems.map((patient) => patient.id),
+      countsByPatientId,
+    );
+
     const items = rawItems.map(({ _count, ...p }) => ({
       ...p,
       canDelete: computeCanDelete(_count),
@@ -185,6 +323,7 @@ export class PatientsService {
         followUps: _count.followUps,
         creditTransactions: _count.creditTransactions,
       },
+      summary: summaries.get(p.id) ?? finalizePatientSummary(makeSummaryAccumulator(_count)),
     }));
 
     return { items, total };
@@ -266,6 +405,12 @@ export class PatientsService {
     }
 
     const { _count, ...patient } = raw;
+    const summaries = await this.buildPatientSummaryMap(
+      centerId,
+      [patient.id],
+      new Map([[patient.id, _count]]),
+    );
+
     return {
       ...patient,
       canDelete: computeCanDelete(_count),
@@ -276,6 +421,9 @@ export class PatientsService {
         followUps: _count.followUps,
         creditTransactions: _count.creditTransactions,
       },
+      summary:
+        summaries.get(patient.id) ??
+        finalizePatientSummary(makeSummaryAccumulator(_count)),
     };
   }
 
@@ -464,6 +612,186 @@ export class PatientsService {
     if (!hasTenantPermission(permissions, permission)) {
       throw forbidden(permission);
     }
+  }
+
+  private async buildPatientSummaryMap(
+    centerId: string,
+    patientIds: string[],
+    countsByPatientId: Map<string, LinkedRecordCounts>,
+  ) {
+    const summaries = new Map<string, PatientSummaryAccumulator>();
+
+    for (const patientId of patientIds) {
+      summaries.set(
+        patientId,
+        makeSummaryAccumulator(countsByPatientId.get(patientId)),
+      );
+    }
+
+    if (patientIds.length === 0) {
+      return new Map<string, PatientSummary>();
+    }
+
+    const prisma = await this.prisma.getClient();
+    const now = new Date();
+
+    const [appointments, followUps, invoices] = await Promise.all([
+      prisma.appointment.findMany({
+        where: {
+          centerId,
+          patientId: { in: patientIds },
+          // History (latestSession) includes CANCELLED; upcoming uses SCHEDULED/CONFIRMED.
+          status: {
+            in: ['COMPLETED', 'CONFIRMED', 'SCHEDULED', 'IN_PROGRESS', 'CANCELLED'],
+          },
+        },
+        orderBy: [{ appointmentDate: 'asc' }, { startTime: 'asc' }],
+        select: {
+          appointmentDate: true,
+          id: true,
+          patientId: true,
+          startTime: true,
+          status: true,
+          customServiceName: true,
+          service: { select: { nameAr: true, nameEn: true, nameHe: true } },
+        },
+      }),
+      prisma.patientFollowUp.findMany({
+        where: {
+          centerId,
+          patientId: { in: patientIds },
+          // Active treatment plans only — exclude cancelled and closed-early plans.
+          planStatus: { notIn: ['CANCELLED', 'CLOSED_EARLY'] },
+          status: { notIn: ['CANCELLED', 'CLOSED_EARLY'] },
+        },
+        select: {
+          appointmentId: true,
+          id: true,
+          dueDate: true,
+          originFollowUpId: true,
+          patientId: true,
+          planTotalSessions: true,
+          serviceId: true,
+          status: true,
+          treatmentTemplateId: true,
+        },
+      }),
+      prisma.invoice.findMany({
+        where: {
+          centerId,
+          patientId: { in: patientIds },
+          status: { not: 'CANCELLED' },
+        },
+        select: {
+          amount: true,
+          creditTransactions: {
+            where: { type: 'CREDIT_USE' },
+            select: { amount: true },
+          },
+          currency: true,
+          patientId: true,
+          payments: { select: { amount: true } },
+        },
+      }),
+    ]);
+
+    // Compare by LOCAL calendar date (not time-of-day) so an appointment today
+    // counts as upcoming and a past-dated booking counts as history.
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+
+    for (const appointment of appointments) {
+      const summary = summaries.get(appointment.patientId);
+
+      if (!summary) {
+        continue;
+      }
+
+      const appointmentDay = new Date(appointment.appointmentDate);
+      appointmentDay.setHours(0, 0, 0, 0);
+      const isPast = appointmentDay.getTime() < todayStart.getTime();
+      const isActiveBooking =
+        appointment.status === 'SCHEDULED' ||
+        appointment.status === 'CONFIRMED';
+
+      // History (آخر جلسة): completed/cancelled records, plus active bookings whose
+      // date has already passed. Appointments are ordered ascending, so the last
+      // history match wins — i.e. the most recent one.
+      const isHistory =
+        appointment.status === 'COMPLETED' ||
+        appointment.status === 'CANCELLED' ||
+        ((isActiveBooking || appointment.status === 'IN_PROGRESS') && isPast);
+
+      // Upcoming (الجلسة القادمة / المواعيد القادمة): active bookings due today or later.
+      const isUpcoming = isActiveBooking && !isPast;
+
+      if (isHistory) {
+        summary.latestSession = serializeAppointmentSummary(appointment);
+      }
+
+      if (isUpcoming) {
+        summary.upcomingAppointmentsCount += 1;
+
+        if (!summary.upcomingSession) {
+          summary.upcomingSession = serializeAppointmentSummary(appointment);
+        }
+      }
+    }
+
+    for (const followUp of followUps) {
+      const summary = summaries.get(followUp.patientId);
+
+      if (!summary) {
+        continue;
+      }
+
+      summary.planKeys.add(getFollowUpPlanKey(followUp));
+
+      const dueDate = new Date(followUp.dueDate);
+      dueDate.setHours(0, 0, 0, 0);
+      const today = new Date(now);
+      today.setHours(0, 0, 0, 0);
+      const isOverdueStatus =
+        followUp.status === 'DUE' ||
+        followUp.status === 'UPCOMING' ||
+        followUp.status === 'CONTACTED' ||
+        followUp.status === 'MISSED';
+
+      if (isOverdueStatus && dueDate.getTime() < today.getTime()) {
+        summary.overdueSessionsCount += 1;
+      }
+    }
+
+    for (const invoice of invoices) {
+      const summary = summaries.get(invoice.patientId);
+
+      if (!summary) {
+        continue;
+      }
+
+      const paidFromPayments = invoice.payments.reduce(
+        (total, payment) => total + Number(payment.amount),
+        0,
+      );
+      const paidFromCredits = invoice.creditTransactions.reduce(
+        (total, transaction) => total + Number(transaction.amount),
+        0,
+      );
+      const remaining = Math.max(
+        0,
+        Number(invoice.amount) - paidFromPayments - paidFromCredits,
+      );
+
+      summary.outstandingAmount += remaining;
+      summary.outstandingCurrency = invoice.currency || summary.outstandingCurrency;
+    }
+
+    return new Map(
+      Array.from(summaries.entries()).map(([patientId, summary]) => [
+        patientId,
+        finalizePatientSummary(summary),
+      ]),
+    );
   }
 
   private validateCreate(dto: CreatePatientDto) {

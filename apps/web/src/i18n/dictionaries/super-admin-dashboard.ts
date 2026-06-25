@@ -157,6 +157,15 @@ type DashboardDictionary = {
     domainVerificationCompleted: string;
     pastDueCenterReview: string;
   };
+  platformUsage: {
+    sectionTitle: string;
+    totalPatients: string;
+    totalAppointments: string;
+    appointmentsLast30Days: string;
+    totalInvoices: string;
+    totalUsers: string;
+    activeCenters: string;
+  };
   subscriptions: {
     sectionTitle: string;
     activeSubscriptions: string;
@@ -338,6 +347,15 @@ export const superAdminDashboardDictionaries: Record<
       domainVerificationCompleted: "Domain verification completed",
       pastDueCenterReview: "Past due center requires review",
     },
+    platformUsage: {
+      sectionTitle: "Platform Usage Metrics",
+      totalPatients: "Total Patients",
+      totalAppointments: "Total Appointments",
+      appointmentsLast30Days: "Appointments Last 30 Days",
+      totalInvoices: "Total Invoices",
+      totalUsers: "Total Users",
+      activeCenters: "Active Centers",
+    },
     subscriptions: {
       sectionTitle: "Subscription Overview",
       activeSubscriptions: "Effective",
@@ -513,6 +531,15 @@ export const superAdminDashboardDictionaries: Record<
       domainVerificationCompleted: "اكتمل توثيق النطاق",
       pastDueCenterReview: "مركز متأخر يحتاج إلى مراجعة",
     },
+    platformUsage: {
+      sectionTitle: "مؤشرات استخدام المنصة",
+      totalPatients: "إجمالي المرضى",
+      totalAppointments: "إجمالي الحجوزات",
+      appointmentsLast30Days: "حجوزات آخر 30 يوم",
+      totalInvoices: "إجمالي الفواتير",
+      totalUsers: "إجمالي المستخدمين",
+      activeCenters: "المراكز النشطة",
+    },
     subscriptions: {
       sectionTitle: "نظرة على الاشتراكات",
       activeSubscriptions: "فعالة",
@@ -687,6 +714,15 @@ export const superAdminDashboardDictionaries: Record<
       subscriptionRenewalQueue: "תור חידוש מינויים",
       domainVerificationCompleted: "אימות הדומיין הושלם",
       pastDueCenterReview: "מרכז באיחור דורש בדיקה",
+    },
+    platformUsage: {
+      sectionTitle: "מדדי שימוש בפלטפורמה",
+      totalPatients: "סך המטופלים",
+      totalAppointments: "סך התורים",
+      appointmentsLast30Days: "תורים ב-30 הימים האחרונים",
+      totalInvoices: "סך החשבוניות",
+      totalUsers: "סך המשתמשים",
+      activeCenters: "מרכזים פעילים",
     },
     subscriptions: {
       sectionTitle: "סקירת מינויים",

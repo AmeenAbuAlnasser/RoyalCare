@@ -31,10 +31,14 @@ type PublicCentersDictionary = {
       bookings: string;
       services: string;
     };
-    featuredServicesEyebrow: string;
-    featuredServicesTitle: string;
-    featuredServices: string[];
-    exploreService: string;
+    pricingPreviewEyebrow: string;
+    pricingPreviewTitle: string;
+    pricingPreviewSubtitle: string;
+    pricingPreviewFullDetails: string;
+    pricingPreviewWhatsappCta: string;
+    whyRoyalCareTitle: string;
+    whyRoyalCareSubtitle: string;
+    whyRoyalCareBenefits: Array<{ title: string; description: string }>;
     featuredCentersTitle: string;
     featuredCentersSubtitle: string;
     clearSearch: string;
@@ -175,6 +179,7 @@ type PublicCentersDictionary = {
     menu: string;
     closeMenu: string;
     home: string;
+    pricing: string;
     centers: string;
     howItWorks: string;
     features: string;
@@ -258,17 +263,41 @@ const en: PublicCentersDictionary = {
       bookings: "Bookings",
       services: "Services",
     },
-    featuredServicesEyebrow: "Featured services",
-    featuredServicesTitle: "Choose the service you need",
-    featuredServices: [
-      "Laser",
-      "Physiotherapy",
-      "Hijama",
-      "Beauty",
-      "Skin care",
-      "Dental",
+    pricingPreviewEyebrow: "Pricing",
+    pricingPreviewTitle: "Pricing Plans",
+    pricingPreviewSubtitle:
+      "A quick look at RoyalCare packages. Visit the pricing page for the full feature comparison.",
+    pricingPreviewFullDetails: "View Full Pricing",
+    pricingPreviewWhatsappCta: "Request via WhatsApp",
+    whyRoyalCareTitle: "Why RoyalCare",
+    whyRoyalCareSubtitle:
+      "Everything a modern clinic needs to launch online, manage work, and turn interest into real conversations.",
+    whyRoyalCareBenefits: [
+      {
+        title: "Professional clinic website",
+        description: "Launch a branded public website for your center without a custom build.",
+      },
+      {
+        title: "Online booking 24/7",
+        description: "Let patients request appointments any time from your public page.",
+      },
+      {
+        title: "Patients and appointments management",
+        description: "Keep patient records, bookings, services, and schedules organized.",
+      },
+      {
+        title: "Multilingual AR/EN/HE",
+        description: "Serve Arabic, English, and Hebrew audiences from one platform.",
+      },
+      {
+        title: "Reports and analytics",
+        description: "Track activity, bookings, revenue, and center performance clearly.",
+      },
+      {
+        title: "WhatsApp sales/support flow",
+        description: "Route pricing, sales, and support requests into fast WhatsApp conversations.",
+      },
     ],
-    exploreService: "Explore centers",
     featuredCentersTitle: "Featured centers",
     featuredCentersSubtitle:
       "Browse active RoyalCare partner centers and open the center page to request your next appointment.",
@@ -468,6 +497,7 @@ const en: PublicCentersDictionary = {
     menu: "Menu",
     closeMenu: "Close menu",
     home: "Home",
+    pricing: "Pricing",
     centers: "Centers",
     howItWorks: "How it works",
     features: "Features",
@@ -603,17 +633,41 @@ const ar: PublicCentersDictionary = {
       bookings: "عدد الحجوزات",
       services: "عدد الخدمات",
     },
-    featuredServicesEyebrow: "الخدمات المميزة",
-    featuredServicesTitle: "اختر الخدمة التي تحتاجها",
-    featuredServices: [
-      "ليزر",
-      "علاج طبيعي",
-      "حجامة",
-      "تجميل",
-      "عناية بالبشرة",
-      "أسنان",
+    pricingPreviewEyebrow: "الأسعار",
+    pricingPreviewTitle: "الباقات والأسعار",
+    pricingPreviewSubtitle:
+      "نظرة سريعة على باقات RoyalCare. افتح صفحة الأسعار لعرض المقارنة الكاملة.",
+    pricingPreviewFullDetails: "عرض جميع التفاصيل",
+    pricingPreviewWhatsappCta: "اطلب عبر واتساب",
+    whyRoyalCareTitle: "لماذا RoyalCare",
+    whyRoyalCareSubtitle:
+      "كل ما يحتاجه المركز الحديث للظهور أونلاين، وتنظيم العمل، وتحويل الاهتمام إلى تواصل فعلي.",
+    whyRoyalCareBenefits: [
+      {
+        title: "موقع احترافي للمركز",
+        description: "أطلق موقعاً عاماً بهوية مركزك بدون بناء مخصص من الصفر.",
+      },
+      {
+        title: "حجز أونلاين 24/7",
+        description: "اسمح للمرضى بطلب المواعيد في أي وقت من صفحة المركز.",
+      },
+      {
+        title: "إدارة المرضى والمواعيد",
+        description: "نظم سجلات المرضى والحجوزات والخدمات والجداول في مكان واحد.",
+      },
+      {
+        title: "دعم عربي/إنجليزي/عبري",
+        description: "اخدم جمهورك بثلاث لغات من منصة واحدة.",
+      },
+      {
+        title: "تقارير وتحليلات",
+        description: "تابع النشاط والحجوزات والإيرادات وأداء المركز بوضوح.",
+      },
+      {
+        title: "تدفق واتساب للمبيعات والدعم",
+        description: "حوّل طلبات الأسعار والمبيعات والدعم إلى محادثات واتساب سريعة.",
+      },
     ],
-    exploreService: "استكشف المراكز",
     featuredCentersTitle: "مراكز مميزة",
     featuredCentersSubtitle:
       "تصفح مراكز RoyalCare النشطة وافتح صفحة المركز لطلب موعدك القادم.",
@@ -806,6 +860,7 @@ const ar: PublicCentersDictionary = {
     menu: "القائمة",
     closeMenu: "إغلاق القائمة",
     home: "الرئيسية",
+    pricing: "الأسعار",
     centers: "المراكز",
     howItWorks: "كيف تعمل",
     features: "المميزات",
@@ -937,17 +992,41 @@ const he: PublicCentersDictionary = {
       bookings: "מספר הזמנות",
       services: "מספר שירותים",
     },
-    featuredServicesEyebrow: "שירותים מובילים",
-    featuredServicesTitle: "בחרו את השירות שאתם צריכים",
-    featuredServices: [
-      "לייזר",
-      "פיזיותרפיה",
-      "חיג'אמה",
-      "יופי",
-      "טיפוח עור",
-      "שיניים",
+    pricingPreviewEyebrow: "מחירים",
+    pricingPreviewTitle: "חבילות ומחירים",
+    pricingPreviewSubtitle:
+      "מבט קצר על חבילות RoyalCare. עמוד המחירים מציג את ההשוואה המלאה.",
+    pricingPreviewFullDetails: "הצג את כל המחירים",
+    pricingPreviewWhatsappCta: "בקש בוואטסאפ",
+    whyRoyalCareTitle: "למה RoyalCare",
+    whyRoyalCareSubtitle:
+      "כל מה שמרפאה מודרנית צריכה כדי להופיע אונליין, לנהל עבודה ולהפוך עניין לשיחות אמיתיות.",
+    whyRoyalCareBenefits: [
+      {
+        title: "אתר מקצועי למרפאה",
+        description: "השיקו אתר ציבורי ממותג למרכז שלכם בלי פיתוח מותאם מאפס.",
+      },
+      {
+        title: "הזמנה אונליין 24/7",
+        description: "אפשרו למטופלים לבקש תורים בכל שעה מדף המרכז.",
+      },
+      {
+        title: "ניהול מטופלים ותורים",
+        description: "רכזו רשומות מטופלים, הזמנות, שירותים ולוחות זמנים במקום אחד.",
+      },
+      {
+        title: "ריבוי שפות AR/EN/HE",
+        description: "שרתו קהלים בערבית, אנגלית ועברית מתוך מערכת אחת.",
+      },
+      {
+        title: "דוחות ואנליטיקה",
+        description: "עקבו בבירור אחר פעילות, הזמנות, הכנסות וביצועי המרכז.",
+      },
+      {
+        title: "תהליך WhatsApp למכירות ותמיכה",
+        description: "נתבו בקשות מחיר, מכירות ותמיכה לשיחות WhatsApp מהירות.",
+      },
     ],
-    exploreService: "גלו מרכזים",
     featuredCentersTitle: "מרכזים מומלצים",
     featuredCentersSubtitle:
       "עיינו במרכזי RoyalCare הפעילים ופתחו את דף המרכז כדי לבקש את התור הבא שלכם.",
@@ -1140,6 +1219,7 @@ const he: PublicCentersDictionary = {
     menu: "תפריט",
     closeMenu: "סגור תפריט",
     home: "בית",
+    pricing: "מחירים",
     centers: "מרכזים",
     howItWorks: "איך זה עובד",
     features: "תכונות",

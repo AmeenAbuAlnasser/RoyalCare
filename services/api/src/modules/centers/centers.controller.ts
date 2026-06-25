@@ -133,6 +133,20 @@ export class CentersController {
     });
   }
 
+  @Patch(':centerId/public-visibility')
+  @RequirePermissions('edit:centers')
+  updatePublicVisibility(
+    @Param('centerId') centerId: string,
+    @Body('publicVisible') publicVisible: boolean,
+    @Headers('x-royalcare-super-admin-user-id') authorId?: string,
+  ) {
+    return this.centersService.updateAdminCenterPublicVisibility(
+      centerId,
+      Boolean(publicVisible),
+      authorId,
+    );
+  }
+
   @Patch(':centerId')
   @RequirePermissions('edit:centers')
   update(@Param('centerId') centerId: string, @Body() dto: UpdateCenterDto) {
@@ -262,6 +276,20 @@ export class CentersAliasController {
       ip: request?.ip,
       userAgent: request?.headers['user-agent'],
     });
+  }
+
+  @Patch(':centerId/public-visibility')
+  @RequirePermissions('edit:centers')
+  updatePublicVisibility(
+    @Param('centerId') centerId: string,
+    @Body('publicVisible') publicVisible: boolean,
+    @Headers('x-royalcare-super-admin-user-id') authorId?: string,
+  ) {
+    return this.centersService.updateAdminCenterPublicVisibility(
+      centerId,
+      Boolean(publicVisible),
+      authorId,
+    );
   }
 
   @Patch(':centerId')

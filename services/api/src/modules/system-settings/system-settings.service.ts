@@ -12,6 +12,7 @@ const DEFAULTS: Record<string, string> = {
   public_support_phone: '',
   public_support_whatsapp: '',
   public_support_email: 'support@royalcare.app',
+  public_sales_whatsapp: '',
   public_facebook_url: '',
   public_instagram_url: '',
   public_whatsapp_url: '',

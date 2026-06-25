@@ -143,9 +143,17 @@ enum AppointmentStatus {
   NO_SHOW
 }
 
-enum ServiceFollowUpType {
-  FIXED_INTERVAL
-  SESSION_PLAN
+enum ServiceFollowUpMode {
+  NONE
+  SESSION_BASED_PLAN
+  RECURRING_CONTINUOUS
+}
+
+enum RecurringIntervalUnit {
+  DAY
+  WEEK
+  MONTH
+  YEAR
 }
 
 enum PatientFollowUpSourceType {
@@ -161,7 +169,18 @@ enum PatientFollowUpStatus {
   BOOKED
   COMPLETED
   MISSED
+  CLOSED_EARLY
   CANCELLED
+  SKIPPED
+  PAUSED
+}
+
+enum PatientFollowUpPlanStatus {
+  ACTIVE
+  COMPLETED
+  CLOSED_EARLY
+  CANCELLED
+  PAUSED
 }
 
 enum AppointmentSource {
@@ -220,6 +239,14 @@ enum InvoiceStatus {
   CANCELLED
 }
 
+enum InvoiceSource {
+  MANUAL
+  AUTO_APPOINTMENT
+  AUTO_FOLLOW_UP
+  AUTO_RECALCULATION
+  AUTO_APPOINTMENT_COMPLETION
+}
+
 enum SubscriptionInvoiceStatus {
   DRAFT
   PENDING
@@ -233,6 +260,13 @@ enum PaymentMethod {
   BANK_TRANSFER
   CHECK
   OTHER
+}
+
+enum ExpenseStatus {
+  PAID
+  PENDING
+  RECURRING
+  CANCELLED
 }
 
 enum CreditTransactionType {
@@ -250,6 +284,17 @@ enum BookingRequestStatus {
   PENDING
   ACCEPTED
   REJECTED
+}
+
+enum PublicBookingMode {
+  SIMPLE_REQUEST
+  DIRECT_BOOKING
+}
+
+enum BookingRequestSource {
+  PUBLIC_WEBSITE
+  CUSTOMER_PORTAL
+  ADMIN
 }
 
 enum DayOfWeek {
@@ -327,6 +372,8 @@ model User {
   roles                     UserRole[]
   staffInvoices             Invoice[]              @relation("InvoiceStaff")
   paymentsCreated           Payment[]              @relation("PaymentCreatedBy")
+  expensesCreated           Expense[]              @relation("ExpenseCreatedBy")
+  expenseRecurrencesCreated ExpenseRecurrence[]    @relation("ExpenseRecurrenceCreatedBy")
   creditTransactionsCreated CreditTransaction[]    @relation("CreditTransactionCreatedBy")
   auditLogsAsActor          AuditLog[]             @relation("AuditLogActor")
   auditLogsAsTarget         AuditLog[]             @relation("AuditLogTarget")
@@ -377,15 +424,16 @@ model Permission {
 }
 
 model UserRole {
-  id         String         @id @default(uuid()) @db.Uuid
-  userId     String         @db.Uuid
-  roleId     String         @db.Uuid
-  centerId   String?        @db.Uuid
-  status     UserRoleStatus @default(ACTIVE)
-  assignedAt DateTime       @default(now())
-  revokedAt  DateTime?
-  createdAt  DateTime       @default(now())
-  updatedAt  DateTime       @updatedAt
+  id              String         @id @default(uuid()) @db.Uuid
+  userId          String         @db.Uuid
+  roleId          String         @db.Uuid
+  centerId        String?        @db.Uuid
+  status          UserRoleStatus @default(ACTIVE)
+  providerEnabled Boolean        @default(false)
+  assignedAt      DateTime       @default(now())
+  revokedAt       DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
   user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   role   Role    @relation(fields: [roleId], references: [id], onDelete: Cascade)
@@ -395,6 +443,7 @@ model UserRole {
   @@index([userId, status])
   @@index([roleId])
   @@index([centerId, status])
+  @@index([centerId, providerEnabled, status])
 }
 
 model RolePermission {
@@ -447,6 +496,9 @@ model Center {
   internalNotes         CenterInternalNote[]
   invoices              Invoice[]
   payments              Payment[]
+  expenseCategories     ExpenseCategory[]
+  expenses              Expense[]
+  expenseRecurrences    ExpenseRecurrence[]
   creditTransactions    CreditTransaction[]
   auditLogs             AuditLog[]
   bookingRequests       BookingRequest[]
@@ -460,6 +512,7 @@ model Center {
   beforeAfterItems      CenterBeforeAfter[]
   teamMembers           CenterTeamMember[]
   offers                CenterOffer[]
+  branches              CenterBranch[]
   seoSettings           CenterSeoSettings?
   marketingSettings     TenantMarketingSettings?
   marketingTrackingLogs MarketingTrackingLog[]
@@ -489,9 +542,51 @@ model CenterInternalNote {
   @@index([createdAt])
 }
 
+// Platform-level subscription plan definitions.
+// planCode/planName on Subscription remain as denormalized strings for
+// audit trail and backwards compatibility. planId FK is the v2 source of truth.
+model Plan {
+  id   String @id @default(uuid()) @db.Uuid
+  code String @unique @db.VarChar(80)
+
+  nameEn        String  @db.VarChar(120)
+  nameAr        String  @db.VarChar(120)
+  nameHe        String  @db.VarChar(120)
+  descriptionEn String?
+  descriptionAr String?
+  descriptionHe String?
+
+  yearlyPrice Decimal @db.Decimal(10, 2)
+  currency    String  @default("USD") @db.VarChar(10)
+
+  isActive         Boolean @default(true)
+  isPublic         Boolean @default(true)
+  isPopular        Boolean @default(false)
+  isContactPricing Boolean @default(false)
+  displayOrder     Int     @default(0)
+
+  // Stored now, not enforced until Phase 6
+  maxUsers                Int?
+  maxPatients             Int?
+  maxAppointmentsPerMonth Int?
+
+  // [{ key, nameEn, nameAr, nameHe, included }]
+  features Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subscriptions Subscription[]
+
+  @@index([isActive, isPublic, displayOrder])
+}
+
 model Subscription {
   id                   String             @id @default(uuid()) @db.Uuid
   centerId             String             @db.Uuid
+  // v2 FK — nullable; existing rows backfilled by plans.seed.ts
+  planId               String?            @db.Uuid
+  // Keep unchanged: denormalized audit trail + backwards compat
   planCode             String             @db.VarChar(80)
   planName             String             @db.VarChar(120)
   status               SubscriptionStatus @default(TRIALING)
@@ -512,8 +607,10 @@ model Subscription {
   updatedAt            DateTime           @updatedAt
 
   center   Center                @relation(fields: [centerId], references: [id], onDelete: Restrict)
+  plan     Plan?                 @relation(fields: [planId], references: [id], onDelete: SetNull)
   invoices SubscriptionInvoice[]
 
+  @@index([planId])
   @@index([centerId, status])
   @@index([centerId, currentPeriodEnd])
   @@index([status, currentPeriodEnd])
@@ -640,38 +737,46 @@ model Patient {
 }
 
 model Service {
-  id                       String              @id @default(uuid()) @db.Uuid
-  centerId                 String              @db.Uuid
-  nameEn                   String              @default("") @db.VarChar(160)
-  nameAr                   String              @default("") @db.VarChar(160)
-  nameHe                   String              @default("") @db.VarChar(160)
-  descriptionEn            String?
-  descriptionAr            String?
-  descriptionHe            String?
-  durationMinutes          Int?
-  bufferMinutes            Int                 @default(0)
-  followUpEnabled          Boolean             @default(false)
-  followUpType             ServiceFollowUpType @default(FIXED_INTERVAL)
-  defaultIntervalDays      Int?
-  totalRecommendedSessions Int?
-  autoCreateNextReminder   Boolean             @default(true)
-  reminderMessageAr        String?
-  reminderMessageEn        String?
-  reminderMessageHe        String?
-  followUpRules            Json?
-  price                    Decimal?            @db.Decimal(10, 2)
-  currency                 String              @default("ILS") @db.VarChar(3)
-  isActive                 Boolean             @default(true)
-  createdAt                DateTime            @default(now())
-  updatedAt                DateTime            @updatedAt
-  archivedAt               DateTime?
+  id                          String                 @id @default(uuid()) @db.Uuid
+  centerId                    String                 @db.Uuid
+  nameEn                      String                 @default("") @db.VarChar(160)
+  nameAr                      String                 @default("") @db.VarChar(160)
+  nameHe                      String                 @default("") @db.VarChar(160)
+  descriptionEn               String?
+  descriptionAr               String?
+  descriptionHe               String?
+  durationMinutes             Int?
+  bufferMinutes               Int                    @default(0)
+  followUpEnabled             Boolean                @default(false)
+  followUpMode                ServiceFollowUpMode    @default(NONE)
+  defaultIntervalDays         Int?
+  totalRecommendedSessions    Int?
+  recurringIntervalValue      Int?
+  recurringIntervalUnit       RecurringIntervalUnit?
+  autoWhatsappReminderEnabled Boolean                @default(false)
+  autoReminderDaysBefore      Int?
+  autoCreateNextReminder      Boolean                @default(true)
+  reminderMessageAr           String?
+  reminderMessageEn           String?
+  reminderMessageHe           String?
+  followUpRules               Json?
+  price                       Decimal?               @db.Decimal(10, 2)
+  currency                    String                 @default("ILS") @db.VarChar(3)
+  coverImageUrl               String?                @db.VarChar(800)
+  coverImageBlurhash          String?                @db.VarChar(120)
+  coverImageAlt               String?                @db.VarChar(200)
+  isActive                    Boolean                @default(true)
+  createdAt                   DateTime               @default(now())
+  updatedAt                   DateTime               @updatedAt
+  archivedAt                  DateTime?
 
-  center          Center            @relation(fields: [centerId], references: [id], onDelete: Cascade)
-  appointments    Appointment[]
-  sessions        Session[]
-  invoices        Invoice[]
-  bookingRequests BookingRequest[]
-  followUps       PatientFollowUp[]
+  center             Center                     @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  appointments       Appointment[]
+  sessions           Session[]
+  invoices           Invoice[]
+  treatmentTemplates ServiceTreatmentTemplate[]
+  bookingRequests    BookingRequest[]
+  followUps          PatientFollowUp[]
 
   @@index([centerId])
   @@index([centerId, isActive])
@@ -680,87 +785,153 @@ model Service {
   @@index([centerId, nameHe])
 }
 
-model Appointment {
-  id                    String            @id @default(uuid()) @db.Uuid
-  centerId              String            @db.Uuid
-  patientId             String            @db.Uuid
-  serviceId             String?           @db.Uuid
-  staffUserId           String            @db.Uuid
-  createdByUserId       String            @db.Uuid
-  appointmentDate       DateTime          @db.Date
-  startTime             String            @db.VarChar(5)
-  endTime               String            @db.VarChar(5)
-  durationMinutes       Int
-  customServiceName     String?           @db.VarChar(160)
-  customServiceDuration Int?
-  customServicePrice    Decimal?          @db.Decimal(10, 2)
-  customServiceCurrency String?           @db.VarChar(10)
-  customServiceSaved    Boolean           @default(false)
-  status                AppointmentStatus @default(SCHEDULED)
-  notes                 String?
-  internalNotes         String?
-  offerTitle            String?           @db.VarChar(200)
-  offerPrice            Decimal?          @db.Decimal(12, 2)
-  offerCurrency         String?           @db.VarChar(10)
-  isCancelled           Boolean           @default(false)
-  cancellationReason    String?
-  reminderSent          Boolean           @default(false)
-  lastReminderSentAt    DateTime?
-  reminderCount         Int               @default(0)
-  reminder24hSent       Boolean           @default(false)
-  reminder2hSent        Boolean           @default(false)
-  cancelledAt           DateTime?
-  completedAt           DateTime?
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
+model ServiceTreatmentTemplate {
+  id                  String   @id @default(uuid()) @db.Uuid
+  serviceId           String   @db.Uuid
+  nameAr              String   @default("") @db.VarChar(160)
+  nameEn              String   @default("") @db.VarChar(160)
+  nameHe              String   @default("") @db.VarChar(160)
+  totalSessions       Int
+  defaultIntervalDays Int?
+  phases              Json?
+  isDefault           Boolean  @default(false)
+  isActive            Boolean  @default(true)
+  sortOrder           Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-  center           Center            @relation(fields: [centerId], references: [id], onDelete: Restrict)
-  patient          Patient           @relation(fields: [patientId], references: [id], onDelete: Restrict)
-  service          Service?          @relation(fields: [serviceId], references: [id], onDelete: Restrict)
-  staffUser        User              @relation("AppointmentStaffUser", fields: [staffUserId], references: [id], onDelete: Restrict)
-  createdByUser    User              @relation("AppointmentCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  sessions         Session[]
-  invoices         Invoice[]
-  bookingRequest   BookingRequest?
-  followUpsCreated PatientFollowUp[] @relation("FollowUpSourceAppointment")
-  followUpsNext    PatientFollowUp[] @relation("FollowUpNextAppointment")
+  service      Service           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+  followUps    PatientFollowUp[]
+
+  @@index([serviceId, isActive, sortOrder])
+  @@index([serviceId, isDefault])
+}
+
+model Appointment {
+  id                                   String            @id @default(uuid()) @db.Uuid
+  centerId                             String            @db.Uuid
+  patientId                            String            @db.Uuid
+  serviceId                            String?           @db.Uuid
+  branchId                             String?           @db.Uuid
+  staffUserId                          String            @db.Uuid
+  createdByUserId                      String            @db.Uuid
+  appointmentDate                      DateTime          @db.Date
+  startTime                            String            @db.VarChar(5)
+  endTime                              String            @db.VarChar(5)
+  durationMinutes                      Int
+  customServiceName                    String?           @db.VarChar(160)
+  customServiceDuration                Int?
+  customServicePrice                   Decimal?          @db.Decimal(10, 2)
+  customServiceCurrency                String?           @db.VarChar(10)
+  customServiceSaved                   Boolean           @default(false)
+  status                               AppointmentStatus @default(SCHEDULED)
+  notes                                String?
+  internalNotes                        String?
+  offerTitle                           String?           @db.VarChar(200)
+  offerPrice                           Decimal?          @db.Decimal(12, 2)
+  offerCurrency                        String?           @db.VarChar(10)
+  treatmentTemplateId                  String?           @db.Uuid
+  treatmentTemplateNameAr              String?           @db.VarChar(160)
+  treatmentTemplateNameEn              String?           @db.VarChar(160)
+  treatmentTemplateNameHe              String?           @db.VarChar(160)
+  treatmentTemplateTotalSessions       Int?
+  treatmentTemplateDefaultIntervalDays Int?
+  treatmentTemplatePhases              Json?
+  isCancelled                          Boolean           @default(false)
+  cancellationReason                   String?
+  reminderSent                         Boolean           @default(false)
+  lastReminderSentAt                   DateTime?
+  reminderCount                        Int               @default(0)
+  reminder24hSent                      Boolean           @default(false)
+  reminder2hSent                       Boolean           @default(false)
+  cancelledAt                          DateTime?
+  completedAt                          DateTime?
+  createdAt                            DateTime          @default(now())
+  updatedAt                            DateTime          @updatedAt
+
+  center            Center                    @relation(fields: [centerId], references: [id], onDelete: Restrict)
+  patient           Patient                   @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  service           Service?                  @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  branch            CenterBranch?             @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  treatmentTemplate ServiceTreatmentTemplate? @relation(fields: [treatmentTemplateId], references: [id], onDelete: SetNull)
+  staffUser         User                      @relation("AppointmentStaffUser", fields: [staffUserId], references: [id], onDelete: Restrict)
+  createdByUser     User                      @relation("AppointmentCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  sessions          Session[]
+  invoices          Invoice[]
+  bookingRequest    BookingRequest?
+  followUpsCreated  PatientFollowUp[]         @relation("FollowUpSourceAppointment")
+  followUpsNext     PatientFollowUp[]         @relation("FollowUpNextAppointment")
 
   @@index([centerId, status])
   @@index([centerId, appointmentDate])
   @@index([centerId, staffUserId, appointmentDate])
   @@index([centerId, patientId, appointmentDate])
+  @@index([centerId, branchId])
   @@index([serviceId])
+  @@index([treatmentTemplateId])
   @@index([createdByUserId])
 }
 
 model PatientFollowUp {
-  id                String                    @id @default(uuid()) @db.Uuid
-  centerId          String                    @db.Uuid
-  patientId         String                    @db.Uuid
-  serviceId         String?                   @db.Uuid
-  appointmentId     String?                   @db.Uuid
-  sourceType        PatientFollowUpSourceType
-  title             String                    @db.VarChar(180)
-  notes             String?
-  sessionNumber     Int?
-  dueDate           DateTime                  @db.Date
-  status            PatientFollowUpStatus     @default(UPCOMING)
-  lastContactedAt   DateTime?
-  nextAppointmentId String?                   @db.Uuid
-  createdAt         DateTime                  @default(now())
-  updatedAt         DateTime                  @updatedAt
+  id                      String                    @id @default(uuid()) @db.Uuid
+  centerId                String                    @db.Uuid
+  patientId               String                    @db.Uuid
+  serviceId               String?                   @db.Uuid
+  appointmentId           String?                   @db.Uuid
+  sourceType              PatientFollowUpSourceType
+  title                   String                    @db.VarChar(180)
+  notes                   String?
+  sessionNumber           Int?
+  dueDate                 DateTime                  @db.Date
+  isRecurring             Boolean                   @default(false)
+  recurringIntervalValue  Int?
+  recurringIntervalUnit   RecurringIntervalUnit?
+  nextRecurringAt         DateTime?
+  originFollowUpId        String?                   @db.Uuid
+  status                  PatientFollowUpStatus     @default(UPCOMING)
+  planStatus              PatientFollowUpPlanStatus @default(ACTIVE)
+  closedEarlyReason       String?
+  closedEarlyAt           DateTime?
+  closedEarlyByUserId     String?                   @db.Uuid
+  closedEarlyAfterSession Int?
+  treatmentTemplateId     String?                   @db.Uuid
+  treatmentTemplateNameAr String?                   @db.VarChar(160)
+  treatmentTemplateNameEn String?                   @db.VarChar(160)
+  treatmentTemplateNameHe String?                   @db.VarChar(160)
+  planTotalSessions       Int?
+  planDefaultIntervalDays Int?
+  planPhases              Json?
+  lastContactedAt         DateTime?
+  lastContactedByUserId   String?                   @db.Uuid
+  reminderCount           Int                       @default(0)
+  lastReminderAt          DateTime?
+  lastReminderByUserId    String?                   @db.Uuid
+  skippedAt               DateTime?
+  skippedByUserId         String?                   @db.Uuid
+  pausedAt                DateTime?
+  pausedByUserId          String?                   @db.Uuid
+  nextAppointmentId       String?                   @db.Uuid
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
 
-  center          Center       @relation(fields: [centerId], references: [id], onDelete: Restrict)
-  patient         Patient      @relation(fields: [patientId], references: [id], onDelete: Restrict)
-  service         Service?     @relation(fields: [serviceId], references: [id], onDelete: SetNull)
-  appointment     Appointment? @relation("FollowUpSourceAppointment", fields: [appointmentId], references: [id], onDelete: SetNull)
-  nextAppointment Appointment? @relation("FollowUpNextAppointment", fields: [nextAppointmentId], references: [id], onDelete: SetNull)
+  center             Center                    @relation(fields: [centerId], references: [id], onDelete: Restrict)
+  patient            Patient                   @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  service            Service?                  @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  treatmentTemplate  ServiceTreatmentTemplate? @relation(fields: [treatmentTemplateId], references: [id], onDelete: SetNull)
+  appointment        Appointment?              @relation("FollowUpSourceAppointment", fields: [appointmentId], references: [id], onDelete: SetNull)
+  nextAppointment    Appointment?              @relation("FollowUpNextAppointment", fields: [nextAppointmentId], references: [id], onDelete: SetNull)
+  originFollowUp     PatientFollowUp?          @relation("RecurringFollowUpChain", fields: [originFollowUpId], references: [id], onDelete: SetNull)
+  generatedFollowUps PatientFollowUp[]         @relation("RecurringFollowUpChain")
 
   @@unique([centerId, appointmentId, sessionNumber])
   @@index([centerId, status, dueDate])
+  @@index([centerId, patientId, serviceId, isRecurring, status])
   @@index([centerId, dueDate])
   @@index([centerId, patientId, dueDate])
   @@index([centerId, serviceId])
+  @@index([centerId, planStatus])
+  @@index([treatmentTemplateId])
 }
 
 model Session {
@@ -905,12 +1076,138 @@ model BrandingSettings {
   longitude                Decimal?          @db.Decimal(10, 7)
   websiteSectionOrder      Json?
   websiteSectionVisibility Json?
+  publicBookingMode        PublicBookingMode @default(SIMPLE_REQUEST)
   createdAt                DateTime          @default(now())
   updatedAt                DateTime          @updatedAt
 
   center Center @relation(fields: [centerId], references: [id], onDelete: Cascade)
 
   @@index([defaultLanguage])
+}
+
+model CenterBranch {
+  id                 String   @id @default(uuid()) @db.Uuid
+  centerId           String   @db.Uuid
+  name               String   @db.VarChar(160)
+  cityAr             String?  @db.VarChar(160)
+  cityEn             String?  @db.VarChar(160)
+  cityHe             String?  @db.VarChar(160)
+  addressAr          String?  @db.VarChar(300)
+  addressEn          String?  @db.VarChar(300)
+  addressHe          String?  @db.VarChar(300)
+  phone              String?  @db.VarChar(40)
+  whatsapp           String?  @db.VarChar(40)
+  mapsUrl            String?  @db.VarChar(800)
+  workingHoursTextAr String?  @db.VarChar(800)
+  workingHoursTextEn String?  @db.VarChar(800)
+  workingHoursTextHe String?  @db.VarChar(800)
+  isMain             Boolean  @default(false)
+  isActive           Boolean  @default(true)
+  sortOrder          Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  center             Center              @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  bookingRequests    BookingRequest[]
+  appointments       Appointment[]
+  expenses           Expense[]
+  expenseRecurrences ExpenseRecurrence[]
+
+  @@index([centerId])
+  @@index([centerId, isActive, isMain, sortOrder])
+}
+
+model ExpenseCategory {
+  id        String   @id @default(uuid()) @db.Uuid
+  centerId  String   @db.Uuid
+  name      String   @db.VarChar(120)
+  color     String   @default("#0B2D5C") @db.VarChar(20)
+  icon      String   @default("receipt") @db.VarChar(60)
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  center      Center              @relation(fields: [centerId], references: [id], onDelete: Restrict)
+  expenses    Expense[]
+  recurrences ExpenseRecurrence[]
+
+  @@unique([centerId, name])
+  @@index([centerId])
+  @@index([centerId, isActive, sortOrder])
+}
+
+model ExpenseRecurrence {
+  id                 String        @id @default(uuid()) @db.Uuid
+  centerId           String        @db.Uuid
+  categoryId         String?       @db.Uuid
+  branchId           String?       @db.Uuid
+  createdByUserId    String        @db.Uuid
+  title              String        @db.VarChar(180)
+  description        String?
+  amount             Decimal       @db.Decimal(12, 2)
+  currency           String        @default("ILS") @db.VarChar(10)
+  paymentMethod      PaymentMethod @default(CASH)
+  vendorName         String?       @db.VarChar(180)
+  invoiceNumber      String?       @db.VarChar(120)
+  notes              String?
+  tags               Json?
+  dayOfMonth         Int
+  nextGenerationDate DateTime
+  isPaused           Boolean       @default(false)
+  lastGeneratedAt    DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  center    Center           @relation(fields: [centerId], references: [id], onDelete: Restrict)
+  category  ExpenseCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  branch    CenterBranch?    @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  createdBy User             @relation("ExpenseRecurrenceCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  expenses  Expense[]
+
+  @@index([centerId])
+  @@index([centerId, isPaused, nextGenerationDate])
+  @@index([categoryId])
+  @@index([branchId])
+  @@index([createdByUserId])
+}
+
+model Expense {
+  id              String        @id @default(uuid()) @db.Uuid
+  centerId        String        @db.Uuid
+  categoryId      String?       @db.Uuid
+  branchId        String?       @db.Uuid
+  createdByUserId String        @db.Uuid
+  recurrenceId    String?       @db.Uuid
+  title           String        @db.VarChar(180)
+  description     String?
+  amount          Decimal       @db.Decimal(12, 2)
+  currency        String        @default("ILS") @db.VarChar(10)
+  expenseDate     DateTime
+  dueDate         DateTime?
+  paymentMethod   PaymentMethod @default(CASH)
+  status          ExpenseStatus @default(PENDING)
+  receiptUrl      String?       @db.VarChar(600)
+  invoiceNumber   String?       @db.VarChar(120)
+  vendorName      String?       @db.VarChar(180)
+  notes           String?
+  tags            Json?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  center     Center             @relation(fields: [centerId], references: [id], onDelete: Restrict)
+  category   ExpenseCategory?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  branch     CenterBranch?      @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  createdBy  User               @relation("ExpenseCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  recurrence ExpenseRecurrence? @relation(fields: [recurrenceId], references: [id], onDelete: SetNull)
+
+  @@index([centerId])
+  @@index([centerId, status])
+  @@index([centerId, expenseDate])
+  @@index([centerId, categoryId])
+  @@index([centerId, branchId])
+  @@index([centerId, recurrenceId])
+  @@index([createdByUserId])
 }
 
 model CenterGalleryImage {
@@ -1161,6 +1458,7 @@ model Invoice {
   amount            Decimal       @db.Decimal(12, 2)
   currency          String        @default("ILS") @db.VarChar(10)
   status            InvoiceStatus @default(PENDING)
+  source            InvoiceSource @default(MANUAL)
   notes             String?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
@@ -1292,13 +1590,16 @@ model BookingRequest {
   centerId      String               @db.Uuid
   serviceId     String?              @db.Uuid
   offerId       String?              @db.Uuid
+  branchId      String?              @db.Uuid
   providerId    String?              @db.Uuid
   appointmentId String?              @unique @db.Uuid
   fullName      String               @db.VarChar(160)
   phone         String               @db.VarChar(32)
+  patientArea   String?              @db.VarChar(120)
   notes         String?
-  requestedDate DateTime             @db.Date
+  requestedDate DateTime?            @db.Date
   requestedTime String?              @db.VarChar(5)
+  source        BookingRequestSource @default(PUBLIC_WEBSITE)
   offerTitle    String?              @db.VarChar(200)
   offerPrice    Decimal?             @db.Decimal(12, 2)
   offerCurrency String?              @db.VarChar(10)
@@ -1306,15 +1607,18 @@ model BookingRequest {
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
 
-  center      Center       @relation(fields: [centerId], references: [id], onDelete: Cascade)
-  service     Service?     @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-  offer       CenterOffer? @relation(fields: [offerId], references: [id], onDelete: SetNull)
-  provider    User?        @relation("BookingRequestProvider", fields: [providerId], references: [id], onDelete: SetNull)
-  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  center      Center        @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  service     Service?      @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  offer       CenterOffer?  @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  branch      CenterBranch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  provider    User?         @relation("BookingRequestProvider", fields: [providerId], references: [id], onDelete: SetNull)
+  appointment Appointment?  @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
 
   @@index([centerId, status])
+  @@index([centerId, source])
   @@index([centerId, createdAt])
   @@index([centerId, offerId])
+  @@index([centerId, branchId])
   @@index([providerId])
   @@index([serviceId])
   @@index([status, createdAt])

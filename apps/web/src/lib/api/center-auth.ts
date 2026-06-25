@@ -6,6 +6,7 @@ import type {
 
 export type CenterSession = {
   center: {
+    logoUrl?: string | null;
     branding?: {
       logoUrl?: string | null;
     } | null;
@@ -57,6 +58,44 @@ export type CenterLoginContext = {
   loginAllowed: boolean;
 };
 
+export type CenterAccountProfile = {
+  avatarUrl: string | null;
+  email: string;
+  fullName: string;
+  phone: string;
+  preferredLanguage: "AR" | "EN" | "HE";
+  whatsappPhone: string;
+};
+
+export type CenterAccountProfilePayload = {
+  avatarUrl?: string | null;
+  email: string;
+  fullName: string;
+  phone: string;
+  preferredLanguage: "AR" | "EN" | "HE";
+  whatsappPhone: string;
+};
+
+const CENTER_SESSION_CACHE_TTL_MS = 60_000;
+
+let centerSessionCache:
+  | {
+      expiresAt: number;
+      promise: Promise<CenterSession>;
+    }
+  | null = null;
+
+export function clearCenterSessionCache() {
+  centerSessionCache = null;
+}
+
+export function primeCenterSessionCache(session: CenterSession) {
+  centerSessionCache = {
+    expiresAt: Date.now() + CENTER_SESSION_CACHE_TTL_MS,
+    promise: Promise.resolve(session),
+  };
+}
+
 function safelyParseJson(rawBody: string) {
   if (!rawBody.trim()) {
     return null;
@@ -104,20 +143,40 @@ export function loginCenterUser(
   password: string,
   centerSlug?: string,
 ) {
+  clearCenterSessionCache();
   return request<CenterSession>("/auth/center/login", {
     body: JSON.stringify({ centerSlug, email, password }),
     method: "POST",
+  }).then((session) => {
+    primeCenterSessionCache(session);
+    return session;
   });
 }
 
-export function getCenterSession() {
-  return request<CenterSession>("/permissions/me");
+export function getCenterSession(options?: { force?: boolean }) {
+  const now = Date.now();
+  if (!options?.force && centerSessionCache && centerSessionCache.expiresAt > now) {
+    return centerSessionCache.promise;
+  }
+
+  const promise = request<CenterSession>("/permissions/me").catch((error) => {
+    clearCenterSessionCache();
+    throw error;
+  });
+
+  centerSessionCache = {
+    expiresAt: now + CENTER_SESSION_CACHE_TTL_MS,
+    promise,
+  };
+
+  return promise;
 }
 
 export function logoutCenterUser() {
+  clearCenterSessionCache();
   return request<{ loggedOut: boolean }>("/auth/center/logout", {
     method: "POST",
-  });
+  }).finally(clearCenterSessionCache);
 }
 
 export function changeCenterPassword(
@@ -127,5 +186,17 @@ export function changeCenterPassword(
   return request<{ success: boolean }>("/auth/center/change-password", {
     body: JSON.stringify({ currentPassword, newPassword }),
     method: "POST",
+  });
+}
+
+export function getCenterAccountProfile() {
+  return request<CenterAccountProfile>("/auth/center/account-profile");
+}
+
+export function updateCenterAccountProfile(payload: CenterAccountProfilePayload) {
+  clearCenterSessionCache();
+  return request<CenterAccountProfile>("/auth/center/account-profile", {
+    body: JSON.stringify(payload),
+    method: "PATCH",
   });
 }

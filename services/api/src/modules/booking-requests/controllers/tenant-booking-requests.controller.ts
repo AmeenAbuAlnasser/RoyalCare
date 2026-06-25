@@ -33,12 +33,17 @@ export class TenantBookingRequestsController {
   ) {}
 
   @Get()
-  async list(@Req() request: Request, @Query('status') status?: string) {
+  async list(
+    @Req() request: Request,
+    @Query('status') status?: string,
+    @Query('branchId') branchId?: string,
+  ) {
     const session = await this.getSession(request);
     return this.bookingRequestsService.list(
       session.center.id,
       session.permissions,
       status,
+      branchId,
     );
   }
 
@@ -55,6 +60,36 @@ export class TenantBookingRequestsController {
       session.user.id,
       requestId,
       body?.patientResolution,
+    );
+  }
+
+  @Patch(':requestId/prepare-conversion')
+  async prepareConversion(
+    @Req() request: Request,
+    @Param('requestId') requestId: string,
+  ) {
+    const session = await this.getSession(request);
+    return this.bookingRequestsService.prepareConversion(
+      session.center.id,
+      session.permissions,
+      session.user.id,
+      requestId,
+    );
+  }
+
+  @Patch(':requestId/link')
+  async link(
+    @Req() request: Request,
+    @Param('requestId') requestId: string,
+    @Body() body: { appointmentId?: string },
+  ) {
+    const session = await this.getSession(request);
+    return this.bookingRequestsService.linkAppointment(
+      session.center.id,
+      session.permissions,
+      session.user.id,
+      requestId,
+      body?.appointmentId ?? '',
     );
   }
 

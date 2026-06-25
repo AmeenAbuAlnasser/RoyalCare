@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { buttonClassName } from "@/components/ui/button-styles";
@@ -40,6 +41,7 @@ export function PublicHeader({
   settings?: SystemSetting[];
 }) {
   const { setLocale } = useLanguage();
+  const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [settings, setSettings] = useState<SystemSetting[]>(settingsProp);
 
@@ -75,6 +77,7 @@ export function PublicHeader({
 
   const navItems = [
     { label: d.nav.home, href: "/centers" },
+    { label: d.nav.pricing, href: "/pricing" },
     { label: d.nav.centers, href: "#featured-centers" },
     { label: d.nav.howItWorks, href: "#how-it-works" },
     { label: d.nav.features, href: "#features" },
@@ -87,20 +90,25 @@ export function PublicHeader({
       aria-label="Primary"
       className="flex flex-col gap-1 lg:flex-row lg:items-center lg:gap-1"
     >
-      {navItems.map((item) => (
-        <Link
-          className={`rounded-lg px-3 py-2 text-sm font-bold transition hover:bg-[#F8FAFC] hover:text-[#0B2D5C] focus:outline-none focus:ring-3 focus:ring-[#C8A45D]/20 ${
-            item.href === "/centers"
-              ? "bg-[#C8A45D]/12 text-[#0B2D5C]"
-              : "text-[#526176]"
-          }`}
-          href={item.href}
-          key={item.href}
-          onClick={() => setIsOpen(false)}
-        >
-          {item.label}
-        </Link>
-      ))}
+      {navItems.map((item) => {
+        const isActive =
+          (item.href === "/centers" && pathname === "/centers") ||
+          (item.href === "/pricing" && pathname === "/pricing");
+
+        return (
+          <Link
+            aria-current={isActive ? "page" : undefined}
+            className={`rounded-lg px-3 py-2 text-sm font-bold transition hover:bg-[#F8FAFC] hover:text-[#0B2D5C] focus:outline-none focus:ring-3 focus:ring-[#C8A45D]/20 ${
+              isActive ? "bg-[#C8A45D]/12 text-[#0B2D5C]" : "text-[#526176]"
+            }`}
+            href={item.href}
+            key={item.href}
+            onClick={() => setIsOpen(false)}
+          >
+            {item.label}
+          </Link>
+        );
+      })}
     </nav>
   );
 

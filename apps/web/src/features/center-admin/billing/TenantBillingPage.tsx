@@ -12,6 +12,8 @@ import {
   type InvoiceStatus,
   type TenantInvoice,
 } from "@/lib/api/tenant-billing";
+import { BranchFilter } from "@/components/branch/BranchFilter";
+import { useBranchFilter } from "@/lib/use-branch-filter";
 import { CenterAdminShell } from "../layout/CenterAdminShell";
 import {
   getTenantSubscriptionRestrictionMessage,
@@ -23,17 +25,16 @@ type BillingFilter = "ALL" | InvoiceStatus;
 
 function getServiceName(
   service: { nameEn: string; nameAr: string; nameHe: string } | null,
-  locale: string,
+  _locale: string,
   customServiceName?: string | null,
 ) {
   if (!service) return customServiceName || "";
-  if (locale === "ar" && service.nameAr) return service.nameAr;
-  if (locale === "he" && service.nameHe) return service.nameHe;
   return service.nameEn || service.nameAr || service.nameHe || customServiceName || "";
 }
 
 export function TenantBillingPage() {
   const { locale } = useLanguage();
+  const { branchId, setBranchId } = useBranchFilter();
   const [invoices, setInvoices] = useState<TenantInvoice[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<BillingFilter>("ALL");
@@ -45,7 +46,7 @@ export function TenantBillingPage() {
   useEffect(() => {
     let isMounted = true;
 
-    listTenantInvoices({ search, status: statusFilter })
+    listTenantInvoices({ search, status: statusFilter, branchId: branchId || undefined })
       .then((response) => {
         if (isMounted) {
           setLoadError(false);
@@ -62,7 +63,7 @@ export function TenantBillingPage() {
     return () => {
       isMounted = false;
     };
-  }, [search, statusFilter]);
+  }, [search, statusFilter, branchId]);
 
   useEffect(() => {
     if (!notice) return;
@@ -168,6 +169,7 @@ export function TenantBillingPage() {
                   placeholder={dictionary.billing.searchPlaceholder}
                   value={search}
                 />
+                <BranchFilter onChange={setBranchId} value={branchId} />
                 {hasBillingPermission(session.permissions, "billing:create") ? (
                   isWriteBlocked ? (
                     <button

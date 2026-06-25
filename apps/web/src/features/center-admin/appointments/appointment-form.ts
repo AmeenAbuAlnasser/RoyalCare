@@ -6,18 +6,21 @@ import type {
 
 export type TenantAppointmentFormState = {
   appointmentDate: string;
+  branchId: string;
   autoCreateNextReminder: boolean;
   customServiceName: string;
   customServicePrice: string;
   defaultIntervalDays: string;
   durationMinutes: string;
   followUpEnabled: boolean;
+  followUpMode: "NONE" | "SESSION_BASED_PLAN" | "RECURRING_CONTINUOUS";
   followUpRules: Array<{
     fromSessionNumber: string;
     toSessionNumber: string;
     intervalDays: string;
   }>;
-  followUpType: "FIXED_INTERVAL" | "SESSION_PLAN";
+  recurringIntervalValue: string;
+  recurringIntervalUnit: "DAY" | "WEEK" | "MONTH" | "YEAR";
   internalNotes: string;
   notes: string;
   patientId: string;
@@ -29,6 +32,7 @@ export type TenantAppointmentFormState = {
   staffUserId: string;
   startTime: string;
   status: AppointmentStatus;
+  treatmentTemplateId: string;
   totalRecommendedSessions: string;
 };
 
@@ -36,25 +40,69 @@ export type TenantAppointmentFormErrors = Partial<
   Record<keyof TenantAppointmentFormState | "endTime" | "cancellationReason", string>
 >;
 
+type FollowUpRuleDraft = {
+  toSessionNumber: string;
+};
+
+export function calculateTotalSessionsFromRules(rules: FollowUpRuleDraft[]) {
+  const totals = rules
+    .map((rule) => Number(rule.toSessionNumber))
+    .filter((value) => Number.isInteger(value) && value > 0);
+
+  return totals.length > 0 ? Math.max(...totals) : null;
+}
+
 export function appointmentToForm(
   appointment?: TenantAppointment,
 ): TenantAppointmentFormState {
+  const snapshotRules = Array.isArray(appointment?.treatmentTemplatePhases)
+    ? appointment.treatmentTemplatePhases
+        .map((rule) => {
+          if (!rule || typeof rule !== "object") return null;
+          const item = rule as Record<string, unknown>;
+          return {
+            fromSessionNumber: String(item.fromSessionNumber ?? ""),
+            intervalDays: String(item.intervalDays ?? ""),
+            toSessionNumber: String(item.toSessionNumber ?? ""),
+          };
+        })
+        .filter(
+          (rule): rule is {
+            fromSessionNumber: string;
+            intervalDays: string;
+            toSessionNumber: string;
+          } => Boolean(rule),
+        )
+    : [];
+  const snapshotTotal = appointment?.treatmentTemplateTotalSessions?.toString() ?? "";
+  const snapshotInterval =
+    appointment?.treatmentTemplateDefaultIntervalDays?.toString() ?? "";
+
   return {
     appointmentDate: appointment?.appointmentDate.slice(0, 10) ?? "",
+    branchId: appointment?.branchId ?? "",
     autoCreateNextReminder: true,
     customServiceName: appointment?.serviceId ? "" : (appointment?.customServiceName ?? ""),
     customServicePrice: appointment?.serviceId ? "" : (appointment?.customServicePrice ?? ""),
-    defaultIntervalDays: "",
+    defaultIntervalDays: snapshotInterval,
     durationMinutes:
       appointment?.customServiceDuration?.toString() ??
       appointment?.durationMinutes.toString() ??
       "",
-    followUpEnabled: false,
-    followUpRules: [
-      { fromSessionNumber: "1", toSessionNumber: "4", intervalDays: "30" },
-      { fromSessionNumber: "5", toSessionNumber: "8", intervalDays: "40" },
-    ],
-    followUpType: "FIXED_INTERVAL",
+    followUpEnabled: Boolean(appointment?.treatmentTemplateId),
+    followUpMode: appointment?.treatmentTemplateId ? "SESSION_BASED_PLAN" : "NONE",
+    followUpRules:
+      snapshotRules.length > 0
+        ? snapshotRules
+        : [
+            {
+              fromSessionNumber: "1",
+              toSessionNumber: snapshotTotal || "4",
+              intervalDays: snapshotInterval || "30",
+            },
+          ],
+    recurringIntervalValue: "3",
+    recurringIntervalUnit: "MONTH",
     internalNotes: appointment?.internalNotes ?? "",
     notes: appointment?.notes ?? "",
     patientId: appointment?.patientId ?? "",
@@ -66,7 +114,8 @@ export function appointmentToForm(
     staffUserId: appointment?.staffUserId ?? "",
     startTime: appointment?.startTime ?? "",
     status: appointment?.status ?? "SCHEDULED",
-    totalRecommendedSessions: "",
+    treatmentTemplateId: appointment?.treatmentTemplateId ?? "",
+    totalRecommendedSessions: snapshotTotal,
   };
 }
 
@@ -75,6 +124,7 @@ export function formToAppointmentPayload(
 ): TenantAppointmentPayload {
   const base: TenantAppointmentPayload = {
     appointmentDate: form.appointmentDate,
+    branchId: form.branchId || null,
     customServiceCurrency: form.customServiceName.trim() ? "ILS" : null,
     customServiceDuration: form.customServiceName.trim()
       ? form.durationMinutes
@@ -90,24 +140,57 @@ export function formToAppointmentPayload(
     staffUserId: form.staffUserId,
     startTime: form.startTime,
     status: form.status,
+    treatmentTemplateId: form.treatmentTemplateId || null,
   };
 
+  const followUpOverride =
+    form.treatmentTemplateId && form.followUpMode === "SESSION_BASED_PLAN"
+      ? {
+          defaultIntervalDays: form.defaultIntervalDays || null,
+          followUpEnabled: true,
+          followUpMode: form.followUpMode,
+          followUpRules: form.followUpRules.map((rule) => ({
+            fromSessionNumber: rule.fromSessionNumber,
+            toSessionNumber: rule.toSessionNumber,
+            intervalDays: rule.intervalDays,
+          })),
+          followUpSessionRules: form.followUpRules.map((rule) => ({
+            fromSessionNumber: rule.fromSessionNumber,
+            toSessionNumber: rule.toSessionNumber,
+            intervalDays: rule.intervalDays,
+          })),
+          totalRecommendedSessions:
+            calculateTotalSessionsFromRules(form.followUpRules)?.toString() ?? null,
+        }
+      : null;
+
   if (!form.saveCustomService) {
-    return base;
+    return followUpOverride ? { ...base, ...followUpOverride } : base;
   }
 
   return {
     ...base,
-    followUpEnabled: form.followUpEnabled,
-    followUpType: form.followUpType,
+    followUpEnabled: form.followUpMode !== "NONE",
+    followUpMode: form.followUpMode,
     defaultIntervalDays: form.defaultIntervalDays || null,
-    totalRecommendedSessions: form.totalRecommendedSessions || null,
+    totalRecommendedSessions:
+      form.followUpMode === "SESSION_BASED_PLAN"
+        ? calculateTotalSessionsFromRules(form.followUpRules)?.toString() ?? null
+        : form.totalRecommendedSessions || null,
+    recurringIntervalValue:
+      form.followUpMode === "RECURRING_CONTINUOUS"
+        ? form.recurringIntervalValue || null
+        : null,
+    recurringIntervalUnit:
+      form.followUpMode === "RECURRING_CONTINUOUS"
+        ? form.recurringIntervalUnit
+        : null,
     autoCreateNextReminder: form.autoCreateNextReminder,
     reminderMessageAr: form.reminderMessageAr.trim() || null,
     reminderMessageEn: form.reminderMessageEn.trim() || null,
     reminderMessageHe: form.reminderMessageHe.trim() || null,
     followUpRules:
-      form.followUpEnabled && form.followUpType === "SESSION_PLAN"
+      form.followUpMode === "SESSION_BASED_PLAN"
         ? form.followUpRules.map((rule) => ({
             fromSessionNumber: rule.fromSessionNumber,
             toSessionNumber: rule.toSessionNumber,
@@ -115,7 +198,7 @@ export function formToAppointmentPayload(
           }))
         : null,
     followUpSessionRules:
-      form.followUpEnabled && form.followUpType === "SESSION_PLAN"
+      form.followUpMode === "SESSION_BASED_PLAN"
         ? form.followUpRules.map((rule) => ({
             fromSessionNumber: rule.fromSessionNumber,
             toSessionNumber: rule.toSessionNumber,

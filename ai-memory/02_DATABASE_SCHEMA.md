@@ -1,7 +1,42 @@
+## 2026-06-17 - Booking Request Patient Area
+
+- `BookingRequest.patientArea String? @db.VarChar(120)` stores the optional city/area submitted from the public booking request form.
+- Migration `20260617123000_add_booking_request_patient_area` adds the nullable column without requiring a full address.
+- `BookingRequest.branchId String? @db.Uuid` links a public booking request to the selected `CenterBranch` when a center has branches.
+- Migration `20260617124500_add_booking_request_branch` adds the nullable branch relation and `(centerId, branchId)` index.
+
+## 2026-06-17 - Public Booking Mode
+
+- `PublicBookingMode` enum was added with `SIMPLE_REQUEST` and `DIRECT_BOOKING`.
+- `BrandingSettings.publicBookingMode PublicBookingMode @default(SIMPLE_REQUEST)` controls how each center public website collects booking requests.
+- `BookingRequestSource` enum was added with `PUBLIC_WEBSITE`, `CUSTOMER_PORTAL`, and `ADMIN`.
+- `BookingRequest.source BookingRequestSource @default(PUBLIC_WEBSITE)` records where a request came from.
+- `BookingRequest.requestedDate` is now nullable so simple public contact requests can be stored without forcing a fake appointment date.
+- Migration `20260617120000_add_public_booking_mode` adds these fields and indexes `(centerId, source)`.
+
+## 2026-06-07 - Staff Provider Flag
+
+- `UserRole.providerEnabled Boolean @default(false)` was added to make appointment-provider visibility explicit per center staff assignment.
+- Migration `20260607130000_add_staff_provider_enabled` adds the column, backfills existing active `CENTER_OWNER`, `CENTER_MANAGER`, `DOCTOR`, and `STAFF` assignments plus active center-owner assignments to `providerEnabled=true`, and indexes `(centerId, providerEnabled, status)`.
+- Provider visibility is intentionally not derived from role alone anymore; `CENTER_OWNER` defaults to provider-capable and can be disabled later through `providerEnabled=false`.
+
+## 2026-06-08 - Invoice Source Tracking
+
+- `InvoiceSource` enum was added with `MANUAL`, `AUTO_APPOINTMENT`, `AUTO_FOLLOW_UP`, and `AUTO_RECALCULATION`.
+- `Invoice.source InvoiceSource @default(MANUAL)` was added by migration `20260608160000_add_invoice_source`.
+- Existing tenant invoices default to `MANUAL`; automatic source values are reserved for future explicit auto-billing settings.
+
 # RoyalCare - Database Schema
 
-Last updated: 2026-05-26
+Latest update 2026-06-08: Services now support reusable treatment plan templates through `ServiceTreatmentTemplate` (`serviceId`, localized names, `totalSessions`, `defaultIntervalDays`, optional `phases` JSON, default/active flags, and sort order). `Service` has many templates. `Appointment` stores the selected template id plus immutable snapshot fields (`treatmentTemplateName*`, total sessions, default interval, phases). `PatientFollowUp` stores the same patient-plan snapshot (`treatmentTemplateId`, `treatmentTemplateName*`, `planTotalSessions`, `planDefaultIntervalDays`, `planPhases`) so editing a service template later does not change existing patient plans.
+
+Last updated: 2026-06-06
 Status: Tenant auth, patients, services, appointments, staff management, manual billing, patient credit, subscription lifecycle, subscription invoices, subscription invoice numbering, localized business name storage, tenant marketing settings, marketing tracking debug logs, center website builder settings, gallery, reviews, and before/after gallery implemented
+
+Latest public profile branch update:
+- `CenterBranch` stores multiple public locations/contact rows per center with localized city/address/working-hours text, phone, WhatsApp, Google Maps URL, main/active flags, and sort order.
+- `Center.branches` is the relation used by public center APIs and public profile management.
+- Public center pages prefer active branches when present and keep the legacy single-address/WhatsApp fields on `BrandingSettings` as backward-compatible fallback for older centers.
 
 ## 1. Database Strategy
 
@@ -40,6 +75,7 @@ Rule:
 
 Latest website settings update:
 - `BrandingSettings` is now the foundation for center website CMS settings.
+- `CenterBranch` now supports multiple public branches/locations per center without making appointments/services/staff branch-aware yet.
 - Migration `20260525110000_add_center_website_settings` adds localized full descriptions, localized slogans, phone/email, Google Maps URL, localized working-hours text, and Facebook/Instagram/TikTok links.
 - Migration `20260526090000_add_website_builder_settings` adds `websiteSectionOrder` and `websiteSectionVisibility` JSON fields so each center can control homepage section order and visibility without code.
 - Existing logo, cover image, primary color, secondary color, short descriptions, WhatsApp, and localized address fields remain in `BrandingSettings`.
@@ -1128,15 +1164,23 @@ Rules:
 
 Service follow-up configuration is stored directly on `Service`:
 - `followUpEnabled Boolean @default(false)`
-- `followUpType ServiceFollowUpType @default(FIXED_INTERVAL)`
+- `followUpMode ServiceFollowUpMode @default(NONE)` with `NONE`, `SESSION_BASED_PLAN`, and `RECURRING_CONTINUOUS`
 - `defaultIntervalDays Int?`
 - `totalRecommendedSessions Int?`
+- `recurringIntervalValue Int?`
+- `recurringIntervalUnit RecurringIntervalUnit?`
+- `autoWhatsappReminderEnabled Boolean @default(false)`
+- `autoReminderDaysBefore Int?`
 - `autoCreateNextReminder Boolean @default(true)`
 - `reminderMessageAr`, `reminderMessageEn`, `reminderMessageHe`
 - `followUpRules Json?` for session-plan rules like `{ fromSessionNumber, toSessionNumber, intervalDays }`.
 
 Added enums:
-- `ServiceFollowUpType`: `FIXED_INTERVAL`, `SESSION_PLAN`
+- `ServiceFollowUpMode`: `NONE`, `SESSION_BASED_PLAN`, `RECURRING_CONTINUOUS`
+- The redundant `ServiceFollowUpType` enum and `Service.followUpType` column were removed by migration `20260622140000_refactor_follow_up_plan_types`; phase intervals remain stored in `followUpRules` with `defaultIntervalDays` fallback.
+- Migration `20260622141000_backfill_session_plan_rules` converts legacy fixed-interval configurations with a session count into an equivalent single phase, preserving their schedule after the discriminator removal.
+- Migration `20260622141100_backfill_json_null_session_plan_rules` applies the same compatibility mapping to rows stored with Prisma JSON null.
+- `RecurringIntervalUnit`: `DAY`, `WEEK`, `MONTH`, `YEAR`
 - `PatientFollowUpSourceType`: `APPOINTMENT_COMPLETED`, `MANUAL`, `BOOKING_REQUEST`
 - `PatientFollowUpStatus`: `DUE`, `UPCOMING`, `CONTACTED`, `BOOKED`, `COMPLETED`, `MISSED`, `CANCELLED`
 
@@ -1144,11 +1188,12 @@ Added `PatientFollowUp`:
 - `id`, `centerId`, `patientId`
 - optional `serviceId`, `appointmentId`, `nextAppointmentId`
 - `sourceType`, `title`, `notes`, `sessionNumber`, `dueDate`, `status`, `lastContactedAt`
+- recurring metadata: `isRecurring`, `recurringIntervalValue`, `recurringIntervalUnit`, `nextRecurringAt`, `originFollowUpId`
 - timestamps
 
 Indexes:
 - unique `(centerId, appointmentId, sessionNumber)`
-- `(centerId, status, dueDate)`, `(centerId, dueDate)`, `(centerId, patientId, dueDate)`, `(centerId, serviceId)`
+- `(centerId, status, dueDate)`, `(centerId, patientId, serviceId, isRecurring, status)`, `(centerId, dueDate)`, `(centerId, patientId, dueDate)`, `(centerId, serviceId)`
 
 Rules:
 - Follow-up records are tenant-owned and every query must scope by authenticated `centerId`.
@@ -1174,3 +1219,42 @@ Rules:
 - Every appointment must have either `serviceId` or `customServiceName`, except existing offer-backed appointments.
 - Custom appointment invoices use `customServicePrice` or a manually supplied invoice amount.
 - If staff choose “save as future service”, a real `Service` is created and linked while the appointment still keeps the custom-service snapshot and badge.
+# 2026-06-08 - Follow-up Early Plan Closure
+
+- Added `PatientFollowUpStatus.CLOSED_EARLY` for future treatment-plan sessions closed without deleting history.
+- Added `PatientFollowUpPlanStatus` enum: `ACTIVE`, `COMPLETED`, `CLOSED_EARLY`, `CANCELLED`.
+- Added `PatientFollowUp` plan-closure fields:
+  - `planStatus`
+  - `closedEarlyReason`
+  - `closedEarlyAt`
+  - `closedEarlyByUserId`
+  - `closedEarlyAfterSession`
+- Migration: `20260608120000_add_follow_up_early_closure`.
+
+# 2026-06-14 - Tenant Expenses
+
+Added tenant-owned expense tracking models through migration `20260614120000_add_tenant_expenses`.
+
+Enum:
+- `ExpenseStatus`: `PAID`, `PENDING`, `RECURRING`, `CANCELLED`
+
+Models:
+- `ExpenseCategory`: center-scoped categories with `name`, `color`, `icon`, `isActive`, `sortOrder`, timestamps, and unique `(centerId, name)`.
+- `ExpenseRecurrence`: center-scoped monthly recurring expense templates with category/branch/user references, amount/currency/payment metadata, `dayOfMonth`, `nextGenerationDate`, `isPaused`, and `lastGeneratedAt`.
+- `Expense`: center-scoped expense records with category/branch/user/recurrence references, title, description, amount, currency, `expenseDate`, optional `dueDate`, `PaymentMethod`, `ExpenseStatus`, receipt URL, invoice/vendor/notes/tags, and timestamps.
+
+Rules:
+- All expense records, categories, and recurrences are tenant-owned and must always be queried by authenticated `centerId`.
+- Category and branch references are nullable with `SetNull` delete behavior so historical expenses survive category/branch cleanup.
+- Center and creator user references are restricted to preserve financial history.
+## 2026-06-20 - Recurring Follow-up Workflow Metadata
+
+`PatientFollowUp` recurring lifecycle now stores:
+- `lastContactedByUserId` alongside existing `lastContactedAt`.
+- `reminderCount`, `lastReminderAt`, and `lastReminderByUserId`.
+- `skippedAt` and `skippedByUserId`.
+- `pausedAt` and `pausedByUserId`.
+- `PatientFollowUpStatus`: new `SKIPPED` and `PAUSED` values.
+- `PatientFollowUpPlanStatus`: new `PAUSED` value.
+
+Migration: `20260620120000_add_recurring_follow_up_workflow`.

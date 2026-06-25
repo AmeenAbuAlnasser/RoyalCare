@@ -1,11 +1,65 @@
+## 2026-06-17 - Public Booking Mode
+
+- `GET /api/v1/public/centers/:slug` now returns `branding.publicBookingMode`.
+- `PATCH /api/v1/tenant/public-profile` accepts `publicBookingMode` as `SIMPLE_REQUEST` or `DIRECT_BOOKING`.
+- `PATCH /api/v1/admin/centers/:centerId/public-profile` accepts the same field for Super Admin public profile editing.
+- `POST /api/v1/public/centers/:slug/booking-requests` branches by the center setting:
+  - `SIMPLE_REQUEST`: requires full name and phone, accepts optional `serviceId`, `offerId`, `patientArea`, `branchId`, and note, stores `source=PUBLIC_WEBSITE`, and does not require provider/date/time. `branchId` is required only when the center has multiple active branches and is auto-filled when there is exactly one active branch.
+  - `DIRECT_BOOKING`: preserves service/provider/date/time validation and slot availability checks.
+- `GET /api/v1/tenant/booking-requests` returns `patientArea`, `branchId`, and `branch`, and may return `requestedDate=null` for simple contact requests.
+
+## 2026-06-07 - Tenant Staff Provider Flag
+
+- Tenant staff create/update/list/detail payloads include `providerEnabled`.
+- `GET /api/v1/tenant/appointments/options` and tenant schedule provider lists include active staff assignments when `providerEnabled=true OR userId=center.ownerUserId`, then de-duplicate users with multiple center roles.
+- Appointment create/update provider validation accepts active same-center staff assignments when `providerEnabled=true OR userId=center.ownerUserId`, so the active owner remains selectable and saveable even if older data has `providerEnabled=false/null`.
+
 # RoyalCare - API Map
 
-Last updated: 2026-05-26
-Status: Dedicated tenant login, tenant patients, services, appointments, tenant staff, booking requests, tenant notifications, tenant website builder settings, center website gallery/reviews/before-after, and center website analytics routes documented
+Latest update 2026-06-08: Tenant service create/update/list/detail APIs include `treatmentTemplates` for finite treatment plans. Appointment create/update accepts optional `treatmentTemplateId`; appointment options return each service's active templates so `/tenant/appointments/new` can default to the service default protocol. Appointment creation snapshots the selected template or patient-specific override into the appointment, and follow-up plan generation copies that snapshot into each `PatientFollowUp` row.
+
+Last updated: 2026-06-06
+Status: Dedicated tenant login, tenant patients, services, appointments, follow-ups, tenant staff, booking requests, tenant notifications, tenant website builder settings, center website gallery/reviews/before-after, center website analytics, and public pricing/contact routes documented
+
+Latest public profile branch endpoints:
+- `GET /api/v1/admin/centers/:centerId/public-profile/branches`
+- `POST /api/v1/admin/centers/:centerId/public-profile/branches`
+- `PATCH /api/v1/admin/centers/:centerId/public-profile/branches/:branchId`
+- `DELETE /api/v1/admin/centers/:centerId/public-profile/branches/:branchId` soft-deactivates a branch.
+- `PATCH /api/v1/admin/centers/:centerId/public-profile/branches/reorder`
+- Tenant equivalents exist under `/api/v1/tenant/public-profile/branches`.
+- `GET /api/v1/public/centers/:slug` now returns active `branches[]` sorted by main branch first, then `sortOrder`.
+
+Rules:
+- Branch management is center-scoped. Super Admin routes require the platform permission guard; tenant routes derive `centerId` from the signed center session and require `settings:view`.
+- Public websites prefer active branch rows for contact/location display. Legacy `BrandingSettings` address/phone/WhatsApp fields remain fallback for centers without branches.
+- Branches are public profile/contact data only. Appointments, services, and staff are not branch-aware in this update.
+
+Latest public pricing/contact endpoints:
+- `GET /api/v1/public/plans` — public pricing plan list used by `/pricing`.
+- `GET /api/v1/public/platform-contact` — public-safe platform sales WhatsApp contact used by pricing CTAs.
+
+Latest Super Admin center management endpoint:
+- `PATCH /api/v1/centers/:centerId/public-visibility` and alias `PATCH /api/v1/super-admin/centers/:centerId/public-visibility` — updates whether a center appears in public center listings. Requires platform session cookie and `edit:centers`.
+
+Rules:
+- Public pricing CTAs open WhatsApp directly with a prefilled message; no checkout or lead storage is part of this flow.
+- `GET /api/v1/public/platform-contact` returns only `{ salesWhatsappNumber }`, using `public_sales_whatsapp` with safe fallback to public support WhatsApp/phone.
+- Protected platform settings endpoints use the Super Admin platform session cookie through `PermissionGuard`; they do not require the legacy `x-royalcare-super-admin-user-id` header.
 
 Latest center analytics endpoints:
 - `POST /api/v1/public/centers/:slug/track` — fire-and-forget public event ingestion (no auth)
 - `GET /api/v1/tenant/marketing/analytics` — center website analytics dashboard (session auth, `reports:view`)
+
+Latest tenant financial reports endpoint:
+- `GET /api/v1/tenant/reports/financial` - center financial dashboard data (session auth, `reports:view`), including revenue cards/charts, receivables KPIs, receivable detail rows, receivables by payment status, top patients by debt, revenue-vs-receivables chart data, and `reportMeta` with the active range and included invoice/payment counts.
+
+Rules:
+- Tenant financial reports derive `centerId` from the authenticated tenant session.
+- Receivable values are calculated from invoice amount, payment totals, credit-use totals, and derived remaining amount/payment status. The report must not treat invoice total as collected revenue.
+- Revenue is filtered by actual collection dates (`Payment.paidAt` and credit-use `createdAt`); invoice activity counts are filtered by invoice `createdAt`.
+- Receivables are not limited by the selected report range by default. They include every same-center, non-cancelled invoice with computed remaining balance greater than zero until fully paid.
+- Supported query filters include `period=today|last7days|week|month|custom`, `from`, `to`, `openOnly=true`, and `overdueOnly=true`.
 
 Latest center website builder endpoints:
 - `GET /api/v1/tenant/before-after`
@@ -298,7 +352,7 @@ Purpose:
 ## 4.1 Tenant Patients API
 
 Implemented endpoints:
-- `GET /api/v1/patients` - lists patients for the authenticated center only; supports `search` by name or phone.
+- `GET /api/v1/patients` - lists patients for the authenticated center only; supports `search` by name or phone. Responses include a computed `summary` per patient with latest completed/booked appointment, nearest upcoming scheduled/confirmed appointment, treatment/follow-up plan count, overdue follow-up/session count, outstanding invoice balance, upcoming appointment count, and total linked records.
 - `POST /api/v1/patients` - creates a patient in the authenticated center only.
 - `GET /api/v1/patients/:patientId` - returns one patient only when it belongs to the authenticated center.
 - `PATCH /api/v1/patients/:patientId` - updates one patient only when it belongs to the authenticated center.
@@ -549,8 +603,7 @@ Endpoints:
 - `POST /api/v1/admin/branding/logo`
 
 Permissions:
-- `settings.read`
-- `settings.update`
+- `manage:settings` for protected platform settings reads/writes and public branding uploads.
 - `branding.read`
 - `branding.update`
 
@@ -878,6 +931,9 @@ Session response:
 Endpoints:
 - `GET /api/v1/admin/centers`
 - `GET /api/v1/admin/centers/:centerId`
+- `GET /api/v1/admin/centers/:centerId/public-profile`
+- `PATCH /api/v1/admin/centers/:centerId/public-profile`
+- `POST /api/v1/admin/centers/:centerId/public-profile/upload-image`
 - `PATCH /api/v1/admin/centers/:centerId/status`
 - `POST /api/v1/admin/centers/:centerId/login-as`
 - `POST /api/v1/admin/centers/:centerId/manager`
@@ -887,8 +943,9 @@ Response:
 - Details returns the same center fields plus safe center users (`id`, `fullName`, `email`, `phone`, `role`, `roleName`, `status`, `assignmentStatus`, `createdAt`).
 
 Rules:
-- Requires an explicit Super Admin platform user header.
-- Only users assigned the platform `super_admin` role can access these endpoints.
+- Center list/details/status/login-as/manager routes still use the explicit Super Admin platform user header until migrated.
+- The center public-profile admin routes use the current platform session cookie through `PermissionGuard`; `GET` requires `view:centers`, while `PATCH` and upload require `edit:centers`.
+- Legacy header-based admin center routes remain limited to platform `super_admin`; public-profile admin routes follow the listed platform permission keys.
 - Tenant sessions do not grant access.
 - User responses must never include `passwordHash`.
 - `POST /api/v1/admin/centers/:centerId/login-as` selects the center owner or first active center manager, refuses platform Super Admin targets, creates a tenant center session cookie, returns `token` and `redirectUrl`, and writes an internal audit note.
@@ -1167,16 +1224,37 @@ Rules:
 Base path: `/api/v1/tenant/follow-ups`
 
 Endpoints:
-- `GET /api/v1/tenant/follow-ups?filter=TODAY|THIS_WEEK|OVERDUE|UPCOMING|CONTACTED|BOOKED|COMPLETED&patientId=<uuid>`
+- `GET /api/v1/tenant/follow-ups?filter=TODAY|THIS_WEEK|OVERDUE|UPCOMING|CONTACTED|BOOKED|COMPLETED&patientId=<uuid>&includeAll=true&includeAllForPatient=true`
 - `GET /api/v1/tenant/follow-ups/analytics`
 - `PATCH /api/v1/tenant/follow-ups/:followUpId/status`
 - `PATCH /api/v1/tenant/follow-ups/:followUpId/notes`
+- `PATCH /api/v1/tenant/follow-ups/:followUpId/due-date`
+- `PATCH /api/v1/tenant/follow-ups/:followUpId/close-early`
+- `PATCH /api/v1/tenant/follow-ups/:followUpId/reminder`
+- `PATCH /api/v1/tenant/follow-ups/:followUpId/skip-cycle`
+- `PATCH /api/v1/tenant/follow-ups/:followUpId/pause`
 
 Rules:
 - Requires active center session cookie.
 - Reads require `appointments:view`.
-- Status and note updates require `appointments:update`.
+- Status, note, and due-date updates require `appointments:update`.
 - Every query and mutation scopes by `session.center.id`; no client-provided `centerId` is accepted.
+- Filter semantics:
+  - `TODAY`: `dueDate` is today only, excluding `COMPLETED` and `CANCELLED`.
+  - `THIS_WEEK`: product label "Next 7 Days"; `dueDate >= today` and `dueDate <= today + 7 days`, excluding `COMPLETED`, `BOOKED`, and `CANCELLED`. It is not calendar-week based, and Today can overlap with this bucket.
+  - `OVERDUE`: `dueDate` before today, excluding `COMPLETED` and `CANCELLED`.
+  - `UPCOMING`: `dueDate` after today, excluding `COMPLETED` and `CANCELLED`.
+  - `CONTACTED`, `BOOKED`, and `COMPLETED` match exact status.
+- `includeAllForPatient=true` is honored only with a `patientId`; it returns all follow-ups for that same-center patient regardless of the active filter. This is used by `/tenant/follow-ups` expanded Upcoming patient cards so the summary filter controls which patients appear while the expanded plan shows the patient's complete treatment plan.
+- `includeAll=true` returns the same-center follow-up queue without applying a status/date filter, capped by the existing list limit. It is used by `/tenant/follow-ups` search and CRM chips so client-side search can override the active filter while preserving tenant isolation and permissions.
+- `PATCH /close-early` requires `appointments:update`, accepts an optional `reason`, marks the finite plan `CLOSED_EARLY`, records closure metadata, and changes only future unbooked actionable sessions to `CLOSED_EARLY`.
+- Due-date update accepts `{ dueDate: "YYYY-MM-DD" }`. For existing `DUE`/`UPCOMING` rows, the backend recalculates the status from the new date; other workflow statuses are preserved.
+- Recurring follow-up rows include `isRecurring`, `recurringIntervalValue`, `recurringIntervalUnit`, `nextRecurringAt`, and `originFollowUpId`.
+- Recurring rows are lifecycle reminders, not treatment sessions; `sessionNumber` remains `null`.
+- Analytics additionally returns `recurringDueToday`, `recurringThisWeek`, and `recurringPatientsRetention`.
+- List queries accept `kind=RECURRING|FINITE` so the UI can keep recurring reminders separate from fixed session plans.
+- Analytics also returns `recurringOverdue`.
+- Recurring list rows expose reminder/contact/skip/pause metadata plus `sourceAppointment` branch/date context.
 
 List response:
 ```json
@@ -1195,6 +1273,8 @@ List response:
       "status": "UPCOMING",
       "lastContactedAt": null,
       "nextAppointmentId": null,
+      "createdAt": "2026-05-28T21:58:49.898Z",
+      "updatedAt": "2026-06-02T09:34:57.242Z",
       "overdueDays": 0,
       "patient": { "id": "uuid", "fullName": "Patient", "phone": "059..." },
       "service": { "id": "uuid", "nameAr": "ليزر", "nameEn": "Laser", "nameHe": "" },
@@ -1222,6 +1302,11 @@ Related service API update:
 
 Automatic creation:
 - `PATCH /api/v1/tenant/appointments/:appointmentId/status` creates a follow-up when status changes to `COMPLETED` and the service has follow-ups enabled.
+- For `followUpMode=RECURRING_CONTINUOUS`, both appointment update paths create an idempotent ACTIVE recurring row after completion, using `completedAt + recurringIntervalValue/unit` for its due date.
+- `GET /api/v1/tenant/follow-ups?kind=RECURRING` performs a center-scoped safe backfill for completed recurring appointments missing their lifecycle row, then returns ACTIVE recurring rows according to the requested date/status filter.
+- Recurring list items expose `nextDueDate`; recurring TODAY/THIS_WEEK/OVERDUE filters query the persisted `nextRecurringAt` value.
+- `GET /api/v1/tenant/follow-ups/analytics?branchId=:branchId` returns counters scoped to the selected branch, including `recurringDueToday`, `recurringThisWeek`, and `recurringOverdue`.
+- Recurring `filter=THIS_WEEK` uses `nextDueDate > today AND nextDueDate <= today + 7 days`; TODAY and OVERDUE do not overlap this window. The recurring counters use the same shared backend window.
 ## Appointment Custom One-Time Services - 2026-05-28
 
 Existing tenant appointment endpoints accept custom service fields without adding new routes:
@@ -1238,3 +1323,33 @@ Rules:
 - `saveCustomService=true` creates a real center-scoped `Service` record and links it to the appointment.
 - Appointment responses include `customServiceName`, `customServicePrice`, and `customServiceSaved`.
 - Tenant billing endpoints can create invoices from custom appointments using `customServiceName` and the custom/manual amount.
+# 2026-06-08 Appointment Follow-up Recalculation
+
+- `PATCH /api/v1/tenant/appointments/:appointmentId` accepts optional `recalculateFollowUpSchedule: boolean`.
+- When true and `appointmentDate` changed, the API recalculates linked finite follow-up session due dates from the plan snapshot while preserving completed/cancelled/closed and unrelated booked sessions.
+- Tenant appointment detail responses expose a linked `followUp` from either `followUpsNext` or `followUpsCreated`, allowing the edit UI to warn about plan impact.
+- `GET /api/v1/tenant/appointments/:appointmentId` now also returns `followUpPlanId` and the exact linked `followUpPlan[]`. Both are resolved from the persisted `followUpsCreated` / `followUpsNext` relations; appointment details no longer infer or reload a plan by patient/service configuration.
+- Appointment list and detail responses share `hasFollowUpPlan` and `followUpPlanSummary`. Recurring plans are detected from persisted `PatientFollowUp` rows using direct appointment links plus the recurring plan identity `(centerId, patientId, serviceId, isRecurring)` because later recurring rows may have no `appointmentId`.
+- A valid appointment service configuration with `followUpMode=RECURRING_CONTINUOUS`, interval value, and interval unit also yields `hasFollowUpPlan=true` before the first reminder row exists; recurring reminder rows are created only after appointment completion.
+
+## 2026-06-14 Tenant Expenses API
+
+Base path: `/api/v1/tenant/expenses`
+
+Endpoints:
+- `GET /overview?from=YYYY-MM-DD&to=YYYY-MM-DD` returns expense KPIs, revenue-vs-expense charts, category/branch breakdowns, and insights. Requires `expenses:reports`.
+- `GET /options` returns expense categories, branches, payment methods, and statuses. Requires `expenses:view`.
+- `GET /?search=&status=&categoryId=&branchId=&from=&to=` lists center-scoped expenses. Requires `expenses:view`.
+- `POST /` creates an expense, optionally with `recurring=true` for a monthly recurrence. Requires `expenses:create`.
+- `PATCH /:expenseId` updates a same-center expense. Requires `expenses:edit`.
+- `DELETE /:expenseId` deletes a same-center expense. Requires `expenses:delete`.
+- `POST /receipt` uploads a PDF/image receipt and returns `{ url }`. Requires `expenses:create`.
+- `GET /categories/list` lists categories. Requires `expenses:view`.
+- `POST /categories` creates a category. Requires `expenses:edit`.
+- `PATCH /categories/:categoryId` updates a same-center category. Requires `expenses:edit`.
+
+Rules:
+- The controller derives tenant context from the center session cookie; clients do not provide `centerId`.
+- All query/mutation service methods scope by `session.center.id`.
+- Validation errors use `{ message: "Validation failed", errors: { fieldName: "Readable message" } }`.
+- Receipt uploads allow PDF, PNG, JPG, and WebP up to 10 MB and save under `/uploads/expenses`.

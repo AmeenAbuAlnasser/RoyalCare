@@ -9,6 +9,7 @@ export const platformPermissionKeys = [
   'view:users',
   'manage:users',
   'manage:plans',
+  'manage:settings',
   'view:reports',
   'view:audit_logs',
 ] as const;

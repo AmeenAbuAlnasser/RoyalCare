@@ -3,10 +3,12 @@ import { API_BASE_URL } from "./public-centers";
 export type CreateBookingRequestPayload = {
   fullName: string;
   phone: string;
+  patientArea?: string;
+  branchId?: string;
   providerId?: string;
   serviceId?: string;
   notes?: string;
-  requestedDate: string;
+  requestedDate?: string;
   requestedTime?: string;
   offerId?: string;
   offerTitle?: string | null;
@@ -64,7 +66,9 @@ export async function createPublicBookingRequest(
   );
 
   if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as Partial<BookingRequestError>;
+    const body = (await response
+      .json()
+      .catch(() => ({}))) as Partial<BookingRequestError>;
     throw {
       code:
         typeof body.code === "string"

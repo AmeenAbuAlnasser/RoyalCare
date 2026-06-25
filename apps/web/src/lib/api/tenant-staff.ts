@@ -9,17 +9,24 @@ export type TenantStaff = {
   email: string | null;
   fullName: string;
   id: string;
+  isActive?: boolean;
+  isCenterOwner?: boolean;
+  name?: string;
   phone: string | null;
+  providerEnabled: boolean;
   role: CenterRoleKey;
   roleName: string;
+  roles?: CenterRoleKey[];
   status: TenantStaffStatus;
   updatedAt: string;
+  userId?: string;
 };
 
 export type TenantStaffPayload = {
   email: string;
   fullName: string;
   password?: string;
+  providerEnabled: boolean;
   role: CenterRoleKey;
   status: TenantStaffStatus;
 };

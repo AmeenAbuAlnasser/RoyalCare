@@ -6,7 +6,7 @@ import { AdminCard, AdminState } from "@/components/ui/admin-surfaces";
 import { buttonClassName } from "@/components/ui/button-styles";
 import { useLanguage } from "@/i18n/LanguageProvider";
 import type { CenterAdminDictionary } from "@/i18n/dictionaries/center-admin";
-import { formatDate, formatNumber } from "@/i18n/formatters";
+import { formatAppointmentDateTime, formatDate, formatNumber } from "@/i18n/formatters";
 import {
   getTenantReportsSummary,
   type TenantReportsSummary,
@@ -23,6 +23,8 @@ import {
 import type { SubscriptionInvoice } from "@/lib/api/super-admin-subscriptions";
 import type { CenterSession } from "@/lib/api/center-auth";
 import { normalizeForWhatsApp, readWhatsAppDefaultCode } from "@/lib/whatsapp";
+import { BranchFilter } from "@/components/branch/BranchFilter";
+import { useBranchFilter } from "@/lib/use-branch-filter";
 import { CenterAdminShell } from "../layout/CenterAdminShell";
 
 const tenantSubscriptionBillingText = {
@@ -83,10 +85,8 @@ const invoiceStatusColors: Record<string, string> = {
 
 function serviceName(
   item: { serviceNameAr: string; serviceNameEn: string; serviceNameHe: string },
-  locale: "en" | "ar" | "he",
+  _locale: "en" | "ar" | "he",
 ) {
-  if (locale === "ar") return item.serviceNameAr || item.serviceNameEn;
-  if (locale === "he") return item.serviceNameHe || item.serviceNameEn;
   return item.serviceNameEn || item.serviceNameAr || item.serviceNameHe;
 }
 
@@ -113,14 +113,40 @@ function SectionTitle({
   );
 }
 
-function StatCard({ label, value }: { label: string; value: number | null }) {
+function todayIso(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+
+function LinkStatCard({
+  helper,
+  href,
+  label,
+  value,
+  viewDetailsLabel,
+}: {
+  helper?: string;
+  href: string;
+  label: string;
+  value: number | null;
+  viewDetailsLabel: string;
+}) {
   return (
-    <AdminCard className="p-5">
-      <p className="text-sm font-medium text-[#66758a]">{label}</p>
-      <p className="mt-3 text-3xl font-semibold text-[#0B2D5C]">
-        {value === null ? "..." : formatNumber(value)}
-      </p>
-    </AdminCard>
+    <Link className="block min-w-0" href={href}>
+      <AdminCard className="group flex h-full cursor-pointer flex-col p-5 hover:border-[#C8A45D]">
+        <p className="text-sm font-medium text-[#66758a]">{label}</p>
+        <p className="mt-3 text-3xl font-semibold text-[#0B2D5C]">
+          {value === null ? "..." : formatNumber(value)}
+        </p>
+        {helper ? (
+          <p className="mt-1.5 text-xs leading-4 text-[#9BABBF]">{helper}</p>
+        ) : null}
+        <p className="mt-auto pt-2 text-xs font-semibold text-[#C8A45D] opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+          {viewDetailsLabel}
+        </p>
+      </AdminCard>
+    </Link>
   );
 }
 
@@ -361,6 +387,13 @@ function SubscriptionBanner({
   );
 }
 
+const STATS_CARD_HREFS = {
+  appointments: null,
+  patients: "/tenant/patients",
+  services: "/tenant/services",
+  staff: "/tenant/staff",
+} as const;
+
 function DashboardStatsCards({
   dictionary,
   locale,
@@ -370,14 +403,17 @@ function DashboardStatsCards({
   locale: Parameters<typeof formatDate>[1];
   stats: TenantDashboardStats | null;
 }) {
+  const today = todayIso();
   return (
     <section className="mt-5 grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
       {(["patients", "appointments", "services", "staff"] as const).map(
         (key) => (
-          <StatCard
+          <LinkStatCard
             key={key}
+            href={key === "appointments" ? `/tenant/appointments?date=${today}` : STATS_CARD_HREFS[key]}
             label={dictionary.cards[key]}
             value={stats ? stats[key] : null}
+            viewDetailsLabel={dictionary.dashboard.viewDetails}
           />
         ),
       )}
@@ -479,21 +515,38 @@ function TodayActivity({
   dictionary: CenterAdminDictionary;
   stats: TenantDashboardStats | null;
 }) {
+  const today = todayIso();
   return (
     <section className="mt-5">
       <SectionTitle title={dictionary.dashboard.todayActivity} />
-      <div className="mt-3 grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard
+      <div className="mt-3 grid min-w-0 grid-cols-2 gap-4 xl:grid-cols-4">
+        <LinkStatCard
+          helper={dictionary.dashboard.appointmentsTodayHelper}
+          href={`/tenant/appointments?date=${today}`}
           label={dictionary.dashboard.appointmentsToday}
           value={stats?.todayActivity.appointmentsToday ?? null}
+          viewDetailsLabel={dictionary.dashboard.viewDetails}
         />
-        <StatCard
+        <LinkStatCard
+          helper={dictionary.dashboard.upcomingNextTwoHoursHelper}
+          href="/tenant/appointments?range=next2h"
           label={dictionary.dashboard.upcomingNextTwoHours}
           value={stats?.todayActivity.upcomingNextTwoHours ?? null}
+          viewDetailsLabel={dictionary.dashboard.viewDetails}
         />
-        <StatCard
+        <LinkStatCard
+          helper={dictionary.dashboard.noShowTodayHelper}
+          href="/tenant/appointments?filter=missed"
           label={dictionary.dashboard.noShowToday}
           value={stats?.todayActivity.noShow ?? null}
+          viewDetailsLabel={dictionary.dashboard.viewDetails}
+        />
+        <LinkStatCard
+          helper={dictionary.dashboard.completedTodayHelper}
+          href={`/tenant/appointments?date=${today}&status=COMPLETED`}
+          label={dictionary.dashboard.completedToday}
+          value={stats?.todayActivity.completedToday ?? null}
+          viewDetailsLabel={dictionary.dashboard.viewDetails}
         />
       </div>
     </section>
@@ -743,7 +796,7 @@ function RecentActivity({
                   </div>
                   <div className="shrink-0 text-start sm:text-end">
                     <p className="text-xs font-semibold text-[#0B2D5C]" dir="ltr">
-                      {formatDate(item.appointmentDate, locale)} {item.startTime}
+                      {formatAppointmentDateTime(item.appointmentDate, item.startTime, locale)}
                     </p>
                     <p className="mt-1 text-xs text-[#66758a]">
                       {
@@ -947,6 +1000,7 @@ function DashboardData({
   session: CenterSession;
 }) {
   const { locale } = useLanguage();
+  const { branchId, setBranchId } = useBranchFilter();
   const [stats, setStats] = useState<TenantDashboardStats | null>(null);
   const [subscriptionInvoices, setSubscriptionInvoices] = useState<
     SubscriptionInvoice[] | null
@@ -962,7 +1016,7 @@ function DashboardData({
   useEffect(() => {
     let isMounted = true;
 
-    getTenantDashboardStats()
+    getTenantDashboardStats(branchId || undefined)
       .then((response) => {
         if (!isMounted) return;
         setStats(response);
@@ -997,7 +1051,7 @@ function DashboardData({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [branchId]);
 
   if (status === "error") {
     return (
@@ -1011,6 +1065,9 @@ function DashboardData({
 
   return (
     <>
+      <div className="mt-5 flex min-w-0 justify-end">
+        <BranchFilter onChange={setBranchId} value={branchId} />
+      </div>
       <SubscriptionBanner dictionary={dictionary} session={session} stats={stats} />
       <NotificationsWidget dictionary={dictionary} stats={stats} />
       <DashboardStatsCards dictionary={dictionary} locale={locale} stats={stats} />

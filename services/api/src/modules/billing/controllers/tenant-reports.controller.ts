@@ -29,7 +29,10 @@ export class TenantReportsController {
     @Req() request: Request,
     @Query('period') period?: string,
     @Query('from') from?: string,
+    @Query('openOnly') openOnly?: string,
+    @Query('overdueOnly') overdueOnly?: string,
     @Query('to') to?: string,
+    @Query('allUnbilled') allUnbilled?: string,
   ) {
     const session = await this.getSession(request);
     return this.tenantReportsService.getFinancial(
@@ -38,7 +41,10 @@ export class TenantReportsController {
       {
         period,
         from,
+        openOnly,
+        overdueOnly,
         to,
+        allUnbilled,
       },
     );
   }

@@ -29,13 +29,51 @@ type TenantDashboardNotificationRow = {
 export class TenantDashboardService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getStats(centerId: string) {
+  async getStats(
+    centerId: string,
+    clientNow?: string,
+    clientDate?: string,
+    branchId?: string,
+  ) {
     const prisma = await this.prisma.getClient();
-    const todayText = new Date().toISOString().slice(0, 10);
-    const today = new Date(`${todayText}T00:00:00.000Z`);
-    const now = new Date();
-    const nowMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+    const serverNow = new Date();
+
+    // Branch scoping fragments. Appointments carry branchId directly; invoices
+    // are scoped through their linked appointment. Patients/services/staff are
+    // center-level entities (not per-branch), so their counters stay global.
+    const apptBranch: Prisma.AppointmentWhereInput = branchId ? { branchId } : {};
+    const invoiceBranch: Prisma.InvoiceWhereInput = branchId
+      ? { appointment: { is: { branchId } } }
+      : {};
+
+    // Prefer the browser's local time over the server clock.
+    // The server may run in a different timezone (e.g. UTC+2) while appointments
+    // are stored in center local time. clientNow / clientDate come from the
+    // browser so they always reflect the user's actual local clock.
+    let nowMinutes: number;
+    if (clientNow && /^\d{2}:\d{2}$/.test(clientNow)) {
+      const [h, m] = clientNow.split(':').map(Number);
+      nowMinutes = h * 60 + m;
+    } else {
+      nowMinutes = serverNow.getHours() * 60 + serverNow.getMinutes();
+    }
+
+    const todayText =
+      clientDate && /^\d{4}-\d{2}-\d{2}$/.test(clientDate)
+        ? clientDate
+        : `${serverNow.getFullYear()}-${String(serverNow.getMonth() + 1).padStart(2, '0')}-${String(serverNow.getDate()).padStart(2, '0')}`;
+
     const twoHoursFromNow = nowMinutes + 120;
+    const today = new Date(`${todayText}T00:00:00.000Z`);
+
+    console.log('[dashboard-kpi]', {
+      clientNow: clientNow ?? null,
+      clientDate: clientDate ?? null,
+      resolvedNowHHMM: minutesToTime(nowMinutes),
+      resolvedTodayText: todayText,
+      windowStart: minutesToTime(nowMinutes),
+      windowEnd: minutesToTime(Math.min(twoHoursFromNow, 24 * 60 - 1)),
+    });
 
     const [
       patients,
@@ -52,9 +90,10 @@ export class TenantDashboardService {
       latestSubscription,
       notificationUnreadCount,
       latestNotifications,
+      completedToday,
     ] = await Promise.all([
       prisma.patient.count({ where: { centerId } }),
-      prisma.appointment.count({ where: { centerId } }),
+      prisma.appointment.count({ where: { centerId, ...apptBranch } }),
       prisma.service.count({ where: { centerId } }),
       prisma.userRole.count({
         where: {
@@ -72,25 +111,37 @@ export class TenantDashboardService {
       prisma.appointment.count({
         where: {
           centerId,
+          ...apptBranch,
           appointmentDate: today,
         },
       }),
+      // Overlap logic: appointment overlaps [now, now+2h]
+      // endTime >= now  →  appointment hasn't finished yet
+      // startTime <= now+2h  →  appointment starts within the window
       prisma.appointment.count({
         where: {
           centerId,
+          ...apptBranch,
           appointmentDate: today,
-          status: { in: ['SCHEDULED', 'CONFIRMED'] },
-          startTime: {
-            gte: minutesToTime(nowMinutes),
-            lte: minutesToTime(Math.min(twoHoursFromNow, 24 * 60 - 1)),
-          },
+          status: { in: ['SCHEDULED', 'CONFIRMED', 'IN_PROGRESS'] },
+          endTime: { gte: minutesToTime(nowMinutes) },
+          startTime: { lte: minutesToTime(Math.min(twoHoursFromNow, 24 * 60 - 1)) },
         },
       }),
+      // "Missed / no-show": NO_SHOW status OR appointments whose endTime has
+      // already passed today but are still in an active status.
       prisma.appointment.count({
         where: {
           centerId,
+          ...apptBranch,
           appointmentDate: today,
-          status: 'NO_SHOW',
+          OR: [
+            { status: 'NO_SHOW' },
+            {
+              status: { in: ['SCHEDULED', 'CONFIRMED', 'IN_PROGRESS'] },
+              endTime: { lt: minutesToTime(nowMinutes) },
+            },
+          ],
         },
       }),
       prisma.patient.count({
@@ -102,11 +153,12 @@ export class TenantDashboardService {
       prisma.invoice.count({
         where: {
           centerId,
+          ...invoiceBranch,
           status: { in: ['PENDING', 'PARTIAL'] },
         },
       }),
       prisma.appointment.findMany({
-        where: { centerId },
+        where: { centerId, ...apptBranch },
         orderBy: { createdAt: 'desc' },
         take: 5,
         select: {
@@ -122,7 +174,7 @@ export class TenantDashboardService {
         },
       }),
       prisma.invoice.findMany({
-        where: { centerId },
+        where: { centerId, ...invoiceBranch },
         orderBy: { createdAt: 'desc' },
         take: 5,
         select: {
@@ -168,6 +220,9 @@ export class TenantDashboardService {
           },
         })
         .catch(() => [] as TenantDashboardNotificationRow[]),
+      prisma.appointment.count({
+        where: { centerId, ...apptBranch, appointmentDate: today, status: 'COMPLETED' },
+      }),
     ]);
 
     const notificationRows =
@@ -175,7 +230,7 @@ export class TenantDashboardService {
 
     const subEnd = latestSubscription?.currentPeriodEnd ?? null;
     const subDaysRemaining = subEnd
-      ? Math.ceil((subEnd.getTime() - now.getTime()) / MS_PER_DAY)
+      ? Math.ceil((subEnd.getTime() - serverNow.getTime()) / MS_PER_DAY)
       : null;
     const subIsExpired = subDaysRemaining !== null && subDaysRemaining < 0;
     const subIsExpiringSoon =
@@ -231,6 +286,7 @@ export class TenantDashboardService {
         : null,
       todayActivity: {
         appointmentsToday: todayAppointments,
+        completedToday,
         noShow: noShowToday,
         upcomingNextTwoHours: upcomingSoon,
       },
@@ -258,3 +314,4 @@ function minutesToTime(minutes: number) {
     .toString()
     .padStart(2, '0')}`;
 }
+

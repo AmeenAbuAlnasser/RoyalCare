@@ -12,6 +12,7 @@ export class CreateTenantStaffDto {
   email!: string;
   fullName!: string;
   password!: string;
+  providerEnabled?: boolean;
   role!: TenantStaffRole;
   status?: TenantStaffStatus;
 }

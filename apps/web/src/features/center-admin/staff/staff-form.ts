@@ -9,6 +9,7 @@ export type TenantStaffFormState = {
   email: string;
   fullName: string;
   password: string;
+  providerEnabled: boolean;
   role: CenterRoleKey;
   status: TenantStaffStatus;
 };
@@ -22,6 +23,7 @@ export function staffToForm(staff?: TenantStaff): TenantStaffFormState {
     email: staff?.email ?? "",
     fullName: staff?.fullName ?? "",
     password: "",
+    providerEnabled: staff?.providerEnabled ?? false,
     role: staff?.role ?? "STAFF",
     status: staff?.status ?? "ACTIVE",
   };
@@ -34,6 +36,7 @@ export function formToPayload(
   const payload = {
     email: form.email.trim(),
     fullName: form.fullName.trim(),
+    providerEnabled: form.providerEnabled,
     role: form.role,
     status: form.status,
   };

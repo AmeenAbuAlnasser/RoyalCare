@@ -1,4 +1,4 @@
-﻿import {
+import {
   BadRequestException,
   ForbiddenException,
   Injectable,
@@ -6,7 +6,8 @@
 } from '@nestjs/common';
 import {
   Prisma,
-  type ServiceFollowUpType,
+  type RecurringIntervalUnit,
+  type ServiceFollowUpMode,
 } from '@royalcare/db';
 import { PrismaService } from '../../../common/database/prisma.service';
 import { hasTenantPermission } from '../../../common/permissions/tenant-permissions';
@@ -39,17 +40,39 @@ const serviceSelect = {
   descriptionHe: true,
   bufferMinutes: true,
   followUpEnabled: true,
-  followUpType: true,
+  followUpMode: true,
   defaultIntervalDays: true,
   totalRecommendedSessions: true,
+  recurringIntervalValue: true,
+  recurringIntervalUnit: true,
+  autoWhatsappReminderEnabled: true,
+  autoReminderDaysBefore: true,
   autoCreateNextReminder: true,
   reminderMessageAr: true,
   reminderMessageEn: true,
   reminderMessageHe: true,
   followUpRules: true,
+  treatmentTemplates: {
+    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+    select: {
+      id: true,
+      nameAr: true,
+      nameEn: true,
+      nameHe: true,
+      totalSessions: true,
+      defaultIntervalDays: true,
+      phases: true,
+      isDefault: true,
+      isActive: true,
+      sortOrder: true,
+    },
+  },
   durationMinutes: true,
   price: true,
   currency: true,
+  coverImageUrl: true,
+  coverImageBlurhash: true,
+  coverImageAlt: true,
   isActive: true,
   createdAt: true,
   updatedAt: true,
@@ -129,6 +152,24 @@ function parsePositiveIntegerField(value: number | string | null | undefined) {
   return parsed;
 }
 
+function parseReminderDaysField(value: number | string | null | undefined) {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null || value === '') {
+    return null;
+  }
+
+  const parsed = Number(value);
+
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 3650) {
+    return 'invalid';
+  }
+
+  return parsed;
+}
+
 function parsePriceField(value: number | string | null | undefined) {
   if (value === undefined) {
     return undefined;
@@ -149,6 +190,22 @@ function parsePriceField(value: number | string | null | undefined) {
 
 function normalizeCurrency(value?: string | null) {
   return optionalTrimmed(value)?.toUpperCase() ?? 'ILS';
+}
+
+function isValidCoverImageUrl(value: string): boolean {
+  if (
+    value.startsWith('/uploads/') ||
+    value.startsWith('/images/') ||
+    value.startsWith('/assets/')
+  ) {
+    return true;
+  }
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 function isValidCurrency(value: string) {
@@ -190,6 +247,132 @@ function parseFollowUpRules(value: CreateTenantServiceDto['followUpRules']) {
   }
 
   return normalized;
+}
+
+function calculateTotalSessionsFromRules(
+  rules: Array<{ toSessionNumber: number }> | null | undefined,
+) {
+  if (!Array.isArray(rules) || rules.length === 0) {
+    return null;
+  }
+
+  const totals = rules
+    .map((rule) => rule.toSessionNumber)
+    .filter((value) => Number.isInteger(value) && value > 0);
+
+  return totals.length > 0 ? Math.max(...totals) : null;
+}
+
+type TreatmentTemplateInput =
+  NonNullable<CreateTenantServiceDto['treatmentTemplates']>[number];
+
+type NormalizedTreatmentTemplate = {
+  id: string | null;
+  nameAr: string;
+  nameEn: string;
+  nameHe: string;
+  totalSessions: number;
+  defaultIntervalDays: number | null;
+  phases: Prisma.InputJsonValue | typeof Prisma.JsonNull;
+  isDefault: boolean;
+  isActive: boolean;
+  sortOrder: number;
+};
+
+function parseTreatmentTemplates(
+  value: CreateTenantServiceDto['treatmentTemplates'],
+) {
+  if (value === undefined) return undefined;
+  if (value === null) return [];
+  if (!Array.isArray(value)) return 'invalid' as const;
+
+  const normalized: NormalizedTreatmentTemplate[] = [];
+  let defaultSeen = false;
+
+  for (let index = 0; index < value.length; index += 1) {
+    const item = value[index] as TreatmentTemplateInput | undefined;
+    if (!item) return 'invalid' as const;
+
+    const totalSessions = Number(item.totalSessions);
+    const defaultIntervalDays =
+      item.defaultIntervalDays === null ||
+      item.defaultIntervalDays === undefined ||
+      item.defaultIntervalDays === ''
+        ? null
+        : Number(item.defaultIntervalDays);
+    const sortOrder =
+      item.sortOrder === null ||
+      item.sortOrder === undefined ||
+      item.sortOrder === ''
+        ? index
+        : Number(item.sortOrder);
+
+    if (
+      !Number.isInteger(totalSessions) ||
+      totalSessions <= 0 ||
+      totalSessions > 200 ||
+      (defaultIntervalDays !== null &&
+        (!Number.isInteger(defaultIntervalDays) ||
+          defaultIntervalDays <= 0 ||
+          defaultIntervalDays > 3650)) ||
+      !Number.isInteger(sortOrder)
+    ) {
+      return 'invalid' as const;
+    }
+
+    const phases = parseFollowUpRules(
+      (item.phases ?? null) as CreateTenantServiceDto['followUpRules'],
+    );
+    if (phases === 'invalid') return 'invalid' as const;
+    const normalizedPhases = phases ?? null;
+    const derivedTotalSessions =
+      Array.isArray(normalizedPhases) && normalizedPhases.length > 0
+        ? calculateTotalSessionsFromRules(normalizedPhases)
+        : null;
+
+    const isDefault = item.isDefault === true && !defaultSeen;
+    if (isDefault) defaultSeen = true;
+
+    normalized.push({
+      id: optionalTrimmed(item.id) ?? null,
+      nameAr: optionalTrimmed(item.nameAr) ?? '',
+      nameEn: optionalTrimmed(item.nameEn) ?? '',
+      nameHe: optionalTrimmed(item.nameHe) ?? '',
+      totalSessions: derivedTotalSessions ?? totalSessions,
+      defaultIntervalDays,
+      phases: normalizedPhases === null ? Prisma.JsonNull : normalizedPhases,
+      isDefault,
+      isActive: item.isActive !== false,
+      sortOrder,
+    });
+  }
+
+  if (!defaultSeen && normalized.length > 0) {
+    normalized[0].isDefault = true;
+  }
+
+  return normalized;
+}
+
+function normalizeFollowUpMode(
+  dto: CreateTenantServiceDto | UpdateTenantServiceDto,
+  isCreate: boolean,
+): ServiceFollowUpMode | undefined {
+  if (dto.followUpMode) {
+    return dto.followUpMode;
+  }
+
+  if (dto.followUpEnabled !== undefined) {
+    return dto.followUpEnabled ? 'SESSION_BASED_PLAN' : 'NONE';
+  }
+
+  return isCreate ? 'NONE' : undefined;
+}
+
+function isValidRecurringIntervalUnit(
+  value: unknown,
+): value is RecurringIntervalUnit {
+  return value === 'DAY' || value === 'WEEK' || value === 'MONTH' || value === 'YEAR';
 }
 
 function localizedFieldsForLanguage(language: string): LocalizedServiceFields {
@@ -285,15 +468,26 @@ export class TenantServicesService {
     this.requirePermission(permissions, 'services:create');
 
     const validated = this.validateCreate(dto, primaryLanguage);
+    const templates = this.validateTreatmentTemplates(dto);
     const prisma = await this.prisma.getClient();
 
-    return prisma.service.create({
-      data: {
-        centerId,
-        ...validated,
-      },
-      select: serviceSelect,
+    const created = await prisma.$transaction(async (tx) => {
+      const service = await tx.service.create({
+        data: {
+          centerId,
+          ...validated,
+        },
+        select: { id: true },
+      });
+
+      if (templates !== undefined) {
+        await this.syncTreatmentTemplates(tx, service.id, templates);
+      }
+
+      return service;
     });
+
+    return this.getById(centerId, permissions, created.id);
   }
 
   async getById(centerId: string, permissions: string[], serviceId: string) {
@@ -341,11 +535,20 @@ export class TenantServicesService {
     await this.getById(centerId, permissions, serviceId);
 
     const validated = this.validateUpdate(dto, primaryLanguage);
+    const templates = this.validateTreatmentTemplates(dto);
     const prisma = await this.prisma.getClient();
 
-    const result = await prisma.service.updateMany({
-      where: { id: serviceId, centerId },
-      data: validated,
+    const result = await prisma.$transaction(async (tx) => {
+      const updateResult = await tx.service.updateMany({
+        where: { id: serviceId, centerId },
+        data: validated,
+      });
+
+      if (updateResult.count === 1 && templates !== undefined) {
+        await this.syncTreatmentTemplates(tx, serviceId, templates);
+      }
+
+      return updateResult;
     });
 
     if (result.count !== 1) {
@@ -445,6 +648,93 @@ export class TenantServicesService {
     return { deleted: true };
   }
 
+  private validateTreatmentTemplates(
+    dto: CreateTenantServiceDto | UpdateTenantServiceDto,
+  ) {
+    const parsed = parseTreatmentTemplates(dto.treatmentTemplates);
+    if (parsed === 'invalid') {
+      throw validationFailed({
+        treatmentTemplates: 'Enter valid treatment plan templates.',
+      });
+    }
+    return parsed;
+  }
+
+  private async syncTreatmentTemplates(
+    tx: Prisma.TransactionClient,
+    serviceId: string,
+    templates: NormalizedTreatmentTemplate[],
+  ) {
+    const incomingIds = templates
+      .map((template) => template.id)
+      .filter((id): id is string => Boolean(id));
+
+    await tx.serviceTreatmentTemplate.deleteMany({
+      where: {
+        serviceId,
+        ...(incomingIds.length > 0 ? { id: { notIn: incomingIds } } : {}),
+      },
+    });
+
+    for (const template of templates) {
+      const data = {
+        defaultIntervalDays: template.defaultIntervalDays,
+        isActive: template.isActive,
+        isDefault: template.isDefault,
+        nameAr: template.nameAr,
+        nameEn: template.nameEn,
+        nameHe: template.nameHe,
+        phases: template.phases,
+        sortOrder: template.sortOrder,
+        totalSessions: template.totalSessions,
+      };
+
+      if (template.id) {
+        await tx.serviceTreatmentTemplate.updateMany({
+          where: { id: template.id, serviceId },
+          data,
+        });
+      } else {
+        await tx.serviceTreatmentTemplate.create({
+          data: {
+            serviceId,
+            ...data,
+          },
+        });
+      }
+    }
+
+    const defaultTemplate = templates.find((template) => template.isDefault);
+    if (defaultTemplate) {
+      const resolvedDefault = await tx.serviceTreatmentTemplate.findFirst({
+        where: {
+          serviceId,
+          ...(defaultTemplate.id
+            ? { id: defaultTemplate.id }
+            : {
+                nameAr: defaultTemplate.nameAr,
+                nameEn: defaultTemplate.nameEn,
+                nameHe: defaultTemplate.nameHe,
+                sortOrder: defaultTemplate.sortOrder,
+              }),
+        },
+        select: { id: true },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (resolvedDefault) {
+        await tx.serviceTreatmentTemplate.updateMany({
+          where: { serviceId, id: { not: resolvedDefault.id } },
+          data: { isDefault: false },
+        });
+        await tx.serviceTreatmentTemplate.update({
+          where: { id: resolvedDefault.id },
+          data: { isDefault: true },
+        });
+      }
+    }
+  }
+
   private requirePermission(
     permissions: string[],
     permission: ServicePermission,
@@ -471,13 +761,21 @@ export class TenantServicesService {
         (data.durationMinutes as number | null | undefined) ?? null,
       bufferMinutes: (data.bufferMinutes as number | undefined) ?? 0,
       followUpEnabled: (data.followUpEnabled as boolean | undefined) ?? false,
-      followUpType:
-        (data.followUpType as ServiceFollowUpType | undefined) ??
-        'FIXED_INTERVAL',
+      followUpMode:
+        (data.followUpMode as ServiceFollowUpMode | undefined) ?? 'NONE',
       defaultIntervalDays:
         (data.defaultIntervalDays as number | null | undefined) ?? null,
       totalRecommendedSessions:
         (data.totalRecommendedSessions as number | null | undefined) ?? null,
+      recurringIntervalValue:
+        (data.recurringIntervalValue as number | null | undefined) ?? null,
+      recurringIntervalUnit:
+        (data.recurringIntervalUnit as RecurringIntervalUnit | null | undefined) ??
+        null,
+      autoWhatsappReminderEnabled:
+        (data.autoWhatsappReminderEnabled as boolean | undefined) ?? false,
+      autoReminderDaysBefore:
+        (data.autoReminderDaysBefore as number | null | undefined) ?? null,
       autoCreateNextReminder:
         (data.autoCreateNextReminder as boolean | undefined) ?? true,
       reminderMessageAr:
@@ -491,6 +789,10 @@ export class TenantServicesService {
         Prisma.JsonNull,
       price: (data.price as Prisma.Decimal | null | undefined) ?? null,
       currency: data.currency as string,
+      coverImageUrl: (data.coverImageUrl as string | null | undefined) ?? null,
+      coverImageBlurhash:
+        (data.coverImageBlurhash as string | null | undefined) ?? null,
+      coverImageAlt: (data.coverImageAlt as string | null | undefined) ?? null,
       isActive: (data.isActive as boolean | undefined) ?? true,
     };
   }
@@ -539,6 +841,30 @@ export class TenantServicesService {
       }
     }
 
+    // Cover image (optional). URL is validated; blurhash/alt are free text.
+    if (isCreate || dto.coverImageUrl !== undefined) {
+      const coverImageUrl = optionalTrimmed(dto.coverImageUrl);
+      if (coverImageUrl) {
+        if (coverImageUrl.length > 800 || !isValidCoverImageUrl(coverImageUrl)) {
+          errors.coverImageUrl = 'Enter a valid cover image.';
+        } else {
+          data.coverImageUrl = coverImageUrl;
+        }
+      } else {
+        data.coverImageUrl = null;
+      }
+    }
+
+    if (isCreate || dto.coverImageBlurhash !== undefined) {
+      const blurhash = optionalTrimmed(dto.coverImageBlurhash);
+      data.coverImageBlurhash = blurhash ? blurhash.slice(0, 120) : null;
+    }
+
+    if (isCreate || dto.coverImageAlt !== undefined) {
+      const alt = optionalTrimmed(dto.coverImageAlt);
+      data.coverImageAlt = alt ? alt.slice(0, 200) : null;
+    }
+
     const durationMinutes = parseIntegerField(dto.durationMinutes);
 
     if (durationMinutes === 'invalid') {
@@ -555,27 +881,72 @@ export class TenantServicesService {
       data.bufferMinutes = bufferMinutes ?? 0;
     }
 
-    if (isCreate || dto.followUpEnabled !== undefined) {
+    const followUpMode = normalizeFollowUpMode(dto, isCreate);
+
+    if (followUpMode !== undefined) {
       if (
-        dto.followUpEnabled !== undefined &&
-        typeof dto.followUpEnabled !== 'boolean'
+        followUpMode !== 'NONE' &&
+        followUpMode !== 'SESSION_BASED_PLAN' &&
+        followUpMode !== 'RECURRING_CONTINUOUS'
       ) {
+        errors.followUpMode = 'Select a valid follow-up type.';
+      } else {
+        data.followUpMode = followUpMode;
+        data.followUpEnabled = followUpMode !== 'NONE';
+      }
+    } else if (dto.followUpEnabled !== undefined) {
+      if (typeof dto.followUpEnabled !== 'boolean') {
         errors.followUpEnabled = 'Select a valid follow-up setting.';
       } else {
-        data.followUpEnabled = dto.followUpEnabled ?? false;
+        data.followUpEnabled = dto.followUpEnabled;
       }
     }
 
-    if (isCreate || dto.followUpType !== undefined) {
+    const recurringIntervalValue = parsePositiveIntegerField(
+      dto.recurringIntervalValue,
+    );
+    if (recurringIntervalValue === 'invalid') {
+      errors.recurringIntervalValue = 'Enter a valid recurring interval.';
+    } else if (recurringIntervalValue !== undefined) {
+      data.recurringIntervalValue = recurringIntervalValue;
+    }
+
+    if (isCreate || dto.recurringIntervalUnit !== undefined) {
       if (
-        dto.followUpType &&
-        dto.followUpType !== 'FIXED_INTERVAL' &&
-        dto.followUpType !== 'SESSION_PLAN'
+        dto.recurringIntervalUnit !== undefined &&
+        dto.recurringIntervalUnit !== null &&
+        !isValidRecurringIntervalUnit(dto.recurringIntervalUnit)
       ) {
-        errors.followUpType = 'Select a valid follow-up type.';
+        errors.recurringIntervalUnit = 'Select a valid recurring interval unit.';
       } else {
-        data.followUpType = dto.followUpType ?? 'FIXED_INTERVAL';
+        data.recurringIntervalUnit =
+          dto.recurringIntervalUnit === undefined
+            ? null
+            : dto.recurringIntervalUnit;
       }
+    }
+
+    if (isCreate || dto.autoWhatsappReminderEnabled !== undefined) {
+      if (
+        dto.autoWhatsappReminderEnabled !== undefined &&
+        typeof dto.autoWhatsappReminderEnabled !== 'boolean'
+      ) {
+        errors.autoWhatsappReminderEnabled =
+          'Select a valid automatic WhatsApp reminder setting.';
+      } else {
+        data.autoWhatsappReminderEnabled =
+          dto.autoWhatsappReminderEnabled ?? false;
+      }
+    }
+
+    const autoReminderDaysBefore = parseReminderDaysField(
+      dto.autoReminderDaysBefore,
+    );
+    if (autoReminderDaysBefore === 'invalid') {
+      errors.autoReminderDaysBefore =
+        'Enter a valid reminder lead time.';
+    } else if (autoReminderDaysBefore !== undefined) {
+      data.autoReminderDaysBefore = autoReminderDaysBefore;
     }
 
     const defaultIntervalDays = parsePositiveIntegerField(
@@ -626,6 +997,10 @@ export class TenantServicesService {
     } else if (followUpRules !== undefined) {
       data.followUpRules =
         followUpRules === null ? Prisma.JsonNull : followUpRules;
+      if (Array.isArray(followUpRules)) {
+        data.totalRecommendedSessions =
+          calculateTotalSessionsFromRules(followUpRules);
+      }
     }
 
     const price = parsePriceField(dto.price);
@@ -652,6 +1027,53 @@ export class TenantServicesService {
       } else {
         data.isActive = dto.isActive;
         data.archivedAt = dto.isActive ? null : new Date();
+      }
+    }
+
+    if (Object.keys(errors).length > 0) {
+      throw validationFailed(errors);
+    }
+
+    const nextMode =
+      (data.followUpMode as ServiceFollowUpMode | undefined) ??
+      (dto.followUpEnabled === false ? 'NONE' : undefined);
+
+    if (nextMode === 'NONE') {
+      data.followUpEnabled = false;
+      data.recurringIntervalValue = null;
+      data.recurringIntervalUnit = null;
+      data.autoWhatsappReminderEnabled = false;
+      data.autoReminderDaysBefore = null;
+    }
+
+    if (nextMode === 'RECURRING_CONTINUOUS') {
+      data.followUpEnabled = true;
+      data.totalRecommendedSessions = null;
+      data.followUpRules = Prisma.JsonNull;
+
+      const hasRecurringValue =
+        data.recurringIntervalValue !== undefined &&
+        data.recurringIntervalValue !== null;
+      const hasRecurringUnit =
+        data.recurringIntervalUnit !== undefined &&
+        data.recurringIntervalUnit !== null;
+
+      if (!hasRecurringValue) {
+        errors.recurringIntervalValue = 'Enter a recurring interval.';
+      }
+
+      if (!hasRecurringUnit) {
+        errors.recurringIntervalUnit = 'Select a recurring interval unit.';
+      }
+    }
+
+    if (nextMode === 'SESSION_BASED_PLAN') {
+      const rules = data.followUpRules;
+      const hasRules = Array.isArray(rules) && rules.length > 0;
+      if (hasRules) {
+        data.totalRecommendedSessions = calculateTotalSessionsFromRules(
+          rules as Array<{ toSessionNumber: number }>,
+        );
       }
     }
 

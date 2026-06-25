@@ -13,6 +13,7 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "seed:qa": "DATABASE_URL=\"postgresql://royalcare:royalcare123@localhost:5432/royalcare_dev?schema=public\" npx tsx prisma/seeds/qa-center.seed.ts",
+    "seed:plans": "DATABASE_URL=\"postgresql://royalcare:royalcare123@localhost:5432/royalcare_dev?schema=public\" npx tsx prisma/seeds/plans.seed.ts",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [

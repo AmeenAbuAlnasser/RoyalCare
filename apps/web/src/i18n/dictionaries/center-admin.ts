@@ -1,4 +1,4 @@
-﻿import type { SupportedLocale } from "../locales";
+import type { SupportedLocale } from "../locales";
 
 type CenterRoleKey =
   | "CENTER_OWNER"
@@ -57,6 +57,7 @@ type CenterAdminDictionary = {
     services: string;
     staff: string;
     billing: string;
+    expenses: string;
     reports: string;
     notifications: string;
     schedule: string;
@@ -152,8 +153,12 @@ type CenterAdminDictionary = {
     sessionExpired: string;
     alerts: string;
     appointmentsToday: string;
+    appointmentsTodayHelper: string;
+    completedToday: string;
+    completedTodayHelper: string;
     noAlerts: string;
     noShowToday: string;
+    noShowTodayHelper: string;
     patientsWithCredit: string;
     pendingInvoices: string;
     quickActions: string;
@@ -163,6 +168,8 @@ type CenterAdminDictionary = {
     todayActivity: string;
     upcomingAppointmentSoon: string;
     upcomingNextTwoHours: string;
+    upcomingNextTwoHoursHelper: string;
+    viewDetails: string;
     subscription: {
       title: string;
       plan: string;
@@ -238,9 +245,43 @@ type CenterAdminDictionary = {
     title: string;
     subtitle: string;
     addPatient: string;
+    addFirstPatient: string;
     editPatient: string;
     detailsTitle: string;
     searchPlaceholder: string;
+    totalPatients: string;
+    activePatients: string;
+    archivedPatients: string;
+    newPatientsThisMonth: string;
+    filters: string;
+    allGenders: string;
+    allStatuses: string;
+    archiveFilter: string;
+    allArchiveStates: string;
+    activeOnly: string;
+    archivedOnly: string;
+    hasUpcomingAppointment: string;
+    hasReceivables: string;
+    unavailableFilter: string;
+    filterAll: string;
+    filterYes: string;
+    filterNo: string;
+    treatmentPlansCount: string;
+    overdueSessionsCount: string;
+    lastSession: string;
+    appointmentsCount: string;
+    nextSession: string;
+    outstandingBalance: string;
+    upcomingAppointmentsCount: string;
+    noData: string;
+    quickActions: string;
+    createAppointment: string;
+    createTreatmentPlan: string;
+    createInvoice: string;
+    unavailableAction: string;
+    moreActions: string;
+    paginationSummary: (shown: number, total: number) => string;
+    paginationPrepared: string;
     emptyTitle: string;
     emptyBody: string;
     noResultsTitle: string;
@@ -335,12 +376,28 @@ type CenterAdminDictionary = {
     enableFollowUpPlan: string;
     followUpSettings: string;
     followUpDescription: string;
+    followUp: {
+      none: string;
+      sessionBasedPlan: string;
+      sessionBasedHelper: string;
+      recurring: string;
+      recurringHelper: string;
+    };
+    recurringIntervalLabel?: string;
+    recurringUnitDay?: string;
+    recurringUnitWeek?: string;
+    recurringUnitMonth?: string;
+    recurringUnitYear?: string;
+    autoWhatsappReminderEnabled?: string;
+    autoReminderDaysBefore?: string;
     defaultIntervalDays: string;
     planType: string;
     fixedInterval: string;
     sessionPlan: string;
     createNextReminderAutomatically: string;
     totalRecommendedSessions: string;
+    totalSessionsSummary: (count: number) => string;
+    totalSessionsCalculated: string;
     whatsappMessageArabic: string;
     whatsappMessageHebrew: string;
     whatsappMessageEnglish: string;
@@ -350,6 +407,19 @@ type CenterAdminDictionary = {
     addRule: string;
     removeRule: string;
     followUpRuleHelper: string;
+    treatmentPhases: string;
+    treatmentPlanTemplates?: string;
+    treatmentPlanTemplatesHelper?: string;
+    addTreatmentTemplate?: string;
+    noTreatmentTemplates?: string;
+    treatmentTemplateTitle?: (index: number) => string;
+    defaultTreatmentTemplate?: string;
+    activeTreatmentTemplate?: string;
+    sortOrder?: string;
+    templateUsesDefaultInterval?: string;
+    deleteTreatmentTemplate?: string;
+    treatmentTemplateSelect?: string;
+    treatmentTemplateOverrideHint?: string;
     phaseTitle: (index: number) => string;
     reminderAfterDays: (days: number) => string;
     previewSessionLine: (session: number, days: number) => string;
@@ -360,10 +430,14 @@ type CenterAdminDictionary = {
     applyPreset: string;
     editPhase: string;
     deletePhase: string;
+    planCalcExplanation: string;
+    planPreviewPhaseLabel: (from: number, to: number, days: number) => string;
     overlappingRanges: string;
     uncoveredSessions: (range: string) => string;
     invalidIntervals: string;
     invalidRangeOrder: string;
+    firstPhaseMustStartAtOne: string;
+    noGapsAllowed: string;
     deleteService: string;
     deleteServiceConfirmTitle: string;
     deleteServiceConfirmBody: string;
@@ -371,6 +445,15 @@ type CenterAdminDictionary = {
     deleteServiceBlocked: string;
     deleteServiceBlockedTooltip: string;
     deleted: string;
+    followUpBadge: string;
+    noFollowUpBadge: string;
+    sessionBasedPlanLabel: string;
+    recurringContinuousLabel: string;
+    templateCountBadge: (count: number) => string;
+    defaultTemplateSummary: (name: string, sessions: number) => string;
+    totalSessionsBadge: (count: number) => string;
+    intervalDaysBadge: (days: number) => string;
+    followUpAutoHint: string;
   };
   staff: {
     title: string;
@@ -392,6 +475,8 @@ type CenterAdminDictionary = {
     phone: string;
     password: string;
     passwordOptional: string;
+    providerEnabled: string;
+    providerEnabledHelper: string;
     role: string;
     status: string;
     createdAt: string;
@@ -492,6 +577,14 @@ type CenterAdminDictionary = {
     creditSourceManual: string;
     creditSourceAdjustment: string;
     creditUsageLabel: string;
+    invoiceTotalDesc: string;
+    paidAmountDesc: string;
+    balanceDueDesc: string;
+    balanceDueTooltip: string;
+    creditBalanceDesc: string;
+    statusPaidDesc: string;
+    statusPartialDesc: string;
+    statusPendingDesc: string;
   };
   appointments: {
     title: string;
@@ -506,6 +599,9 @@ type CenterAdminDictionary = {
     dateFilter: string;
     providerFilter: string;
     allProviders: string;
+    allBranches: string;
+    branch: string;
+    chooseBranch: string;
     emptyTitle: string;
     emptyBody: string;
     noResultsTitle: string;
@@ -578,15 +674,18 @@ type CenterAdminDictionary = {
     viewInvoice: string;
     invoiceRequiresCompleted: string;
     invoiceFullyPaid: string;
+    needsInvoiceBadge: string;
     bookingRequestDetails: string;
     bookingRequester: string;
     bookingRequesterPhone: string;
     bookingRequestNotes: string;
     requestedBy: (name: string) => string;
     slotBooked: string;
+    currentAppointmentSlot: string;
     loadingSlots: string;
     noSlots: string;
     selectServiceAndDate: string;
+    enterDurationToSeeSlots: string;
     calendarView: string;
     listView: string;
     dayView: string;
@@ -626,6 +725,27 @@ type CenterAdminDictionary = {
     invoiceBlockedCancelled: string;
     followUpPlanExists: string;
     followUpPlanNone: string;
+    followUpPlanSection: string;
+    viewInFollowUps: string;
+    followUpPlanLoading: string;
+    followUpSession: (n: number) => string;
+    followUpPlanNoRecord: string;
+    followUpRecurringBadge: string;
+    followUpNextDue: string;
+    followUpLastCompleted: string;
+    followUpPhaseHeader: (phase: number, days: number) => string;
+    followUpPhaseTitle: (phase: number) => string;
+    followUpPhaseSubtitle: (from: number, to: number, days: number) => string;
+    followUpNextSessionBadge: string;
+    followUpRelativeToday: string;
+    followUpRelativeOverdue: (days: number) => string;
+    followUpRelativeRemaining: (days: number) => string;
+    reminderMessagesSection: string;
+    followUpEvery: string;
+    followUpIntervalDay: (n: number) => string;
+    followUpIntervalWeek: (n: number) => string;
+    followUpIntervalMonth: (n: number) => string;
+    followUpIntervalYear: (n: number) => string;
   };
   reports: {
     title: string;
@@ -659,6 +779,7 @@ type CenterAdminDictionary = {
     revenueByPaymentStatus: string;
     revenueByService: string;
     noChartData: string;
+    viewSessions: string;
     statusPaid: string;
     statusPending: string;
     statusPartial: string;
@@ -670,6 +791,57 @@ type CenterAdminDictionary = {
     topPatientsVisits: string;
     topPatientsCredit: string;
     topPatientsVip: string;
+    receivablesSectionTitle: string;
+    receivablesSectionHelper: string;
+    receivablesDetailsTitle: string;
+    totalReceivables: string;
+    patientsWithDebt: string;
+    unpaidInvoices: string;
+    partiallyPaidInvoices: string;
+    highestDebt: string;
+    invoiceCountIncluded: string;
+    noFinancialDataInRange: string;
+    selectedDateRange: string;
+    openReceivablesOnly: string;
+    overdueOnly: string;
+    receivablesByPaymentStatus: string;
+    topPatientsByDebt: string;
+    revenueVsReceivables: string;
+    revenueLabel: string;
+    receivablesLabel: string;
+    patient: string;
+    phone: string;
+    service: string;
+    invoiceTotal: string;
+    paidAmount: string;
+    remainingAmount: string;
+    paymentStatus: string;
+    lastPayment: string;
+    dueDate: string;
+    notRecorded: string;
+    noReceivablesData: string;
+    todayOverviewTitle: string;
+    appointmentsTodayTotal: string;
+    appointmentsTodayCompleted: string;
+    appointmentsTodayUpcoming: string;
+    delayedFollowUps: string;
+    newPatientsThisMonth: string;
+    activeTreatmentPlans: string;
+    revenueInsightsTitle: string;
+    appointmentAnalyticsTitle: string;
+    totalInPeriod: string;
+    noShowCount: string;
+    cancellationRate: string;
+    noShowRate: string;
+    topProvidersTitle: string;
+    viewFullReceivables: string;
+    hideFullReceivables: string;
+    topDebtorsTitle: string;
+    completedWithoutInvoiceTitle: string;
+    completedWithoutInvoiceAlert: (count: number) => string;
+    completedWithoutInvoiceEmpty: string;
+    showAllUnbilled: string;
+    showPeriodUnbilled: string;
   };
   profile: {
     title: string;
@@ -715,6 +887,11 @@ type CenterAdminDictionary = {
     billingMarkPaid: string;
     paymentsView: string;
     paymentsCreate: string;
+    expensesView: string;
+    expensesCreate: string;
+    expensesEdit: string;
+    expensesDelete: string;
+    expensesReports: string;
     reportsView: string;
     settingsView: string;
     permissionsView: string;
@@ -904,6 +1081,7 @@ export const centerAdminDictionaries: Record<
       services: "Services",
       staff: "Staff",
       billing: "Billing",
+      expenses: "Expenses",
       reports: "Reports",
       notifications: "Notifications",
       schedule: "Schedule",
@@ -1000,8 +1178,12 @@ export const centerAdminDictionaries: Record<
       sessionExpired: "Please log in again.",
       alerts: "Alerts",
       appointmentsToday: "Appointments today",
+      appointmentsTodayHelper: "All today's appointments, any status.",
+      completedToday: "Completed today",
+      completedTodayHelper: "Appointments marked completed today.",
       noAlerts: "No urgent alerts right now.",
       noShowToday: "Missed / no-show",
+      noShowTodayHelper: "Past appointments not completed or marked no-show.",
       patientsWithCredit: "Patients with credit",
       pendingInvoices: "Pending invoices",
       quickActions: "Quick Actions",
@@ -1010,7 +1192,9 @@ export const centerAdminDictionaries: Record<
       revenueSnapshot: "Revenue Snapshot",
       todayActivity: "Today Activity",
       upcomingAppointmentSoon: "Upcoming appointment soon",
-      upcomingNextTwoHours: "Upcoming in next 2 hours",
+      upcomingNextTwoHours: "Active & upcoming (2 h)",
+      upcomingNextTwoHoursHelper: "In-progress or starting within the next 2 hours.",
+      viewDetails: "View details",
       subscription: {
         title: "Subscription",
         plan: "Plan",
@@ -1094,9 +1278,43 @@ export const centerAdminDictionaries: Record<
       title: "Patients",
       subtitle: "Manage patient records for this center only.",
       addPatient: "Add Patient",
+      addFirstPatient: "Add First Patient",
       editPatient: "Edit Patient",
       detailsTitle: "Patient Details",
       searchPlaceholder: "Search by patient name or phone",
+      totalPatients: "Total Patients",
+      activePatients: "Active Patients",
+      archivedPatients: "Archived Patients",
+      newPatientsThisMonth: "New This Month",
+      filters: "Filters",
+      allGenders: "All genders",
+      allStatuses: "All statuses",
+      archiveFilter: "Archive state",
+      allArchiveStates: "All records",
+      activeOnly: "Active only",
+      archivedOnly: "Archived only",
+      hasUpcomingAppointment: "Has upcoming appointment",
+      hasReceivables: "Has receivables",
+      unavailableFilter: "Needs summary data",
+      filterAll: "All",
+      filterYes: "Yes",
+      filterNo: "No",
+      treatmentPlansCount: "Treatment plans",
+      overdueSessionsCount: "Overdue sessions",
+      lastSession: "Last visit",
+      appointmentsCount: "Appointments",
+      nextSession: "Next session",
+      outstandingBalance: "Outstanding balance",
+      upcomingAppointmentsCount: "Upcoming appointments",
+      noData: "None",
+      quickActions: "Quick actions",
+      createAppointment: "Create appointment",
+      createTreatmentPlan: "Create treatment plan",
+      createInvoice: "Create invoice",
+      unavailableAction: "This action is not available yet.",
+      moreActions: "More actions",
+      paginationSummary: (shown, total) => `Showing ${shown} of ${total} patients`,
+      paginationPrepared: "Pagination ready for larger lists",
       emptyTitle: "No patients yet",
       emptyBody: "Create the first patient record for this center.",
       noResultsTitle: "No matching patients",
@@ -1200,12 +1418,28 @@ export const centerAdminDictionaries: Record<
       followUpSettings: "Follow-up settings",
       followUpDescription:
         "Automatically create reminders when a treatment appointment is completed.",
-      defaultIntervalDays: "Default interval in days",
+      followUp: {
+        none: "No follow-up",
+        sessionBasedPlan: "Session-count treatment plan",
+        sessionBasedHelper: "Automatically completes after all sessions are completed.",
+        recurring: "Continuous recurring follow-up",
+        recurringHelper: "Continues sending periodic reminders without a fixed session count.",
+      },
+      recurringIntervalLabel: "Repeat every",
+      recurringUnitDay: "Days",
+      recurringUnitWeek: "Weeks",
+      recurringUnitMonth: "Months",
+      recurringUnitYear: "Years",
+      autoWhatsappReminderEnabled: "Enable automatic WhatsApp reminder",
+      autoReminderDaysBefore: "Reminder days before due date",
+      defaultIntervalDays: "Reminder interval (days)",
       planType: "Plan type",
-      fixedInterval: "Fixed interval",
-      sessionPlan: "Session-based plan",
+      fixedInterval: "Session-count treatment plan",
+      sessionPlan: "Session-count treatment plan",
       createNextReminderAutomatically: "Create next reminder automatically",
       totalRecommendedSessions: "Total recommended sessions",
+      totalSessionsSummary: (count: number) => `Total sessions: ${count} sessions`,
+      totalSessionsCalculated: "Calculated automatically from treatment phases",
       whatsappMessageArabic: "WhatsApp message in Arabic",
       whatsappMessageHebrew: "WhatsApp message in Hebrew",
       whatsappMessageEnglish: "WhatsApp message in English",
@@ -1214,12 +1448,28 @@ export const centerAdminDictionaries: Record<
       intervalDays: "Interval in days",
       addRule: "Add rule",
       removeRule: "Remove rule",
-      followUpRuleHelper:
-        "The system will automatically create a reminder after each completed treatment session.",
+      followUpRuleHelper: "Divide the plan into phases by session count and reminder interval.",
+      treatmentPhases: "Treatment Phases",
+      treatmentPlanTemplates: "Treatment plan templates",
+      treatmentPlanTemplatesHelper:
+        "Create selectable protocols for this service. Patient plans keep a snapshot of the selected template.",
+      addTreatmentTemplate: "Add template",
+      noTreatmentTemplates:
+        "No templates yet. Add protocols such as light, standard, or intensive plans.",
+      treatmentTemplateTitle: (index: number) => `Template ${index}`,
+      defaultTreatmentTemplate: "Default",
+      activeTreatmentTemplate: "Active",
+      sortOrder: "Sort order",
+      templateUsesDefaultInterval:
+        "No phase rules set. The template will use its default interval.",
+      deleteTreatmentTemplate: "Delete template",
+      treatmentTemplateSelect: "Choose treatment plan",
+      treatmentTemplateOverrideHint:
+        "The selected template fills the plan, and you can still customize it for this patient.",
       phaseTitle: (index: number) => `Treatment phase ${index}`,
       reminderAfterDays: (days: number) => `Reminder after ${days} days`,
       previewSessionLine: (session: number, days: number) =>
-        `Session ${session} → after ${days} days`,
+        days === 0 ? `Session ${session} (Appointment day)` : `Session ${session} → after ${days} days`,
       planPreview: "Plan preview",
       laserPreset: "Laser 8 sessions",
       hijamaPreset: "Preventive hijama",
@@ -1227,11 +1477,15 @@ export const centerAdminDictionaries: Record<
       applyPreset: "Apply preset",
       editPhase: "Edit",
       deletePhase: "Delete phase",
+      planCalcExplanation: "Session 1 is the appointment itself. Each subsequent session is scheduled after the phase interval.",
+      planPreviewPhaseLabel: (from: number, to: number, days: number) => `Sessions ${from}–${to} · Every ${days} days`,
       overlappingRanges: "Some session ranges overlap.",
       uncoveredSessions: (range: string) =>
         `Sessions ${range} do not have a follow-up rule.`,
       invalidIntervals: "Reminder interval must be a positive number of days.",
       invalidRangeOrder: "Start session must be less than or equal to end session.",
+      firstPhaseMustStartAtOne: "First phase must start at session 1.",
+      noGapsAllowed: "Treatment phases must be consecutive with no gaps.",
       deleteService: "Delete Permanently",
       deleteServiceConfirmTitle: "Delete Service Permanently",
       deleteServiceConfirmBody:
@@ -1242,6 +1496,15 @@ export const centerAdminDictionaries: Record<
       deleteServiceBlockedTooltip:
         "Cannot delete this service because it is linked to appointments, invoices, or booking requests. Archive it instead.",
       deleted: "Service deleted permanently.",
+      followUpBadge: "Follow-up Plan",
+      noFollowUpBadge: "No Follow-up",
+      sessionBasedPlanLabel: "Session-count treatment plan",
+      recurringContinuousLabel: "Continuous recurring follow-up",
+      templateCountBadge: (count: number) => `${count} template${count === 1 ? "" : "s"}`,
+      defaultTemplateSummary: (name: string, sessions: number) => `Default: ${name} · ${sessions} sessions`,
+      totalSessionsBadge: (count: number) => `${count} sessions total`,
+      intervalDaysBadge: (days: number) => `Every ${days} days`,
+      followUpAutoHint: "This service auto-creates a follow-up plan when an appointment is completed",
     },
     staff: {
       title: "Staff",
@@ -1262,6 +1525,9 @@ export const centerAdminDictionaries: Record<
       email: "Email",
       password: "Password",
       passwordOptional: "Optional on edit",
+      providerEnabled: "Can provide services / show in provider list",
+      providerEnabledHelper:
+        "When enabled, this active staff member appears in appointment provider lists regardless of role.",
       role: "Role",
       status: "Status",
       createdAt: "Created",
@@ -1363,6 +1629,14 @@ export const centerAdminDictionaries: Record<
       creditSourceManual: "Manual adjustment",
       creditSourceAdjustment: "Adjustment",
       creditUsageLabel: "Credit used",
+      invoiceTotalDesc: "Full value of all services in this appointment.",
+      paidAmountDesc: "Total amount already collected from the patient.",
+      balanceDueDesc: "Amount still owed by the patient.",
+      balanceDueTooltip: "Balance Due = Invoice Total − Paid",
+      creditBalanceDesc: "Stored credit available for future bills or sessions.",
+      statusPaidDesc: "Invoice fully collected.",
+      statusPartialDesc: "Part paid — a balance remains.",
+      statusPendingDesc: "No payment received yet.",
     },
     appointments: {
       title: "Appointments",
@@ -1377,6 +1651,9 @@ export const centerAdminDictionaries: Record<
       dateFilter: "Date",
       providerFilter: "Provider",
       allProviders: "All Providers",
+      allBranches: "All Branches",
+      branch: "Branch",
+      chooseBranch: "Choose branch",
       emptyTitle: "No appointments yet",
       emptyBody: "Create the first appointment for this center.",
       noResultsTitle: "No matching appointments",
@@ -1449,15 +1726,18 @@ export const centerAdminDictionaries: Record<
       viewInvoice: "View Invoice",
       invoiceRequiresCompleted: "Invoice can only be created after the appointment is completed.",
       invoiceFullyPaid: "This invoice is fully paid.",
+      needsInvoiceBadge: "Needs Invoice",
       bookingRequestDetails: "Booking Request Details",
       bookingRequester: "Requester",
       bookingRequesterPhone: "Requester Phone",
       bookingRequestNotes: "Request Notes",
       requestedBy: (name) => `Requested by: ${name}`,
       slotBooked: "Booked",
+      currentAppointmentSlot: "Current appointment",
       loadingSlots: "Loading available times...",
       noSlots: "No available slots for this date.",
       selectServiceAndDate: "Select a service and date to see available times.",
+      enterDurationToSeeSlots: "Enter session duration to see available times.",
       calendarView: "Calendar",
       listView: "List",
       dayView: "Day",
@@ -1497,6 +1777,27 @@ export const centerAdminDictionaries: Record<
       invoiceBlockedCancelled: "Invoice cannot be created for a cancelled appointment.",
       followUpPlanExists: "Follow-up Plan Active",
       followUpPlanNone: "No Follow-up Plan",
+      followUpPlanSection: "Follow-up Plan",
+      viewInFollowUps: "View in Follow-ups",
+      followUpPlanLoading: "Loading plan...",
+      followUpSession: (n: number) => `Session ${n}`,
+      followUpPlanNoRecord: "No follow-up plan for this appointment",
+      followUpRecurringBadge: "♾ Recurring",
+      followUpNextDue: "Next follow-up",
+      followUpLastCompleted: "Last completed",
+      followUpPhaseHeader: (phase: number, days: number) => `Phase ${phase} — every ${days} days`,
+      followUpPhaseTitle: (phase: number) => `Treatment Phase ${phase}`,
+      followUpPhaseSubtitle: (from: number, to: number, days: number) => `Sessions ${from} → ${to} • Every ${days} days`,
+      followUpNextSessionBadge: "Next Session",
+      followUpRelativeToday: "Today",
+      followUpRelativeOverdue: (days: number) => days === 1 ? "1 day overdue" : `${days} days overdue`,
+      followUpRelativeRemaining: (days: number) => days === 1 ? "1 day left" : `${days} days left`,
+      reminderMessagesSection: "Reminder Messages",
+      followUpEvery: "Every",
+      followUpIntervalDay: (n: number) => n === 1 ? "day" : "days",
+      followUpIntervalWeek: (n: number) => n === 1 ? "week" : "weeks",
+      followUpIntervalMonth: (n: number) => n === 1 ? "month" : "months",
+      followUpIntervalYear: (n: number) => n === 1 ? "year" : "years",
     },
     reports: {
       title: "Financial Reports",
@@ -1527,7 +1828,8 @@ export const centerAdminDictionaries: Record<
       revenueByDay: "Revenue by day",
       revenueByPaymentStatus: "Revenue by payment status",
       revenueByService: "Revenue by service",
-      noChartData: "No chart data for this period.",
+      noChartData: "Not enough data for this period.",
+      viewSessions: "View sessions",
       statusPaid: "Paid",
       statusPending: "Pending",
       statusPartial: "Partial",
@@ -1538,6 +1840,57 @@ export const centerAdminDictionaries: Record<
       topPatientsVisits: "visits",
       topPatientsCredit: "Credit",
       topPatientsVip: "VIP",
+      receivablesSectionTitle: "Outstanding Receivables",
+      receivablesSectionHelper: "Shows every open balance, even when it is outside the selected period.",
+      receivablesDetailsTitle: "Receivables Details",
+      totalReceivables: "Total Receivables",
+      patientsWithDebt: "Patients with Balances",
+      unpaidInvoices: "Unpaid Invoices",
+      partiallyPaidInvoices: "Partially Paid Invoices",
+      highestDebt: "Highest Debt",
+      invoiceCountIncluded: "Invoices in selected range",
+      noFinancialDataInRange: "No financial data exists in the selected period.",
+      selectedDateRange: "Selected date range",
+      openReceivablesOnly: "Open receivables only",
+      overdueOnly: "Overdue only",
+      receivablesByPaymentStatus: "Receivables by payment status",
+      topPatientsByDebt: "Top Patients by Debt",
+      revenueVsReceivables: "Revenue vs Receivables",
+      revenueLabel: "Revenue",
+      receivablesLabel: "Receivables",
+      patient: "Patient",
+      phone: "Phone",
+      service: "Service",
+      invoiceTotal: "Invoice Total",
+      paidAmount: "Paid",
+      remainingAmount: "Remaining",
+      paymentStatus: "Payment Status",
+      lastPayment: "Last Payment",
+      dueDate: "Due Date",
+      notRecorded: "Not recorded",
+      noReceivablesData: "No receivables match these filters.",
+      todayOverviewTitle: "Today's Overview",
+      appointmentsTodayTotal: "Appointments Today",
+      appointmentsTodayCompleted: "Completed Today",
+      appointmentsTodayUpcoming: "Upcoming Today",
+      delayedFollowUps: "Delayed Follow-ups",
+      newPatientsThisMonth: "New Patients This Month",
+      activeTreatmentPlans: "Active Treatment Plans",
+      revenueInsightsTitle: "Revenue Insights",
+      appointmentAnalyticsTitle: "Appointment Analytics",
+      totalInPeriod: "Total Appointments",
+      noShowCount: "No-Shows",
+      cancellationRate: "Cancellation Rate",
+      noShowRate: "No-Show Rate",
+      topProvidersTitle: "Top Providers",
+      viewFullReceivables: "View Full Receivables",
+      hideFullReceivables: "Hide Receivables",
+      topDebtorsTitle: "Top Outstanding Balances",
+      completedWithoutInvoiceTitle: "Completed Without Invoice",
+      completedWithoutInvoiceAlert: (count: number) => `${count} completed session${count === 1 ? '' : 's'} without an invoice`,
+      completedWithoutInvoiceEmpty: "All completed sessions have invoices.",
+      showAllUnbilled: "All time — ignore date range",
+      showPeriodUnbilled: "Show period only",
     },
     profile: {
       title: "My Profile",
@@ -1583,6 +1936,11 @@ export const centerAdminDictionaries: Record<
         billingMarkPaid: "Cancel Invoices",
         paymentsView: "View Payments",
         paymentsCreate: "Record Payments",
+        expensesView: "View Expenses",
+        expensesCreate: "Create Expenses",
+        expensesEdit: "Edit Expenses",
+        expensesDelete: "Delete Expenses",
+        expensesReports: "Expense Reports",
         reportsView: "View Reports",
         settingsView: "View Settings",
         permissionsView: "View Role Permissions",
@@ -1789,23 +2147,23 @@ export const centerAdminDictionaries: Record<
     languages: { en: "الإنجليزية", ar: "العربية", he: "العبرية" },
     login: { blockedCenter: "هذا المركز غير نشط. يرجى التواصل مع دعم رويال كير.", centerNotFound: "صفحة تسجيل دخول هذا المركز غير متاحة.", title: "تسجيل دخول المركز", subtitle: "سجل الدخول باستخدام حساب طاقم المركز.", email: "البريد الإلكتروني", password: "كلمة المرور", submit: "تسجيل الدخول", submitting: "جار تسجيل الدخول...", error: "البريد الإلكتروني أو كلمة المرور غير صحيحة، أو لا يمكن لهذا الحساب تسجيل الدخول." },
     shell: { accessDeniedBody: "لا يملك دورك صلاحية فتح هذه الصفحة.", accessDeniedTitle: "تم رفض الوصول", menu: "القائمة", close: "إغلاق", language: "اللغة", logout: "تسجيل الخروج", loggingOut: "جار تسجيل الخروج...", navGroups: { dailyOps: "العمليات اليومية", admin: "الإدارة", marketing: "التسويق والموقع", content: "المحتوى" } },
-    nav: { dashboard: "لوحة التحكم", patients: "المرضى", appointments: "المواعيد", bookingRequests: "طلبات الحجز", followUps: "المتابعات", services: "الخدمات", staff: "الطاقم", billing: "الفوترة", reports: "التقارير", notifications: "الإشعارات", schedule: "الدوام", settings: "الإعدادات", permissions: "صلاحيات الأدوار", gallery: "معرض الصور", reviews: "التقييمات", beforeAfter: "قبل وبعد", team: "الفريق", offers: "العروض", seo: "SEO", domain: "النطاقات", website: "الموقع", marketing: "التسويق", websiteAnalytics: "تحليلات الموقع" },
+    nav: { dashboard: "لوحة التحكم", patients: "المرضى", appointments: "المواعيد", bookingRequests: "طلبات الحجز", followUps: "المتابعات", services: "الخدمات", staff: "الطاقم", billing: "الفوترة", expenses: "المصاريف", reports: "التقارير", notifications: "الإشعارات", schedule: "الدوام", settings: "الإعدادات", permissions: "صلاحيات الأدوار", gallery: "معرض الصور", reviews: "التقييمات", beforeAfter: "قبل وبعد", team: "الفريق", offers: "العروض", seo: "SEO", domain: "النطاقات", website: "الموقع", marketing: "التسويق", websiteAnalytics: "تحليلات الموقع" },
     schedule: { addClosedDay: "إضافة يوم إغلاق", addLeave: "إضافة إجازة", centerHours: "دوام المركز", closed: "مغلق", closedDays: "أيام الإغلاق / العطل", date: "التاريخ", delete: "حذف", endTime: "النهاية", helper: "هذه الإعدادات تتحكم في أوقات الحجز العام.", invalidRange: "يجب أن يكون وقت النهاية بعد البداية.", leave: "إجازة", loadError: "تعذر تحميل إعدادات الدوام. يرجى المحاولة مرة أخرى.", noClosedDays: "لا توجد أيام إغلاق بعد.", noLeave: "لا توجد إجازات للمقدمين بعد.", noProviders: "لا يوجد مقدمون متاحون.", open: "مفتوح", providerHours: "دوام المقدم", providerLeave: "إجازات المقدمين", providerSelect: "المقدم", reason: "السبب", save: "حفظ", saved: "تم حفظ الدوام.", startTime: "البداية", subtitle: "إعداد دوام المركز والعطل وتوفر المقدمين.", title: "الدوام" },
     bookingRequests: { title: "طلبات الحجز", subtitle: "راجع وأدر طلبات المواعيد المقدمة من الزوار.", loading: "جار تحميل طلبات الحجز...", loadError: "تعذر تحميل طلبات الحجز. يرجى المحاولة مرة أخرى.", empty: "لا توجد طلبات حجز بعد", emptyBody: "عندما يطلب الزوار مواعيد، ستظهر هنا.", filterAll: "الكل", filterPending: "قيد الانتظار", filterAccepted: "مقبولة", filterRejected: "مرفوضة", fullName: "الاسم", phone: "الهاتف", service: "الخدمة", requestedDate: "التاريخ", requestedTime: "الوقت", notes: "ملاحظات", status: "الحالة", statusPending: "قيد الانتظار", statusAccepted: "مقبول", statusRejected: "مرفوض", createdAt: "تاريخ الاستلام", accept: "قبول", reject: "رفض", accepting: "جار القبول...", rejecting: "جار الرفض...", contactWhatsApp: "واتساب", acceptSuccess: "تم قبول الطلب وإنشاء الموعد.", rejectSuccess: "تم رفض الطلب.", errorAlreadyProcessed: "تمت معالجة هذا الطلب بالفعل.", errorGeneric: "حدث خطأ. يرجى المحاولة مرة أخرى.", pendingCount: (n: number) => `${n} قيد الانتظار`, openAppointment: "فتح الموعد", linkedAppointmentUnavailable: "مقبول، لكن الموعد المرتبط غير متاح.", patientConflictMessage: (patientName: string) => `هذا الهاتف مرتبط بالفعل بالمريض ${patientName}. هل تريد ربط الطلب بالمريض الحالي أم إنشاء مريض جديد؟`, existingPatient: "المريض الحالي", bookingPatient: "طلب الحجز", linkToExistingPatient: "ربط بالمريض الحالي", createNewPatient: "إنشاء مريض جديد" },
-    dashboard: { eyebrow: "مساحة عمل المركز", title: "لوحة التحكم", subtitle: "لوحة التحكم الخاصة بالمركز.", currentUser: "المستخدم الحالي", role: "الدور", centerStatus: "حالة المركز", loading: "جار تحميل لوحة التحكم...", loadError: "تعذر تحميل إحصاءات لوحة التحكم. يرجى المحاولة مرة أخرى.", sessionExpired: "يرجى تسجيل الدخول مرة أخرى.", alerts: "التنبيهات", appointmentsToday: "مواعيد اليوم", noAlerts: "لا توجد تنبيهات مهمة الآن.", noShowToday: "فائتة / لم يحضر", patientsWithCredit: "مرضى لديهم رصيد", pendingInvoices: "فواتير معلقة", quickActions: "إجراءات سريعة", recentAppointments: "آخر المواعيد", recentInvoices: "آخر الفواتير", revenueSnapshot: "لمحة الإيرادات", todayActivity: "نشاط اليوم", upcomingAppointmentSoon: "موعد قريب", upcomingNextTwoHours: "خلال الساعتين القادمتين", subscription: { title: "الاشتراك", plan: "الباقة", status: "الحالة", endDate: "تاريخ الانتهاء", remainingDays: (days: number) => `متبقي ${days} أيام`, oneDayRemaining: "متبقي يوم واحد", expiresToday: "ينتهي اليوم", expiredSince: (days: number) => `منتهي منذ ${days} أيام`, suspended: "الحساب موقوف", noSubscription: "لا يوجد اشتراك فعال" } },
+    dashboard: { eyebrow: "مساحة عمل المركز", title: "لوحة التحكم", subtitle: "لوحة التحكم الخاصة بالمركز.", currentUser: "المستخدم الحالي", role: "الدور", centerStatus: "حالة المركز", loading: "جار تحميل لوحة التحكم...", loadError: "تعذر تحميل إحصاءات لوحة التحكم. يرجى المحاولة مرة أخرى.", sessionExpired: "يرجى تسجيل الدخول مرة أخرى.", alerts: "التنبيهات", appointmentsToday: "مواعيد اليوم", appointmentsTodayHelper: "كل مواعيد اليوم بجميع الحالات.", completedToday: "المكتملة اليوم", completedTodayHelper: "المواعيد التي اكتملت اليوم.", noAlerts: "لا توجد تنبيهات مهمة الآن.", noShowToday: "فائتة / لم يحضر", noShowTodayHelper: "مواعيد انتهى وقتها ولم تكتمل أو تم تعليمها كـ لم يحضر.", patientsWithCredit: "مرضى لديهم رصيد", pendingInvoices: "فواتير معلقة", quickActions: "إجراءات سريعة", recentAppointments: "آخر المواعيد", recentInvoices: "آخر الفواتير", revenueSnapshot: "لمحة الإيرادات", todayActivity: "نشاط اليوم", upcomingAppointmentSoon: "موعد قريب", upcomingNextTwoHours: "المواعيد الحالية والقريبة", upcomingNextTwoHoursHelper: "المواعيد غير المكتملة الجارية الآن أو خلال الساعتين القادمتين.", viewDetails: "عرض التفاصيل", subscription: { title: "الاشتراك", plan: "الباقة", status: "الحالة", endDate: "تاريخ الانتهاء", remainingDays: (days: number) => `متبقي ${days} أيام`, oneDayRemaining: "متبقي يوم واحد", expiresToday: "ينتهي اليوم", expiredSince: (days: number) => `منتهي منذ ${days} أيام`, suspended: "الحساب موقوف", noSubscription: "لا يوجد اشتراك فعال" } },
     subscriptionNotice: { activeTitle: "الاشتراك نشط", expiringSoonTitle: "الاشتراك ينتهي قريباً", expiringSoonBody: (days: number) => `ينتهي اشتراكك خلال ${days} ${days === 1 ? "يوم" : "أيام"}. يرجى التواصل مع الدعم للتجديد.`, expiredTitle: "الاشتراك منتهي", expiredBody: "انتهى اشتراكك. قد تكون بعض الميزات محدودة. يرجى التواصل مع الدعم.", suspendedTitle: "الحساب موقوف", suspendedBody: "تم إيقاف حسابك. يرجى التواصل مع الدعم لاستعادة الوصول.", contactSupport: "التواصل مع الدعم" },
     subscriptionBanner: { expiringTitle: (days: number) => `اشتراكك ينتهي خلال ${days} أيام`, expiresTodayTitle: "اشتراكك ينتهي اليوم", expiredTitle: "انتهى اشتراكك، يرجى التواصل مع الإدارة لتجديده.", suspendedTitle: "تم إيقاف حسابك، يرجى التواصل مع الإدارة.", contactAdmin: "تواصل مع الإدارة", renewButton: "تجديد الاشتراك", contactAdminButton: "تواصل مع الإدارة", whatsappExpiringMessage: (centerName: string, days: number) => `مرحباً، أنا من مركز ${centerName}. اشتراكنا في RoyalCare سينتهي خلال ${days} أيام، نرجو المساعدة في التجديد.`, whatsappExpiringTodayMessage: (centerName: string) => `مرحباً، أنا من مركز ${centerName}. اشتراكنا في RoyalCare ينتهي اليوم، نرجو المساعدة في التجديد فوراً.`, gracePeriodTitle: (days: number) => `انتهى اشتراكك. متبقي ${days} ${days === 1 ? "يوم" : "أيام"} من فترة السماح.`, whatsappExpiredMessage: (centerName: string) => `مرحباً، أنا من مركز ${centerName}. اشتراكنا في RoyalCare منتهي حالياً، نرجو المساعدة في التجديد وإعادة التفعيل.`, whatsappGracePeriodMessage: (centerName: string, days: number) => `مرحباً، أنا من مركز ${centerName}. انتهى اشتراكنا في RoyalCare ولدينا ${days} ${days === 1 ? "يوم" : "أيام"} متبقية في فترة السماح. نرجو المساعدة في التجديد في أقرب وقت.`, whatsappSuspendedMessage: (centerName: string) => `مرحباً، أنا من مركز ${centerName}. حسابنا في RoyalCare موقوف حالياً، نرجو المساعدة في إعادة التفعيل.` },
     subscriptionRenewal: { title: "طلب تجديد الاشتراك", subtitle: "سيُرسَل طلبك إلى فريق إدارة RoyalCare.", notePlaceholder: "ملاحظة اختيارية لفريق الدعم...", submitButton: "إرسال الطلب", submittingButton: "جار الإرسال...", cancelButton: "إلغاء", successTitle: "تم إرسال الطلب", successBody: "تم استلام طلب التجديد. سيتواصل معك فريق الإدارة قريباً.", duplicateTitle: "تم إرسال الطلب مسبقاً", duplicateBody: "لقد أرسلت طلب تجديد خلال آخر 24 ساعة. يرجى انتظار رد فريق الإدارة.", errorTitle: "تعذر إرسال الطلب", errorBody: "حدث خطأ أثناء إرسال طلبك. يرجى المحاولة مرة أخرى أو التواصل مع الدعم مباشرةً." },
     cards: { patients: "المرضى", appointments: "المواعيد", services: "الخدمات", staff: "مستخدمو الطاقم" },
     common: { cancel: "إلغاء", close: "إغلاق", save: "حفظ", saving: "جار الحفظ...", search: "بحث", view: "عرض", edit: "تعديل", archive: "أرشفة", activate: "تفعيل", actions: "الإجراءات", notAvailable: "غير متاح" },
-    patients: { title: "المرضى", subtitle: "إدارة سجلات المرضى الخاصة بهذا المركز فقط.", addPatient: "إضافة مريض", editPatient: "تعديل مريض", detailsTitle: "تفاصيل المريض", searchPlaceholder: "ابحث باسم المريض أو رقم الهاتف", emptyTitle: "لا توجد سجلات مرضى بعد", emptyBody: "أنشئ أول سجل مريض لهذا المركز.", noResultsTitle: "لا توجد نتائج مطابقة", noResultsBody: "جرّب اسمًا أو رقم هاتف آخر.", loading: "جار تحميل المرضى...", fullName: "الاسم الكامل", fullNameAr: "الاسم بالعربية", fullNameHe: "الاسم بالعبرية", fullNameEn: "الاسم بالإنجليزية", namesOptionalHint: "اختياري: أدخل اسم المريض بلغات أخرى للعرض متعدد اللغات.", phone: "الهاتف", email: "البريد الإلكتروني", gender: "الجنس", dateOfBirth: "تاريخ الميلاد", nationalId: "رقم الهوية", notes: "ملاحظات", status: "الحالة", createdAt: "تاريخ الإنشاء", updatedAt: "آخر تحديث", submit: "إنشاء مريض", update: "تحديث المريض", fieldRequired: "هذا الحقل مطلوب.", invalidPhone: "أدخل رقم هاتف صالحًا.", duplicatePhone: "يوجد مريض بهذا الهاتف بالفعل.", loadError: "تعذر تحميل المرضى. يرجى المحاولة مرة أخرى.", saved: "تم حفظ المريض.", archived: "تمت أرشفة المريض.", activated: "تم تفعيل المريض.", notFound: "المريض غير موجود.", deletePatient: "حذف نهائياً", deleteConfirmTitle: "حذف المريض نهائياً", deleteConfirmBody: "هل أنت متأكد؟ سيتم حذف المريض نهائياً ولا يمكن التراجع.", deleteConfirmButton: "حذف نهائياً", deleteBlocked: "لا يمكن الحذف: يوجد مواعيد أو فواتير أو متابعات مرتبطة بهذا المريض.", deleteBlockedTooltip: "لا يمكن حذف هذا المريض لأنه مرتبط بسجلات مثل مواعيد أو فواتير أو متابعات. يمكنك أرشفته بدلاً من ذلك.", deleteBlockedWithCounts: (counts) => { const parts = []; if (counts.appointments > 0) parts.push(`${counts.appointments} موعد`); if (counts.invoices > 0) parts.push(`${counts.invoices} فاتورة`); if (counts.payments > 0) parts.push(`${counts.payments} دفعة`); if (counts.followUps > 0) parts.push(`${counts.followUps} متابعة`); if (counts.creditTransactions > 0) parts.push(`${counts.creditTransactions} معاملة ائتمانية`); return `لا يمكن الحذف: يوجد ${parts.join(" و ")}. يمكنك أرشفته بدلاً من ذلك.`; }, deleted: "تم حذف المريض نهائياً.", patientPortal: { title: "بوابة المريض", generate: "إنشاء رابط بوابة المريض", generating: "جارٍ إنشاء الرابط…", copyLink: "نسخ الرابط", copied: "تم النسخ!", openPortal: "فتح البوابة", shareWhatsApp: "مشاركة عبر واتساب", error: "تعذّر إنشاء رابط البوابة. يرجى المحاولة مرة أخرى." } },
-    services: { title: "الخدمات", subtitle: "إدارة خدمات المركز والمدة والأسعار وحالة التفعيل.", addService: "إضافة خدمة", editService: "تعديل خدمة", detailsTitle: "تفاصيل الخدمة", searchPlaceholder: "ابحث باسم الخدمة", filterAll: "الكل", filterActive: "نشطة", filterArchived: "مؤرشفة", emptyTitle: "لا توجد خدمات بعد", emptyBody: "أنشئ أول خدمة لهذا المركز.", noResultsTitle: "لا توجد خدمات مطابقة", noResultsBody: "جرّب اسم خدمة آخر.", loading: "جار تحميل الخدمات...", loadError: "تعذر تحميل الخدمات. يرجى المحاولة مرة أخرى.", nameEn: "الاسم بالإنجليزية", nameAr: "الاسم بالعربية", nameHe: "الاسم بالعبرية", descriptionEn: "الوصف بالإنجليزية", descriptionAr: "الوصف بالعربية", descriptionHe: "الوصف بالعبرية", bufferMinutes: "وقت فاصل بعد الخدمة بالدقائق", durationMinutes: "المدة", price: "السعر", currency: "العملة", status: "الحالة", createdAt: "تاريخ الإنشاء", updatedAt: "آخر تحديث", submit: "إنشاء خدمة", update: "تحديث الخدمة", saved: "تم حفظ الخدمة.", archived: "تمت أرشفة الخدمة.", activated: "تم تفعيل الخدمة.", notFound: "الخدمة غير موجودة.", optional: "اختياري", fieldRequired: "هذا الحقل مطلوب.", invalidBuffer: "أدخل وقت فصل صالحًا.", invalidDuration: "أدخل مدة صالحة.", invalidPrice: "أدخل سعرًا صالحًا.", invalidCurrency: "أدخل رمز عملة صالحًا.", durationUnitMinutes: "دقيقة", durationUnitHours: "ساعة", enableFollowUpPlan: "تفعيل خطة المتابعة", followUpSettings: "إعدادات المتابعة", followUpDescription: "إنشاء تذكيرات متابعة تلقائياً عند إكمال موعد العلاج.", defaultIntervalDays: "الفترة الافتراضية بالأيام", planType: "نوع الخطة", fixedInterval: "فترة ثابتة", sessionPlan: "خطة حسب الجلسات", createNextReminderAutomatically: "إنشاء التذكير التالي تلقائياً", totalRecommendedSessions: "عدد الجلسات المقترحة", whatsappMessageArabic: "رسالة واتساب بالعربية", whatsappMessageHebrew: "رسالة واتساب بالعبرية", whatsappMessageEnglish: "رسالة واتساب بالإنجليزية", sessionsFrom: "من الجلسة", sessionsTo: "إلى الجلسة", intervalDays: "الفترة بالأيام", addRule: "إضافة قاعدة", removeRule: "حذف القاعدة", followUpRuleHelper: "سيقوم النظام بإنشاء تذكير تلقائي للمريض بعد انتهاء الجلسة حسب الخطة المحددة.", phaseTitle: (index: number) => `مرحلة العلاج ${index}`, reminderAfterDays: (days: number) => `التذكير بعد ${days} يوم`, previewSessionLine: (session: number, days: number) => `الجلسة ${session} → بعد ${days} يوم`, planPreview: "معاينة الخطة", laserPreset: "ليزر 8 جلسات", hijamaPreset: "حجامة وقائية", skincarePreset: "تنظيف بشرة شهري", applyPreset: "تطبيق الخطة", editPhase: "تعديل", deletePhase: "حذف المرحلة", overlappingRanges: "توجد جلسات متداخلة بين المراحل.", uncoveredSessions: (range: string) => `الجلسات ${range} لا تحتوي على قاعدة متابعة`, invalidIntervals: "الفترة بالأيام يجب أن تكون رقماً صحيحاً أكبر من صفر.", invalidRangeOrder: "رقم بداية الجلسة يجب أن يكون أقل من أو يساوي رقم النهاية.", deleteService: "حذف نهائياً", deleteServiceConfirmTitle: "حذف الخدمة نهائياً", deleteServiceConfirmBody: "هل أنت متأكد؟ سيتم حذف الخدمة نهائياً ولا يمكن التراجع.", deleteServiceConfirmButton: "حذف نهائياً", deleteServiceBlocked: "لا يمكن الحذف: هذه الخدمة مرتبطة بمواعيد أو فواتير أو طلبات حجز.", deleteServiceBlockedTooltip: "لا يمكن حذف هذه الخدمة لأنها مرتبطة بمواعيد أو فواتير أو طلبات حجز. يمكنك أرشفتها بدلاً من ذلك.", deleted: "تم حذف الخدمة نهائياً." },
-    staff: { title: "الطاقم", subtitle: "إدارة مستخدمي الطاقم والأدوار وحالة الوصول.", addStaff: "إضافة موظف", editStaff: "تعديل موظف", detailsTitle: "تفاصيل الموظف", searchPlaceholder: "ابحث بالاسم أو البريد الإلكتروني", filterAllRoles: "كل الأدوار", filterAllStatuses: "كل الحالات", emptyTitle: "لا يوجد مستخدمو طاقم بعد", emptyBody: "أنشئ أول مستخدم طاقم لهذا المركز.", noResultsTitle: "لا يوجد طاقم مطابق", noResultsBody: "جرّب اسمًا أو بريدًا أو دورًا أو حالة أخرى.", loading: "جار تحميل الطاقم...", loadError: "تعذر تحميل الطاقم. يرجى المحاولة مرة أخرى.", fullName: "الاسم الكامل", email: "البريد الإلكتروني", password: "كلمة المرور", passwordOptional: "اختيارية عند التعديل", role: "الدور", status: "الحالة", createdAt: "تاريخ الإنشاء", updatedAt: "آخر تحديث", submit: "إنشاء موظف", update: "تحديث الموظف", saved: "تم حفظ الموظف.", activated: "تم تفعيل الموظف.", deactivated: "تم إلغاء تفعيل الموظف.", notFound: "الموظف غير موجود.", fieldRequired: "هذا الحقل مطلوب.", invalidEmail: "أدخل بريدًا إلكترونيًا صالحًا للموظف.", duplicateEmail: "يوجد مستخدم بهذا البريد بالفعل.", invalidPassword: "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل.", permissionsTitle: "صلاحيات الوصول", centerLabel: "المركز", phone: "الهاتف" },
-    billing: { title: "الفوترة", subtitle: "إدارة الفواتير اليدوية وسجلات الدفع لهذا المركز.", addInvoice: "إضافة فاتورة", invoiceTitle: "تفاصيل الفاتورة", searchPlaceholder: "ابحث باسم المريض أو رقم الهاتف", filterAllStatuses: "كل الحالات", filterAll: "الكل", emptyTitle: "لا توجد فواتير نشطة بعد", emptyBody: "أنشئ أول فاتورة لهذا المركز.", emptyPendingTitle: "لا توجد فواتير معلقة", emptyPendingBody: "جميع الفواتير مدفوعة أو ملغاة.", emptyPartialTitle: "لا توجد فواتير مدفوعة جزئيًا", emptyPartialBody: "لا توجد فواتير بدفعات جزئية حاليًا.", emptyPaidTitle: "لا توجد فواتير مدفوعة بعد", emptyPaidBody: "حدد فاتورة كمدفوعة لتظهر هنا.", emptyCancelledTitle: "لا توجد فواتير ملغاة", emptyCancelledBody: "ستظهر الفواتير الملغاة هنا.", loading: "جار تحميل الفواتير...", loadError: "تعذر تحميل الفواتير. يرجى المحاولة مرة أخرى.", patient: "المريض", service: "الخدمة", customService: "خدمة غير موجودة بالقائمة", customServiceName: "اسم الخدمة المخصصة", customServiceDuration: "مدة الخدمة المخصصة", customServicePrice: "سعر الخدمة المخصصة", saveCustomService: "حفظ كخدمة مستقبلية", customServiceBadge: "خدمة مخصصة", provider: "المقدم", providerOptional: "اختياري", noProvider: "بدون مقدم", selectPatient: "اختر مريضًا", selectService: "اختر خدمة", amount: "المبلغ", currency: "العملة", status: "الحالة", notes: "ملاحظات", notesOptional: "اختياري", createdAt: "تاريخ الإنشاء", updatedAt: "آخر تحديث", submit: "إنشاء فاتورة", markedPaid: "تم تحديد الفاتورة كمدفوعة.", invoiceFullyPaid: "الفاتورة مدفوعة بالكامل، لا يمكن إضافة دفعة جديدة.", cancelled: "تم إلغاء الفاتورة.", notFound: "الفاتورة غير موجودة.", fieldRequired: "هذا الحقل مطلوب.", invalidAmount: "أدخل مبلغًا صالحًا أكبر من الصفر.", markAsPaid: "تحديد كمدفوع", cancelInvoice: "إلغاء الفاتورة", reopenInvoice: "إعادة فتح الفاتورة", reopened: "تمت إعادة فتح الفاتورة كمعلقة.", addPayment: "إضافة دفعة", paymentHistory: "سجل الدفعات", paymentMethod: "طريقة الدفع", paymentDate: "تاريخ الدفع", paymentNotes: "ملاحظات", paymentNotesOptional: "اختياري", methodCash: "نقدي", methodBankTransfer: "تحويل بنكي", methodCheck: "شيك", methodOther: "أخرى", paymentAdded: "تم تسجيل الدفعة بنجاح.", noPayments: "لا توجد دفعات مسجلة بعد.", invoiceTotal: "إجمالي الفاتورة", paidAmount: "المدفوع", balanceDue: "الرصيد المستحق", paymentBy: "بواسطة", overpaymentError: "فشل تسجيل الدفعة. يرجى المحاولة مرة أخرى.", overpaymentCreditHint: "المبلغ الزائد سيُحفظ كرصيد ائتماني للمريض.", invalidPaymentDate: "أدخل تاريخ دفع صالحًا.", creditBalance: "الرصيد الائتماني", useCredit: "استخدام الرصيد", creditAmount: "مبلغ الرصيد", creditApplied: "تم تطبيق الرصيد بنجاح.", noCreditAvailable: "لا يوجد رصيد ائتماني متاح لهذا المريض.", insufficientCredit: "رصيد ائتماني غير كافٍ.", noCreditDue: "لا يوجد مبلغ مستحق لاستخدام الرصيد.", creditAdded: "تمت إضافة رصيد لحساب المريض.", overpaymentCreditNotice: "تم حفظ الدفع الزائد كرصيد للمريض.", creditSourceOverpayment: "من دفع زائد", creditSourceManual: "تعديل يدوي", creditSourceAdjustment: "تعديل", creditUsageLabel: "رصيد مستخدم" },
-    reports: { title: "التقارير المالية", subtitle: "الإيرادات والأرصدة المستحقة والنشاط للفترة المحددة.", loading: "جار تحميل التقرير...", loadError: "حدث خطأ في تحميل البيانات.", todayRevenue: "إيرادات اليوم", revenueThisMonth: "إيرادات هذا الشهر", paidInvoices: "الفواتير المدفوعة", pendingInvoices: "الفواتير المعلقة", overdueInvoices: "الفواتير المتأخرة", averageInvoiceValue: "متوسط قيمة الفاتورة", totalPaid: "إجمالي المحصّل", outstanding: "الرصيد المستحق", patientCredit: "رصيد المرضى", cancelledInvoices: "الفواتير الملغاة", appointmentsToday: "مواعيد اليوم", periodToday: "اليوم", periodLast7Days: "آخر 7 أيام", periodWeek: "هذا الأسبوع", periodMonth: "هذا الشهر", periodCustom: "مخصص", filterFrom: "من", filterTo: "إلى", applyFilter: "تطبيق", revenue: "الإيرادات", appointments: "المواعيد", revenueByDay: "الإيرادات حسب اليوم", revenueByPaymentStatus: "الإيرادات حسب حالة الدفع", revenueByService: "الإيرادات حسب الخدمة", noChartData: "لا توجد بيانات رسومية لهذه الفترة.", statusPaid: "مدفوع", statusPending: "معلق", statusPartial: "مدفوع جزئيًا", statusOverdue: "متأخر", topPatientsTitle: "أفضل المرضى", topPatientsEmpty: "لا توجد بيانات لهذه الفترة.", topPatientsTotalPaid: "إجمالي المدفوع", topPatientsVisits: "زيارة", topPatientsCredit: "الرصيد", topPatientsVip: "VIP" },
+    patients: { title: "المرضى", subtitle: "إدارة سجلات المرضى الخاصة بهذا المركز فقط.", addPatient: "إضافة مريض", addFirstPatient: "إضافة أول مريض", editPatient: "تعديل مريض", detailsTitle: "تفاصيل المريض", searchPlaceholder: "ابحث باسم المريض أو رقم الهاتف", totalPatients: "إجمالي المرضى", activePatients: "المرضى النشطون", archivedPatients: "المرضى المؤرشفون", newPatientsThisMonth: "مرضى جدد هذا الشهر", filters: "الفلاتر", allGenders: "كل الأجناس", allStatuses: "كل الحالات", archiveFilter: "الأرشفة", allArchiveStates: "كل السجلات", activeOnly: "النشط فقط", archivedOnly: "المؤرشف فقط", hasUpcomingAppointment: "لديه موعد قادم", hasReceivables: "لديه ذمم", unavailableFilter: "تحتاج بيانات ملخص", filterAll: "الكل", filterYes: "نعم", filterNo: "لا", treatmentPlansCount: "عدد الخطط العلاجية", overdueSessionsCount: "الجلسات المتأخرة", lastSession: "آخر زيارة", appointmentsCount: "عدد المواعيد", nextSession: "الجلسة القادمة", outstandingBalance: "الرصيد المستحق", upcomingAppointmentsCount: "المواعيد القادمة", noData: "لا يوجد", quickActions: "إجراءات سريعة", createAppointment: "إنشاء موعد", createTreatmentPlan: "إنشاء خطة علاج", createInvoice: "إنشاء فاتورة", unavailableAction: "هذا الإجراء غير متاح حاليًا.", moreActions: "إجراءات إضافية", paginationSummary: (shown, total) => `عرض ${shown} من ${total} مريض`, paginationPrepared: "جاهز للتقسيم إلى صفحات عند زيادة السجلات", emptyTitle: "لا توجد سجلات مرضى بعد", emptyBody: "أنشئ أول سجل مريض لهذا المركز.", noResultsTitle: "لا توجد نتائج مطابقة", noResultsBody: "جرّب اسمًا أو رقم هاتف آخر.", loading: "جار تحميل المرضى...", fullName: "الاسم الكامل", fullNameAr: "الاسم بالعربية", fullNameHe: "الاسم بالعبرية", fullNameEn: "الاسم بالإنجليزية", namesOptionalHint: "اختياري: أدخل اسم المريض بلغات أخرى للعرض متعدد اللغات.", phone: "الهاتف", email: "البريد الإلكتروني", gender: "الجنس", dateOfBirth: "تاريخ الميلاد", nationalId: "رقم الهوية", notes: "ملاحظات", status: "الحالة", createdAt: "تاريخ الإنشاء", updatedAt: "آخر تحديث", submit: "إنشاء مريض", update: "تحديث المريض", fieldRequired: "هذا الحقل مطلوب.", invalidPhone: "أدخل رقم هاتف صالحًا.", duplicatePhone: "يوجد مريض بهذا الهاتف بالفعل.", loadError: "تعذر تحميل المرضى. يرجى المحاولة مرة أخرى.", saved: "تم حفظ المريض.", archived: "تمت أرشفة المريض.", activated: "تم تفعيل المريض.", notFound: "المريض غير موجود.", deletePatient: "حذف نهائياً", deleteConfirmTitle: "حذف المريض نهائياً", deleteConfirmBody: "هل أنت متأكد؟ سيتم حذف المريض نهائياً ولا يمكن التراجع.", deleteConfirmButton: "حذف نهائياً", deleteBlocked: "لا يمكن الحذف: يوجد مواعيد أو فواتير أو متابعات مرتبطة بهذا المريض.", deleteBlockedTooltip: "لا يمكن حذف هذا المريض لأنه مرتبط بسجلات مثل مواعيد أو فواتير أو متابعات. يمكنك أرشفته بدلاً من ذلك.", deleteBlockedWithCounts: (counts) => { const parts = []; if (counts.appointments > 0) parts.push(`${counts.appointments} موعد`); if (counts.invoices > 0) parts.push(`${counts.invoices} فاتورة`); if (counts.payments > 0) parts.push(`${counts.payments} دفعة`); if (counts.followUps > 0) parts.push(`${counts.followUps} متابعة`); if (counts.creditTransactions > 0) parts.push(`${counts.creditTransactions} معاملة ائتمانية`); return `لا يمكن الحذف: يوجد ${parts.join(" و ")}. يمكنك أرشفته بدلاً من ذلك.`; }, deleted: "تم حذف المريض نهائياً.", patientPortal: { title: "بوابة المريض", generate: "إنشاء رابط بوابة المريض", generating: "جارٍ إنشاء الرابط…", copyLink: "نسخ الرابط", copied: "تم النسخ!", openPortal: "فتح البوابة", shareWhatsApp: "مشاركة عبر واتساب", error: "تعذّر إنشاء رابط البوابة. يرجى المحاولة مرة أخرى." } },
+    services: { title: "الخدمات", subtitle: "إدارة خدمات المركز والمدة والأسعار وحالة التفعيل.", addService: "إضافة خدمة", editService: "تعديل خدمة", detailsTitle: "تفاصيل الخدمة", searchPlaceholder: "ابحث باسم الخدمة", filterAll: "الكل", filterActive: "نشطة", filterArchived: "مؤرشفة", emptyTitle: "لا توجد خدمات بعد", emptyBody: "أنشئ أول خدمة لهذا المركز.", noResultsTitle: "لا توجد خدمات مطابقة", noResultsBody: "جرّب اسم خدمة آخر.", loading: "جار تحميل الخدمات...", loadError: "تعذر تحميل الخدمات. يرجى المحاولة مرة أخرى.", nameEn: "الاسم بالإنجليزية", nameAr: "الاسم بالعربية", nameHe: "الاسم بالعبرية", descriptionEn: "الوصف بالإنجليزية", descriptionAr: "الوصف بالعربية", descriptionHe: "الوصف بالعبرية", bufferMinutes: "وقت فاصل بعد الخدمة بالدقائق", durationMinutes: "المدة", price: "السعر", currency: "العملة", status: "الحالة", createdAt: "تاريخ الإنشاء", updatedAt: "آخر تحديث", submit: "إنشاء خدمة", update: "تحديث الخدمة", saved: "تم حفظ الخدمة.", archived: "تمت أرشفة الخدمة.", activated: "تم تفعيل الخدمة.", notFound: "الخدمة غير موجودة.", optional: "اختياري", fieldRequired: "هذا الحقل مطلوب.", invalidBuffer: "أدخل وقت فصل صالحًا.", invalidDuration: "أدخل مدة صالحة.", invalidPrice: "أدخل سعرًا صالحًا.", invalidCurrency: "أدخل رمز عملة صالحًا.", durationUnitMinutes: "دقيقة", durationUnitHours: "ساعة", enableFollowUpPlan: "تفعيل خطة المتابعة", followUpSettings: "إعدادات المتابعة", followUpDescription: "إنشاء تذكيرات متابعة تلقائياً عند إكمال موعد العلاج.", followUp: { none: "بدون متابعة", sessionBasedPlan: "خطة علاج بعدد جلسات", sessionBasedHelper: "تنتهي تلقائياً بعد إكمال جميع الجلسات.", recurring: "متابعة دورية مستمرة", recurringHelper: "تستمر بإرسال تذكيرات دورية بدون عدد جلسات محدد." }, defaultIntervalDays: "التذكير بعد كل جلسة (بالأيام)", planType: "نوع الخطة", fixedInterval: "خطة علاج بعدد جلسات", sessionPlan: "خطة علاج بعدد جلسات", createNextReminderAutomatically: "إنشاء التذكير التالي تلقائياً", totalRecommendedSessions: "عدد الجلسات المقترحة", totalSessionsSummary: (count: number) => `إجمالي الجلسات: ${count} جلسات`, totalSessionsCalculated: "يتم احتسابها تلقائيًا من مراحل العلاج", whatsappMessageArabic: "رسالة واتساب بالعربية", whatsappMessageHebrew: "رسالة واتساب بالعبرية", whatsappMessageEnglish: "رسالة واتساب بالإنجليزية", sessionsFrom: "من الجلسة", sessionsTo: "إلى الجلسة", intervalDays: "إعادة المتابعة بعد (يوم)", addRule: "إضافة مرحلة علاج", removeRule: "حذف القاعدة", followUpRuleHelper: "قسّم الخطة إلى مراحل حسب عدد الجلسات وفترة التذكير.", treatmentPhases: "مراحل العلاج", phaseTitle: (index: number) => `مرحلة العلاج ${index}`, reminderAfterDays: (days: number) => `التذكير بعد ${days} يوم`, previewSessionLine: (session: number, days: number) => days === 0 ? `الجلسة ${session} (يوم الموعد)` : `الجلسة ${session} → بعد ${days} يوم`, planPreview: "معاينة الخطة", laserPreset: "بروتوكول ليزر — 8 جلسات", hijamaPreset: "حجامة وقائية", skincarePreset: "تنظيف بشرة شهري", applyPreset: "تطبيق", editPhase: "تعديل", deletePhase: "حذف المرحلة", planCalcExplanation: "الجلسة الأولى هي الموعد ذاته. تُحدد كل جلسة لاحقة بعد فترة المرحلة.", planPreviewPhaseLabel: (from: number, to: number, days: number) => `الجلسات ${from}–${to} · كل ${days} يوم`, overlappingRanges: "لا يمكن تداخل مراحل العلاج.", uncoveredSessions: (range: string) => `الجلسات ${range} لا تحتوي على قاعدة متابعة`, invalidIntervals: "قيمة إعادة المتابعة يجب أن تكون عدداً صحيحاً أكبر من صفر.", invalidRangeOrder: "رقم بداية الجلسة يجب أن يكون أقل من أو يساوي رقم النهاية.", firstPhaseMustStartAtOne: "يجب أن تبدأ أول مرحلة من الجلسة 1.", noGapsAllowed: "يجب أن تكون مراحل العلاج متسلسلة بدون فراغات.", deleteService: "حذف نهائياً", deleteServiceConfirmTitle: "حذف الخدمة نهائياً", deleteServiceConfirmBody: "هل أنت متأكد؟ سيتم حذف الخدمة نهائياً ولا يمكن التراجع.", deleteServiceConfirmButton: "حذف نهائياً", deleteServiceBlocked: "لا يمكن الحذف: هذه الخدمة مرتبطة بمواعيد أو فواتير أو طلبات حجز.", deleteServiceBlockedTooltip: "لا يمكن حذف هذه الخدمة لأنها مرتبطة بمواعيد أو فواتير أو طلبات حجز. يمكنك أرشفتها بدلاً من ذلك.", deleted: "تم حذف الخدمة نهائياً.", followUpBadge: "خطة متابعة", noFollowUpBadge: "بدون متابعة", sessionBasedPlanLabel: "خطة علاج بعدد جلسات", recurringContinuousLabel: "متابعة دورية مستمرة", templateCountBadge: (count: number) => `قوالب علاج: ${count}`, defaultTemplateSummary: (name: string, sessions: number) => `الافتراضي: ${name} · ${sessions} جلسات`, totalSessionsBadge: (count: number) => `إجمالي الجلسات: ${count}`, intervalDaysBadge: (days: number) => `التكرار: كل ${days} يوم`, followUpAutoHint: "تُنشئ هذه الخدمة خطة متابعة تلقائيًا عند اكتمال الموعد" },
+    staff: { title: "الطاقم", subtitle: "إدارة مستخدمي الطاقم والأدوار وحالة الوصول.", addStaff: "إضافة موظف", editStaff: "تعديل موظف", detailsTitle: "تفاصيل الموظف", searchPlaceholder: "ابحث بالاسم أو البريد الإلكتروني", filterAllRoles: "كل الأدوار", filterAllStatuses: "كل الحالات", emptyTitle: "لا يوجد مستخدمو طاقم بعد", emptyBody: "أنشئ أول مستخدم طاقم لهذا المركز.", noResultsTitle: "لا يوجد طاقم مطابق", noResultsBody: "جرّب اسمًا أو بريدًا أو دورًا أو حالة أخرى.", loading: "جار تحميل الطاقم...", loadError: "تعذر تحميل الطاقم. يرجى المحاولة مرة أخرى.", fullName: "الاسم الكامل", email: "البريد الإلكتروني", password: "كلمة المرور", passwordOptional: "اختيارية عند التعديل", providerEnabled: "يمكنه تقديم العلاج / يظهر في قائمة المقدّمين", providerEnabledHelper: "عند التفعيل، يظهر هذا الموظف النشط في قائمة مقدّمي المواعيد بغض النظر عن دوره.", role: "الدور", status: "الحالة", createdAt: "تاريخ الإنشاء", updatedAt: "آخر تحديث", submit: "إنشاء موظف", update: "تحديث الموظف", saved: "تم حفظ الموظف.", activated: "تم تفعيل الموظف.", deactivated: "تم إلغاء تفعيل الموظف.", notFound: "الموظف غير موجود.", fieldRequired: "هذا الحقل مطلوب.", invalidEmail: "أدخل بريدًا إلكترونيًا صالحًا للموظف.", duplicateEmail: "يوجد مستخدم بهذا البريد بالفعل.", invalidPassword: "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل.", permissionsTitle: "صلاحيات الوصول", centerLabel: "المركز", phone: "الهاتف" },
+    billing: { title: "الفوترة", subtitle: "إدارة الفواتير اليدوية وسجلات الدفع لهذا المركز.", addInvoice: "إضافة فاتورة", invoiceTitle: "تفاصيل الفاتورة", searchPlaceholder: "ابحث باسم المريض أو رقم الهاتف", filterAllStatuses: "كل الحالات", filterAll: "الكل", emptyTitle: "لا توجد فواتير نشطة بعد", emptyBody: "أنشئ أول فاتورة لهذا المركز.", emptyPendingTitle: "لا توجد فواتير معلقة", emptyPendingBody: "جميع الفواتير مدفوعة أو ملغاة.", emptyPartialTitle: "لا توجد فواتير مدفوعة جزئيًا", emptyPartialBody: "لا توجد فواتير بدفعات جزئية حاليًا.", emptyPaidTitle: "لا توجد فواتير مدفوعة بعد", emptyPaidBody: "حدد فاتورة كمدفوعة لتظهر هنا.", emptyCancelledTitle: "لا توجد فواتير ملغاة", emptyCancelledBody: "ستظهر الفواتير الملغاة هنا.", loading: "جار تحميل الفواتير...", loadError: "تعذر تحميل الفواتير. يرجى المحاولة مرة أخرى.", patient: "المريض", service: "الخدمة", customService: "خدمة غير موجودة بالقائمة", customServiceName: "اسم الخدمة المخصصة", customServiceDuration: "مدة الخدمة المخصصة", customServicePrice: "سعر الخدمة المخصصة", saveCustomService: "حفظ كخدمة مستقبلية", customServiceBadge: "خدمة مخصصة", provider: "المقدم", providerOptional: "اختياري", noProvider: "بدون مقدم", selectPatient: "اختر مريضًا", selectService: "اختر خدمة", amount: "المبلغ", currency: "العملة", status: "الحالة", notes: "ملاحظات", notesOptional: "اختياري", createdAt: "تاريخ الإنشاء", updatedAt: "آخر تحديث", submit: "إنشاء فاتورة", markedPaid: "تم تحديد الفاتورة كمدفوعة.", invoiceFullyPaid: "الفاتورة مدفوعة بالكامل، لا يمكن إضافة دفعة جديدة.", cancelled: "تم إلغاء الفاتورة.", notFound: "الفاتورة غير موجودة.", fieldRequired: "هذا الحقل مطلوب.", invalidAmount: "أدخل مبلغًا صالحًا أكبر من الصفر.", markAsPaid: "تحديد كمدفوع", cancelInvoice: "إلغاء الفاتورة", reopenInvoice: "إعادة فتح الفاتورة", reopened: "تمت إعادة فتح الفاتورة كمعلقة.", addPayment: "إضافة دفعة", paymentHistory: "سجل الدفعات", paymentMethod: "طريقة الدفع", paymentDate: "تاريخ الدفع", paymentNotes: "ملاحظات", paymentNotesOptional: "اختياري", methodCash: "نقدي", methodBankTransfer: "تحويل بنكي", methodCheck: "شيك", methodOther: "أخرى", paymentAdded: "تم تسجيل الدفعة بنجاح.", noPayments: "لا توجد دفعات مسجلة بعد.", invoiceTotal: "إجمالي الفاتورة", paidAmount: "المدفوع", balanceDue: "الرصيد المستحق", paymentBy: "بواسطة", overpaymentError: "فشل تسجيل الدفعة. يرجى المحاولة مرة أخرى.", overpaymentCreditHint: "المبلغ الزائد سيُحفظ كرصيد ائتماني للمريض.", invalidPaymentDate: "أدخل تاريخ دفع صالحًا.", creditBalance: "الرصيد الائتماني", useCredit: "استخدام الرصيد", creditAmount: "مبلغ الرصيد", creditApplied: "تم تطبيق الرصيد بنجاح.", noCreditAvailable: "لا يوجد رصيد ائتماني متاح لهذا المريض.", insufficientCredit: "رصيد ائتماني غير كافٍ.", noCreditDue: "لا يوجد مبلغ مستحق لاستخدام الرصيد.", creditAdded: "تمت إضافة رصيد لحساب المريض.", overpaymentCreditNotice: "تم حفظ الدفع الزائد كرصيد للمريض.", creditSourceOverpayment: "من دفع زائد", creditSourceManual: "تعديل يدوي", creditSourceAdjustment: "تعديل", creditUsageLabel: "رصيد مستخدم", invoiceTotalDesc: "القيمة الكاملة لجميع الخدمات والفواتير ضمن هذا الموعد.", paidAmountDesc: "إجمالي المبلغ الذي تم دفعه فعليًا من قبل المريض.", balanceDueDesc: "المبلغ المتبقي الذي يجب على المريض دفعه.", balanceDueTooltip: "الرصيد المستحق = إجمالي الفاتورة − المدفوع", creditBalanceDesc: "رصيد محفوظ للمريض يمكن استخدامه في فواتير أو جلسات مستقبلية.", statusPaidDesc: "تم تسديد كامل قيمة الفاتورة.", statusPartialDesc: "تم دفع جزء من قيمة الفاتورة ويوجد مبلغ متبقٍ.", statusPendingDesc: "لم يتم استلام أي دفعة حتى الآن." },
+    reports: { title: "التقارير المالية", subtitle: "الإيرادات والأرصدة المستحقة والنشاط للفترة المحددة.", loading: "جار تحميل التقرير...", loadError: "حدث خطأ في تحميل البيانات.", todayRevenue: "إيرادات اليوم", revenueThisMonth: "إيرادات هذا الشهر", paidInvoices: "الفواتير المدفوعة", pendingInvoices: "الفواتير المعلقة", overdueInvoices: "الفواتير المتأخرة", averageInvoiceValue: "متوسط قيمة الفاتورة", totalPaid: "إجمالي المحصّل", outstanding: "الرصيد المستحق", patientCredit: "رصيد المرضى", cancelledInvoices: "الفواتير الملغاة", appointmentsToday: "مواعيد اليوم", periodToday: "اليوم", periodLast7Days: "آخر 7 أيام", periodWeek: "هذا الأسبوع", periodMonth: "هذا الشهر", periodCustom: "مخصص", filterFrom: "من", filterTo: "إلى", applyFilter: "تطبيق", revenue: "الإيرادات", appointments: "المواعيد", revenueByDay: "الإيرادات حسب اليوم", revenueByPaymentStatus: "الإيرادات حسب حالة الدفع", revenueByService: "الإيرادات حسب الخدمة", noChartData: "لا توجد بيانات كافية لهذه الفترة", viewSessions: "عرض الجلسات", statusPaid: "مدفوع", statusPending: "غير مدفوع", statusPartial: "مدفوع جزئياً", statusOverdue: "متأخر", topPatientsTitle: "أفضل المرضى", topPatientsEmpty: "لا توجد بيانات لهذه الفترة.", topPatientsTotalPaid: "إجمالي المدفوع", topPatientsVisits: "زيارة", topPatientsCredit: "الرصيد", topPatientsVip: "VIP", receivablesSectionTitle: "الذمم المستحقة", receivablesSectionHelper: "تعرض كل الأرصدة المفتوحة حتى لو كانت خارج الفترة المحددة", receivablesDetailsTitle: "تفاصيل الذمم", totalReceivables: "إجمالي الذمم المستحقة", patientsWithDebt: "عدد المرضى الذين عليهم مبالغ", unpaidInvoices: "عدد الفواتير غير المدفوعة", partiallyPaidInvoices: "عدد الفواتير المدفوعة جزئياً", highestDebt: "أعلى مديونية", invoiceCountIncluded: "فواتير ضمن الفترة المحددة", noFinancialDataInRange: "لا توجد بيانات مالية ضمن الفترة المحددة", selectedDateRange: "الفترة المحددة", openReceivablesOnly: "الذمم المفتوحة فقط", overdueOnly: "المتأخر فقط", receivablesByPaymentStatus: "الذمم حسب حالة الدفع", topPatientsByDebt: "أعلى المرضى مديونية", revenueVsReceivables: "الإيرادات مقابل الذمم", revenueLabel: "الإيرادات", receivablesLabel: "الذمم", patient: "المريض", phone: "رقم الهاتف", service: "الخدمة", invoiceTotal: "إجمالي الفاتورة", paidAmount: "المدفوع", remainingAmount: "المتبقي", paymentStatus: "حالة الدفع", lastPayment: "آخر دفعة", dueDate: "تاريخ الاستحقاق", notRecorded: "غير مسجل", noReceivablesData: "لا توجد ذمم مطابقة لهذه الفلاتر.", todayOverviewTitle: "نظرة عامة على اليوم", appointmentsTodayTotal: "مواعيد اليوم", appointmentsTodayCompleted: "المكتملة اليوم", appointmentsTodayUpcoming: "القادمة اليوم", delayedFollowUps: "متابعات متأخرة", newPatientsThisMonth: "مرضى جدد هذا الشهر", activeTreatmentPlans: "خطط علاجية نشطة", revenueInsightsTitle: "تحليل الإيرادات", appointmentAnalyticsTitle: "تحليل المواعيد", totalInPeriod: "إجمالي المواعيد", noShowCount: "غياب بدون إلغاء", cancellationRate: "معدل الإلغاء", noShowRate: "معدل الغياب", topProvidersTitle: "أفضل مقدمي الخدمة", viewFullReceivables: "عرض كل الذمم", hideFullReceivables: "إخفاء الذمم", topDebtorsTitle: "أعلى الأرصدة المستحقة", completedWithoutInvoiceTitle: "جلسات مكتملة بدون فاتورة", completedWithoutInvoiceAlert: (count: number) => `يوجد ${count} جلسات مكتملة لم يتم إنشاء فاتورة لها`, completedWithoutInvoiceEmpty: "جميع الجلسات المكتملة لديها فواتير.", showAllUnbilled: "كل الجلسات المكتملة بدون فاتورة", showPeriodUnbilled: "عرض الفترة المحددة فقط" },
     profile: { title: "ملفي الشخصي", subtitle: "معلومات حسابك وصلاحيات الوصول.", center: "المركز", memberSince: "عضو منذ", permissionsTitle: "صلاحيات الوصول", noPermissions: "لا توجد صلاحيات.", changePassword: "تغيير كلمة المرور", currentPassword: "كلمة المرور الحالية", newPassword: "كلمة المرور الجديدة", confirmPassword: "تأكيد كلمة المرور الجديدة", updatePassword: "تحديث كلمة المرور", updating: "جار التحديث...", passwordUpdated: "تم تحديث كلمة المرور بنجاح.", passwordMismatch: "كلمات المرور الجديدة غير متطابقة.", passwordTooShort: "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل.", wrongPassword: "كلمة المرور الحالية غير صحيحة.", loadError: "تعذر تحميل الملف الشخصي. يرجى المحاولة مرة أخرى." },
-    permissionLabels: { patientsView: "عرض المرضى", patientsCreate: "إضافة مرضى", patientsUpdate: "تعديل المرضى", patientsStatus: "تحديث حالة المرضى", staffView: "عرض الموظفين", staffCreate: "إضافة موظفين", staffUpdate: "تعديل الموظفين", staffActivate: "تفعيل / تعطيل الموظفين", servicesView: "عرض الخدمات", servicesCreate: "إنشاء الخدمات", servicesUpdate: "تعديل الخدمات", servicesArchive: "أرشفة الخدمات", servicesActivate: "تحديث حالة الخدمات", appointmentsView: "عرض المواعيد", appointmentsCreate: "إنشاء المواعيد", appointmentsUpdate: "تعديل المواعيد", appointmentsCancel: "إلغاء المواعيد", appointmentsStatusUpdate: "تحديث حالة المواعيد", billingView: "عرض الفواتير", billingCreate: "إنشاء الفواتير", billingUpdate: "تعديل الفواتير", billingMarkPaid: "إلغاء الفواتير", paymentsView: "عرض المدفوعات", paymentsCreate: "تسجيل المدفوعات", reportsView: "عرض التقارير", settingsView: "عرض الإعدادات", permissionsView: "عرض صلاحيات الأدوار", permissionsUpdate: "تعديل صلاحيات الأدوار" },
-    appointments: { title: "المواعيد", subtitle: "جدولة المواعيد ومتابعتها لهذا المركز.", addAppointment: "إضافة موعد", editAppointment: "تعديل موعد", detailsTitle: "تفاصيل الموعد", searchPlaceholder: "ابحث باسم المريض أو رقم الهاتف", filterAll: "كل الحالات", today: "اليوم", upcoming: "القادمة", dateFilter: "التاريخ", providerFilter: "المقدم", allProviders: "كل المقدمين", emptyTitle: "لا توجد مواعيد بعد", emptyBody: "أنشئ أول موعد لهذا المركز.", noResultsTitle: "لا توجد مواعيد مطابقة", noResultsBody: "جرّب مريضًا أو حالة أو تاريخًا أو مقدمًا آخر.", loading: "جار تحميل المواعيد...", loadError: "تعذر تحميل المواعيد. حاول مرة أخرى.", patient: "المريض", service: "الخدمة", customService: "خدمة غير موجودة بالقائمة", customServiceName: "اسم الخدمة المخصصة", customServiceDuration: "مدة الجلسة (دقيقة)", customServiceDurationPlaceholder: "مثال: 15", customServiceDurationHelper: "مدة الجلسة تُحسب بالدقائق", customServicePrice: "سعر الخدمة (₪)", customServicePricePlaceholder: "مثال: 80", customServicePriceHelper: "يتم احتساب السعر بالشيكل (ILS)", saveCustomService: "حفظ كخدمة مستقبلية", customServiceBadge: "خدمة مخصصة", provider: "المقدم", appointmentDate: "تاريخ الموعد", startTime: "وقت البداية", endTime: "وقت النهاية", durationMinutes: "مدة الموعد (دقيقة)", durationMinutesPlaceholder: "مثال: 15", durationMinutesHelper: "مدة الموعد تُحسب بالدقائق.", status: "الحالة", notes: "ملاحظات علاجية", notesHelper: "تظهر ضمن سجل العلاج والمتابعات القادمة.", internalNotes: "ملاحظات داخلية للطاقم", internalNotesHelper: "لا تظهر للمريض أو برسائل المتابعة.", cancellationReason: "سبب الإلغاء", reminderSent: "تم إرسال التذكير", createdAt: "تاريخ الإنشاء", updatedAt: "آخر تحديث", createdBy: "أنشئ بواسطة", submit: "إنشاء موعد", update: "تحديث الموعد", saved: "تم حفظ الموعد.", saveError: "تعذر حفظ الموعد. يرجى المحاولة مرة أخرى.", cancelled: "تم إلغاء الموعد.", statusUpdated: "تم تحديث حالة الموعد.", notFound: "الموعد غير موجود.", fieldRequired: "هذا الحقل مطلوب.", invalidDate: "اختر تاريخ موعد صالحًا.", invalidTime: "اختر وقتًا صالحًا.", invalidDuration: "أدخل مدة صالحة.", overlap: "هذا الموعد يتداخل مع حجز آخر.", cancelAppointment: "إلغاء الموعد", confirmCancel: "تأكيد الإلغاء", changeStatus: "تغيير الحالة", conflictTitle: "تم اكتشاف تعارض في الموعد", conflictMessage: "يرجى اختيار وقت مختلف", conflictPatient: "المريض", conflictService: "الخدمة", conflictProvider: "المقدم", conflictDate: "التاريخ", conflictStart: "وقت البداية", conflictEnd: "وقت النهاية", startsInMinutes: "يبدأ بعد {n} دقيقة", inProgressNow: "قيد التنفيذ الآن", endOfDayError: "يجب أن ينتهي الموعد قبل منتصف الليل.", invoiceSection: "الفاتورة", noInvoice: "لا توجد فاتورة بعد", noInvoiceBody: "أنشئ فاتورة لتتبع الدفع لهذا الموعد.", createInvoice: "إنشاء فاتورة", openInvoice: "فتح الفاتورة", invoiceCreated: "تم إنشاء الفاتورة بنجاح.", noServicePrice: "لا يوجد سعر لهذه الخدمة. افتح الفوترة لإنشاء الفاتورة يدويًا.", invoiceUnpaid: "غير مدفوع", viewInvoice: "عرض الفاتورة", invoiceRequiresCompleted: "لا يمكن إنشاء الفاتورة إلا بعد اكتمال الموعد.", invoiceFullyPaid: "الفاتورة مدفوعة بالكامل", bookingRequestDetails: "بيانات طلب الحجز", bookingRequester: "طالب الحجز", bookingRequesterPhone: "هاتف طالب الحجز", bookingRequestNotes: "ملاحظات الطلب", requestedBy: (name: string) => `طلب باسم: ${name}`, slotBooked: "محجوز", loadingSlots: "جار تحميل الأوقات المتاحة...", noSlots: "لا توجد أوقات متاحة لهذا التاريخ.", selectServiceAndDate: "اختر خدمة وتاريخًا لعرض الأوقات المتاحة.", calendarView: "التقويم", listView: "القائمة", dayView: "يوم", weekView: "أسبوع", calendarToday: "اليوم", calendarPrev: "السابق", calendarNext: "التالي", reminderSection: "تذكير المريض", lastReminderSent: "آخر تذكير أُرسل", reminderCountLabel: "عدد التذكيرات", sendReminderNow: "إرسال تذكير واتساب", reminderSentSuccess: "تم تحضير التذكير. افتح واتساب للإرسال.", reminderNotSentYet: "لم يُرسل أي تذكير بعد.", reminder24hSentLabel: "تذكير 24 ساعة أُرسل", reminder2hSentLabel: "تذكير ساعتين أُرسل", openWhatsApp: "فتح واتساب", copyMessage: "نسخ الرسالة", reminderSending: "جار التحضير...", reminderHelperText: "سيتم فتح واتساب مع رسالة جاهزة.", followUpCreatedAfterCompletionHelper: "سيتم إنشاء المتابعة تلقائياً بعد تحويل الموعد إلى مكتمل.", followUpPlanLockedHelper: "خطة المتابعة متاحة فقط عند حفظ الخدمة كخدمة مستقبلية.", followUpActiveInService: "خطة المتابعة مفعلة لهذه الخدمة.", editServiceFollowUp: "تعديل إعدادات المتابعة في الخدمة", savedServiceBadge: "هذه الخدمة محفوظة ضمن الخدمات", followUpPlanActive: "خطة متابعة نشطة", followUpUpcoming: "المتابعة القادمة", followUpDue: (date: string) => `متابعة قادمة: ${date}`, followUpMissing: "لم يتم إنشاء متابعة", followUpBooked: "تم الحجز", followUpCompleted: "اكتملت المتابعة", followUpContacted: "تم التواصل", followUpMissed: "فاتت المتابعة", followUpCancelled: "ألغيت المتابعة", reactivateAppointment: "إعادة تفعيل الموعد", reactivateConfirm: "هل تريد إعادة تفعيل هذا الموعد؟ سيتم إرجاعه إلى حالة مؤكد.", reactivated: "تم إعادة تفعيل الموعد بنجاح.", invoiceBlockedCancelled: "لا يمكن إنشاء فاتورة للمواعيد الملغاة.", followUpPlanExists: "يوجد خطة متابعات", followUpPlanNone: "لا يوجد خطة متابعات" },
+    permissionLabels: { patientsView: "عرض المرضى", patientsCreate: "إضافة مرضى", patientsUpdate: "تعديل المرضى", patientsStatus: "تحديث حالة المرضى", staffView: "عرض الموظفين", staffCreate: "إضافة موظفين", staffUpdate: "تعديل الموظفين", staffActivate: "تفعيل / تعطيل الموظفين", servicesView: "عرض الخدمات", servicesCreate: "إنشاء الخدمات", servicesUpdate: "تعديل الخدمات", servicesArchive: "أرشفة الخدمات", servicesActivate: "تحديث حالة الخدمات", appointmentsView: "عرض المواعيد", appointmentsCreate: "إنشاء المواعيد", appointmentsUpdate: "تعديل المواعيد", appointmentsCancel: "إلغاء المواعيد", appointmentsStatusUpdate: "تحديث حالة المواعيد", billingView: "عرض الفواتير", billingCreate: "إنشاء الفواتير", billingUpdate: "تعديل الفواتير", billingMarkPaid: "إلغاء الفواتير", paymentsView: "عرض المدفوعات", paymentsCreate: "تسجيل المدفوعات", expensesView: "عرض المصاريف", expensesCreate: "إضافة المصاريف", expensesEdit: "تعديل المصاريف", expensesDelete: "حذف المصاريف", expensesReports: "تقارير المصاريف", reportsView: "عرض التقارير", settingsView: "عرض الإعدادات", permissionsView: "عرض صلاحيات الأدوار", permissionsUpdate: "تعديل صلاحيات الأدوار" },
+    appointments: { title: "المواعيد", subtitle: "جدولة المواعيد ومتابعتها لهذا المركز.", addAppointment: "إضافة موعد", editAppointment: "تعديل موعد", detailsTitle: "تفاصيل الموعد", searchPlaceholder: "ابحث باسم المريض أو رقم الهاتف", filterAll: "كل الحالات", today: "اليوم", upcoming: "القادمة", dateFilter: "التاريخ", providerFilter: "المقدم", allProviders: "كل المقدمين", allBranches: "كل الفروع", branch: "الفرع", chooseBranch: "اختر الفرع", emptyTitle: "لا توجد مواعيد بعد", emptyBody: "أنشئ أول موعد لهذا المركز.", noResultsTitle: "لا توجد مواعيد مطابقة", noResultsBody: "جرّب مريضًا أو حالة أو تاريخًا أو مقدمًا آخر.", loading: "جار تحميل المواعيد...", loadError: "تعذر تحميل المواعيد. حاول مرة أخرى.", patient: "المريض", service: "الخدمة", customService: "خدمة غير موجودة بالقائمة", customServiceName: "اسم الخدمة المخصصة", customServiceDuration: "مدة الجلسة (دقيقة)", customServiceDurationPlaceholder: "مثال: 15", customServiceDurationHelper: "مدة الجلسة تُحسب بالدقائق", customServicePrice: "سعر الخدمة (₪)", customServicePricePlaceholder: "مثال: 80", customServicePriceHelper: "يتم احتساب السعر بالشيكل (ILS)", saveCustomService: "حفظ كخدمة مستقبلية", customServiceBadge: "خدمة مخصصة", provider: "المقدم", appointmentDate: "تاريخ الموعد", startTime: "وقت البداية", endTime: "وقت النهاية", durationMinutes: "مدة الموعد (دقيقة)", durationMinutesPlaceholder: "مثال: 15", durationMinutesHelper: "مدة الموعد تُحسب بالدقائق.", status: "الحالة", notes: "ملاحظات علاجية", notesHelper: "تظهر ضمن سجل العلاج والمتابعات القادمة.", internalNotes: "ملاحظات داخلية للطاقم", internalNotesHelper: "لا تظهر للمريض أو برسائل المتابعة.", cancellationReason: "سبب الإلغاء", reminderSent: "تم إرسال التذكير", createdAt: "تاريخ الإنشاء", updatedAt: "آخر تحديث", createdBy: "أنشئ بواسطة", submit: "إنشاء موعد", update: "تحديث الموعد", saved: "تم حفظ الموعد.", saveError: "تعذر حفظ الموعد. يرجى المحاولة مرة أخرى.", cancelled: "تم إلغاء الموعد.", statusUpdated: "تم تحديث حالة الموعد.", notFound: "الموعد غير موجود.", fieldRequired: "هذا الحقل مطلوب.", invalidDate: "اختر تاريخ موعد صالحًا.", invalidTime: "اختر وقتًا صالحًا.", invalidDuration: "أدخل مدة صالحة.", overlap: "هذا الموعد يتداخل مع حجز آخر.", cancelAppointment: "إلغاء الموعد", confirmCancel: "تأكيد الإلغاء", changeStatus: "تغيير الحالة", conflictTitle: "تم اكتشاف تعارض في الموعد", conflictMessage: "يرجى اختيار وقت مختلف", conflictPatient: "المريض", conflictService: "الخدمة", conflictProvider: "المقدم", conflictDate: "التاريخ", conflictStart: "وقت البداية", conflictEnd: "وقت النهاية", startsInMinutes: "يبدأ بعد {n} دقيقة", inProgressNow: "قيد التنفيذ الآن", endOfDayError: "يجب أن ينتهي الموعد قبل منتصف الليل.", invoiceSection: "الفاتورة", noInvoice: "لا توجد فاتورة بعد", noInvoiceBody: "أنشئ فاتورة لتتبع الدفع لهذا الموعد.", createInvoice: "إنشاء فاتورة", openInvoice: "فتح الفاتورة", invoiceCreated: "تم إنشاء الفاتورة بنجاح.", noServicePrice: "لا يوجد سعر لهذه الخدمة. افتح الفوترة لإنشاء الفاتورة يدويًا.", invoiceUnpaid: "غير مدفوع", viewInvoice: "عرض الفاتورة", invoiceRequiresCompleted: "لا يمكن إنشاء الفاتورة إلا بعد اكتمال الموعد.", invoiceFullyPaid: "الفاتورة مدفوعة بالكامل", needsInvoiceBadge: "بحاجة فاتورة", bookingRequestDetails: "بيانات طلب الحجز", bookingRequester: "طالب الحجز", bookingRequesterPhone: "هاتف طالب الحجز", bookingRequestNotes: "ملاحظات الطلب", requestedBy: (name: string) => `طلب باسم: ${name}`, slotBooked: "محجوز", currentAppointmentSlot: "الموعد الحالي", loadingSlots: "جار تحميل الأوقات المتاحة...", noSlots: "لا توجد أوقات متاحة لهذا التاريخ.", selectServiceAndDate: "اختر خدمة وتاريخًا لعرض الأوقات المتاحة.", enterDurationToSeeSlots: "أدخل مدة الجلسة لعرض الأوقات المتاحة.", calendarView: "التقويم", listView: "القائمة", dayView: "يوم", weekView: "أسبوع", calendarToday: "اليوم", calendarPrev: "السابق", calendarNext: "التالي", reminderSection: "تذكير المريض", lastReminderSent: "آخر تذكير أُرسل", reminderCountLabel: "عدد التذكيرات", sendReminderNow: "إرسال تذكير واتساب", reminderSentSuccess: "تم تحضير التذكير. افتح واتساب للإرسال.", reminderNotSentYet: "لم يُرسل أي تذكير بعد.", reminder24hSentLabel: "تذكير 24 ساعة أُرسل", reminder2hSentLabel: "تذكير ساعتين أُرسل", openWhatsApp: "فتح واتساب", copyMessage: "نسخ الرسالة", reminderSending: "جار التحضير...", reminderHelperText: "سيتم فتح واتساب مع رسالة جاهزة.", followUpCreatedAfterCompletionHelper: "سيتم إنشاء المتابعة تلقائياً بعد تحويل الموعد إلى مكتمل.", followUpPlanLockedHelper: "خطة المتابعة متاحة فقط عند حفظ الخدمة كخدمة مستقبلية.", followUpActiveInService: "خطة المتابعة مفعلة لهذه الخدمة.", editServiceFollowUp: "تعديل إعدادات المتابعة في الخدمة", savedServiceBadge: "هذه الخدمة محفوظة ضمن الخدمات", followUpPlanActive: "خطة متابعة نشطة", followUpUpcoming: "المتابعة القادمة", followUpDue: (date: string) => `متابعة قادمة: ${date}`, followUpMissing: "لم يتم إنشاء متابعة", followUpBooked: "تم الحجز", followUpCompleted: "اكتملت المتابعة", followUpContacted: "تم التواصل", followUpMissed: "فاتت المتابعة", followUpCancelled: "ألغيت المتابعة", reactivateAppointment: "إعادة تفعيل الموعد", reactivateConfirm: "هل تريد إعادة تفعيل هذا الموعد؟ سيتم إرجاعه إلى حالة مؤكد.", reactivated: "تم إعادة تفعيل الموعد بنجاح.", invoiceBlockedCancelled: "لا يمكن إنشاء فاتورة للمواعيد الملغاة.", followUpPlanExists: "يوجد خطة متابعات", followUpPlanNone: "لا يوجد خطة متابعات", followUpPlanSection: "خطة المتابعة", viewInFollowUps: "عرض في المتابعات", followUpPlanLoading: "جار تحميل الخطة...", followUpSession: (n: number) => `الجلسة ${n}`, followUpPlanNoRecord: "لا توجد خطة متابعة لهذا الموعد", followUpRecurringBadge: "♾ متابعة دورية", followUpNextDue: "المتابعة القادمة", followUpLastCompleted: "آخر مكتملة", followUpPhaseHeader: (phase: number, days: number) => `مرحلة ${phase} — كل ${days} يوم`, followUpPhaseTitle: (phase: number) => `مرحلة العلاج ${phase}`, followUpPhaseSubtitle: (from: number, to: number, days: number) => `الجلسات ${from} → ${to} • كل ${days} يوم`, followUpNextSessionBadge: "الجلسة القادمة", followUpRelativeToday: "اليوم", followUpRelativeOverdue: (days: number) => `متأخرة ${days} ${days === 1 ? 'يوم' : 'أيام'}`, followUpRelativeRemaining: (days: number) => `متبقي ${days} ${days === 1 ? 'يوم' : 'أيام'}`, reminderMessagesSection: "رسائل التذكير", followUpEvery: "كل", followUpIntervalDay: (n: number) => n === 1 ? "يوم" : "أيام", followUpIntervalWeek: (n: number) => n === 1 ? "أسبوع" : "أسابيع", followUpIntervalMonth: (n: number) => n === 1 ? "شهر" : "أشهر", followUpIntervalYear: (n: number) => n === 1 ? "سنة" : "سنوات" },
     rolePermissions: { title: "صلاحيات الأدوار", subtitle: "حدد الإجراءات المسموح بها لكل دور في هذا المركز.", selectRole: "اختر دورًا لإدارة صلاحياته.", ownerProtected: "دور مالك المركز يملك صلاحية كاملة ولا يمكن تعديله.", savePermissions: "حفظ الصلاحيات", saving: "جار الحفظ...", saved: "تم حفظ الصلاحيات.", loadError: "تعذر تحميل الصلاحيات. يرجى المحاولة مرة أخرى.", paymentsSection: "المدفوعات" },
     notifications: { title: "الإشعارات", subtitle: "تنبيهات الاشتراك وإشعارات النظام لهذا المركز.", navLabel: "الإشعارات", loading: "جار تحميل الإشعارات...", loadError: "تعذر تحميل الإشعارات. يرجى المحاولة مرة أخرى.", markAsRead: "تحديد كمقروء", markingRead: "جار التحديد...", markedRead: "تم التحديد كمقروء", viewAll: "عرض كل الإشعارات", filterAll: "الكل", filterUnread: "غير المقروءة", emptyTitle: "لا توجد إشعارات", emptyBody: "ستظهر هنا تنبيهات الاشتراك وإشعارات النظام.", emptyUnreadTitle: "لا توجد إشعارات غير مقروءة", emptyUnreadBody: "تمت قراءة جميع الإشعارات.", unreadCount: (n: number) => `${n} غير مقروءة`, typeExpiring: "الاشتراك ينتهي قريباً", typeExpired: "الاشتراك منتهي", typeBookingRequest: "طلب حجز", newBookingToast: "طلب حجز جديد وصل الآن.", openBookingRequests: "فتح طلبات الحجز", statusPending: "معلق", statusSent: "تم الإرسال", statusFailed: "فشل", widgetTitle: "الإشعارات", widgetNoUnread: "لا توجد إشعارات جديدة.", corruptedFallback: "إشعار جديد" },
     gallery: { title: "معرض الصور", subtitle: "إدارة الصور المعروضة في الملف العام لمركزك.", uploadButton: "رفع صورة", uploadingText: "جار الرفع...", deleteButton: "حذف", emptyTitle: "لا توجد صور بعد", emptyBody: "ارفع صوراً لعرض مركزك في الصفحة العامة.", loadError: "تعذر تحميل المعرض. يرجى المحاولة مرة أخرى.", uploadError: "فشل الرفع. يرجى التحقق من الملف والمحاولة مرة أخرى.", maxImages: "الحد الأقصى 20 صورة.", recommendedSize: "موصى به: JPG أو PNG، بحد أدنى 800 × 600 بكسل.", moveUp: "تحريك للأعلى", moveDown: "تحريك للأسفل" },
@@ -1826,23 +2184,23 @@ export const centerAdminDictionaries: Record<
     languages: { en: "אנגלית", ar: "ערבית", he: "עברית" },
     login: { blockedCenter: "מרכז זה אינו פעיל. יש לפנות לתמיכת RoyalCare.", centerNotFound: "דף הכניסה של מרכז זה אינו זמין.", title: "כניסה למרכז", subtitle: "התחברו באמצעות חשבון צוות המרכז.", email: "אימייל", password: "סיסמה", submit: "כניסה", submitting: "מתחבר...", error: "האימייל או הסיסמה שגויים, או שהחשבון אינו יכול להתחבר." },
     shell: { accessDeniedBody: "לתפקיד שלך אין הרשאה לפתוח עמוד זה.", accessDeniedTitle: "הגישה נדחתה", menu: "תפריט", close: "סגירה", language: "שפה", logout: "התנתקות", loggingOut: "מתנתק...", navGroups: { dailyOps: "פעולות יומיות", admin: "ניהול", marketing: "שיווק ואתר", content: "תוכן" } },
-    nav: { dashboard: "לוח בקרה", patients: "מטופלים", appointments: "תורים", bookingRequests: "בקשות תור", followUps: "מעקבים", services: "שירותים", staff: "צוות", billing: "חיוב", reports: "דוחות", notifications: "התראות", schedule: "לוח זמנים", settings: "הגדרות", permissions: "הרשאות תפקידים", gallery: "גלריה", reviews: "ביקורות", beforeAfter: "לפני / אחרי", team: "צוות המרכז", offers: "מבצעים", seo: "SEO", domain: "דומיינים", website: "אתר", marketing: "שיווק", websiteAnalytics: "אנליטיקת האתר" },
+    nav: { dashboard: "לוח בקרה", patients: "מטופלים", appointments: "תורים", bookingRequests: "בקשות תור", followUps: "מעקבים", services: "שירותים", staff: "צוות", billing: "חיוב", expenses: "הוצאות", reports: "דוחות", notifications: "התראות", schedule: "לוח זמנים", settings: "הגדרות", permissions: "הרשאות תפקידים", gallery: "גלריה", reviews: "ביקורות", beforeAfter: "לפני / אחרי", team: "צוות המרכז", offers: "מבצעים", seo: "SEO", domain: "דומיינים", website: "אתר", marketing: "שיווק", websiteAnalytics: "אנליטיקת האתר" },
     schedule: { addClosedDay: "הוסף יום סגור", addLeave: "הוסף חופשה", centerHours: "שעות פעילות המרכז", closed: "סגור", closedDays: "ימי סגירה / חגים", date: "תאריך", delete: "מחיקה", endTime: "סיום", helper: "הגדרות אלה קובעות את זמינות ההזמנות הציבוריות.", invalidRange: "שעת הסיום חייבת להיות אחרי שעת ההתחלה.", leave: "חופשה", loadError: "לא ניתן לטעון הגדרות לוח זמנים. נסו שוב.", noClosedDays: "אין עדיין ימי סגירה.", noLeave: "אין עדיין ימי חופשה למטפלים.", noProviders: "אין מטפלים זמינים.", open: "פתוח", providerHours: "שעות פעילות מטפל", providerLeave: "חופשות מטפלים", providerSelect: "מטפל", reason: "סיבה", save: "שמירה", saved: "לוח הזמנים נשמר.", startTime: "התחלה", subtitle: "הגדירו שעות פעילות, חגים וזמינות מטפלים.", title: "לוח זמנים" },
     bookingRequests: { title: "בקשות תור", subtitle: "סקור ונהל בקשות לתורים שנשלחו ע\"י מבקרים.", loading: "טוען בקשות תור...", loadError: "לא ניתן לטעון בקשות תור. נסה שוב.", empty: "עוד אין בקשות תור", emptyBody: "כשמבקרים יבקשו תורים, הם יופיעו כאן.", filterAll: "הכל", filterPending: "ממתינות", filterAccepted: "מאושרות", filterRejected: "נדחות", fullName: "שם", phone: "טלפון", service: "שירות", requestedDate: "תאריך", requestedTime: "שעה", notes: "הערות", status: "סטטוס", statusPending: "ממתין", statusAccepted: "מאושר", statusRejected: "נדחה", createdAt: "התקבל", accept: "אישור", reject: "דחייה", accepting: "מאשר...", rejecting: "דוחה...", contactWhatsApp: "וואטסאפ", acceptSuccess: "הבקשה אושרה והתור נוצר.", rejectSuccess: "הבקשה נדחתה.", errorAlreadyProcessed: "בקשה זו כבר טופלה.", errorGeneric: "אירעה שגיאה. נסה שוב.", pendingCount: (n: number) => `${n} ממתינות`, openAppointment: "פתח תור", linkedAppointmentUnavailable: "אושר, אך התור המקושר אינו זמין.", patientConflictMessage: (patientName: string) => `הטלפון הזה כבר מקושר למטופל ${patientName}. לקשר למטופל הקיים או ליצור מטופל חדש?`, existingPatient: "מטופל קיים", bookingPatient: "בקשת תור", linkToExistingPatient: "קישור למטופל קיים", createNewPatient: "יצירת מטופל חדש" },
-    dashboard: { eyebrow: "סביבת העבודה של המרכז", title: "לוח בקרה", subtitle: "לוח הבקרה הפרטי של המרכז.", currentUser: "משתמש נוכחי", role: "תפקיד", centerStatus: "סטטוס המרכז", loading: "טוען את לוח הבקרה...", loadError: "לא ניתן לטעון את נתוני לוח הבקרה. נסו שוב.", sessionExpired: "יש להתחבר מחדש.", alerts: "התראות", appointmentsToday: "תורים היום", noAlerts: "אין כרגע התראות חשובות.", noShowToday: "הוחמצו / לא הגיעו", patientsWithCredit: "מטופלים עם זיכוי", pendingInvoices: "חשבוניות ממתינות", quickActions: "פעולות מהירות", recentAppointments: "תורים אחרונים", recentInvoices: "חשבוניות אחרונות", revenueSnapshot: "תמונת הכנסות", todayActivity: "פעילות היום", upcomingAppointmentSoon: "תור קרוב", upcomingNextTwoHours: "בקרוב בשעתיים הקרובות", subscription: { title: "מינוי", plan: "תוכנית", status: "סטטוס", endDate: "תאריך סיום", remainingDays: (days: number) => `נותרו ${days} ימים`, oneDayRemaining: "נותר יום אחד", expiresToday: "מסתיים היום", expiredSince: (days: number) => `פג לפני ${days} ימים`, suspended: "החשבון מושהה", noSubscription: "אין מינוי פעיל" } },
+    dashboard: { eyebrow: "סביבת העבודה של המרכז", title: "לוח בקרה", subtitle: "לוח הבקרה הפרטי של המרכז.", currentUser: "משתמש נוכחי", role: "תפקיד", centerStatus: "סטטוס המרכז", loading: "טוען את לוח הבקרה...", loadError: "לא ניתן לטעון את נתוני לוח הבקרה. נסו שוב.", sessionExpired: "יש להתחבר מחדש.", alerts: "התראות", appointmentsToday: "תורים היום", appointmentsTodayHelper: "כל תורי היום בכל הסטטוסים.", completedToday: "הושלמו היום", completedTodayHelper: "תורים שהושלמו היום.", noAlerts: "אין כרגע התראות חשובות.", noShowToday: "הוחמצו / לא הגיעו", noShowTodayHelper: "תורים שעברו ולא הושלמו או סומנו כלא הגיעו.", patientsWithCredit: "מטופלים עם זיכוי", pendingInvoices: "חשבוניות ממתינות", quickActions: "פעולות מהירות", recentAppointments: "תורים אחרונים", recentInvoices: "חשבוניות אחרונות", revenueSnapshot: "תמונת הכנסות", todayActivity: "פעילות היום", upcomingAppointmentSoon: "תור קרוב", upcomingNextTwoHours: "תורים פעילים וקרובים", upcomingNextTwoHoursHelper: "תורים פעילים עכשיו או מתחילים בשעתיים הקרובות.", viewDetails: "הצג פרטים", subscription: { title: "מינוי", plan: "תוכנית", status: "סטטוס", endDate: "תאריך סיום", remainingDays: (days: number) => `נותרו ${days} ימים`, oneDayRemaining: "נותר יום אחד", expiresToday: "מסתיים היום", expiredSince: (days: number) => `פג לפני ${days} ימים`, suspended: "החשבון מושהה", noSubscription: "אין מינוי פעיל" } },
     subscriptionNotice: { activeTitle: "המינוי פעיל", expiringSoonTitle: "המינוי מסתיים בקרוב", expiringSoonBody: (days: number) => `המינוי שלך מסתיים בעוד ${days} ${days === 1 ? "יום" : "ימים"}. יש לפנות לתמיכה לחידוש.`, expiredTitle: "המינוי פג תוקף", expiredBody: "המינוי שלך פג תוקף. חלק מהתכונות עשויות להיות מוגבלות. יש לפנות לתמיכה.", suspendedTitle: "החשבון מושהה", suspendedBody: "החשבון שלך הושהה. יש לפנות לתמיכה לשחזור הגישה.", contactSupport: "פנייה לתמיכה" },
     subscriptionBanner: { expiringTitle: (days: number) => `המינוי שלך מסתיים בעוד ${days} ימים`, expiresTodayTitle: "המינוי שלך מסתיים היום", expiredTitle: "המינוי שלך פג תוקף, יש לפנות למינהל", gracePeriodTitle: (days: number) => `המינוי פג תוקף. נותרו ${days} ${days === 1 ? "יום" : "ימים"} בתקופת החסד.`, suspendedTitle: "החשבון שלך הושהה, יש לפנות למינהל", contactAdmin: "פנייה למינהל", renewButton: "חידוש מינוי", contactAdminButton: "פנייה למינהל", whatsappExpiringMessage: (centerName: string, days: number) => `שלום, אנחנו ממרכז ${centerName}. המינוי שלנו ב-RoyalCare יסתיים בעוד ${days} ימים. אנא עזרו לנו לחדש אותו.`, whatsappExpiringTodayMessage: (centerName: string) => `שלום, אנחנו ממרכז ${centerName}. המינוי שלנו ב-RoyalCare מסתיים היום. אנא עזרו לנו לחדש אותו מיידית.`, whatsappExpiredMessage: (centerName: string) => `שלום, אנחנו ממרכז ${centerName}. המינוי שלנו ב-RoyalCare פג תוקף. אנא עזרו לנו לחדש ולהפעיל מחדש.`, whatsappGracePeriodMessage: (centerName: string, days: number) => `שלום, אנחנו ממרכז ${centerName}. המינוי שלנו ב-RoyalCare פג תוקף ונותרו לנו ${days} ${days === 1 ? "יום" : "ימים"} בתקופת החסד. אנא עזרו לנו לחדש בהקדם.`, whatsappSuspendedMessage: (centerName: string) => `שלום, אנחנו ממרכז ${centerName}. החשבון שלנו ב-RoyalCare מושהה כרגע. אנא עזרו לנו להפעיל אותו מחדש.` },
     subscriptionRenewal: { title: "בקשת חידוש מינוי", subtitle: "הבקשה תישלח לצוות הניהול של RoyalCare.", notePlaceholder: "הערה אופציונלית לצוות התמיכה...", submitButton: "שלח בקשה", submittingButton: "שולח...", cancelButton: "ביטול", successTitle: "הבקשה נשלחה", successBody: "בקשת החידוש התקבלה. צוות הניהול ייצור איתך קשר בקרוב.", duplicateTitle: "הבקשה כבר הוגשה", duplicateBody: "כבר שלחת בקשת חידוש ב-24 השעות האחרונות. אנא המתן לתגובת צוות הניהול.", errorTitle: "לא ניתן לשלוח את הבקשה", errorBody: "אירעה שגיאה בעת שליחת הבקשה. נסה שוב או פנה לתמיכה ישירות." },
     cards: { patients: "מטופלים", appointments: "תורים", services: "שירותים", staff: "משתמשי צוות" },
     common: { cancel: "ביטול", close: "סגירה", save: "שמירה", saving: "שומר...", search: "חיפוש", view: "צפייה", edit: "עריכה", archive: "ארכוב", activate: "הפעלה", actions: "פעולות", notAvailable: "לא זמין" },
-    patients: { title: "מטופלים", subtitle: "ניהול רשומות מטופלים של המרכז הזה בלבד.", addPatient: "הוספת מטופל", editPatient: "עריכת מטופל", detailsTitle: "פרטי מטופל", searchPlaceholder: "חיפוש לפי שם מטופל או טלפון", emptyTitle: "עדיין אין מטופלים", emptyBody: "צרו את רשומת המטופל הראשונה של המרכז.", noResultsTitle: "לא נמצאו מטופלים תואמים", noResultsBody: "נסו שם או מספר טלפון אחר.", loading: "טוען מטופלים...", fullName: "שם מלא", fullNameAr: "שם בערבית", fullNameHe: "שם בעברית", fullNameEn: "שם באנגלית", namesOptionalHint: "אופציונלי: הזינו את שם המטופל בשפות נוספות לתצוגה רב-לשונית.", phone: "טלפון", email: "אימייל", gender: "מין", dateOfBirth: "תאריך לידה", nationalId: "מספר זהות", notes: "הערות", status: "סטטוס", createdAt: "נוצר", updatedAt: "עודכן", submit: "יצירת מטופל", update: "עדכון מטופל", fieldRequired: "שדה זה חובה.", invalidPhone: "הזינו מספר טלפון תקין.", duplicatePhone: "כבר קיים מטופל עם מספר הטלפון הזה.", loadError: "לא ניתן לטעון מטופלים. נסו שוב.", saved: "המטופל נשמר.", archived: "המטופל הועבר לארכיון.", activated: "המטופל הופעל.", notFound: "המטופל לא נמצא.", deletePatient: "מחיקה לצמיתות", deleteConfirmTitle: "מחיקת מטופל לצמיתות", deleteConfirmBody: "האם אתה בטוח? המטופל יימחק לצמיתות ואין דרך לבטל פעולה זו.", deleteConfirmButton: "מחק לצמיתות", deleteBlocked: "לא ניתן למחוק: למטופל יש פגישות, חשבוניות או מעקבים מקושרים.", deleteBlockedTooltip: "לא ניתן למחוק מטופל זה כי הוא מקושר לרשומות כמו תורים, חשבוניות או מעקבים. ניתן להעביר אותו לארכיון במקום.", deleteBlockedWithCounts: (counts) => { const parts = []; if (counts.appointments > 0) parts.push(`${counts.appointments} תורים`); if (counts.invoices > 0) parts.push(`${counts.invoices} חשבוניות`); if (counts.payments > 0) parts.push(`${counts.payments} תשלומים`); if (counts.followUps > 0) parts.push(`${counts.followUps} מעקבים`); if (counts.creditTransactions > 0) parts.push(`${counts.creditTransactions} עסקאות זיכוי`); return `לא ניתן למחוק: מקושר ל-${parts.join(", ")}. ניתן להעביר לארכיון במקום.`; }, deleted: "המטופל נמחק לצמיתות.", patientPortal: { title: "פורטל מטופל", generate: "צור קישור לפורטל מטופל", generating: "יוצר קישור…", copyLink: "העתק קישור", copied: "הועתק!", openPortal: "פתח פורטל", shareWhatsApp: "שתף בוואטסאפ", error: "לא ניתן ליצור קישור לפורטל. נסה שוב." } },
-    services: { title: "שירותים", subtitle: "ניהול שירותי המרכז, משך השירות, מחירים וסטטוס פעילות.", addService: "הוספת שירות", editService: "עריכת שירות", detailsTitle: "פרטי שירות", searchPlaceholder: "חיפוש לפי שם שירות", filterAll: "הכול", filterActive: "פעילים", filterArchived: "בארכיון", emptyTitle: "עדיין אין שירותים", emptyBody: "צרו את השירות הראשון של המרכז.", noResultsTitle: "לא נמצאו שירותים תואמים", noResultsBody: "נסו שם שירות אחר.", loading: "טוען שירותים...", loadError: "לא ניתן לטעון שירותים. נסו שוב.", nameEn: "שם באנגלית", nameAr: "שם בערבית", nameHe: "שם בעברית", descriptionEn: "תיאור באנגלית", descriptionAr: "תיאור בערבית", descriptionHe: "תיאור בעברית", bufferMinutes: "זמן מרווח אחרי השירות (דקות)", durationMinutes: "משך", price: "מחיר", currency: "מטבע", status: "סטטוס", createdAt: "נוצר", updatedAt: "עודכן", submit: "יצירת שירות", update: "עדכון שירות", saved: "השירות נשמר.", archived: "השירות הועבר לארכיון.", activated: "השירות הופעל.", notFound: "השירות לא נמצא.", optional: "אופציונלי", fieldRequired: "שדה זה חובה.", invalidBuffer: "הזינו זמן מרווח תקין.", invalidDuration: "הזינו משך תקין.", invalidPrice: "הזינו מחיר תקין.", invalidCurrency: "הזינו קוד מטבע תקין.", durationUnitMinutes: "דקות", durationUnitHours: "שעות", enableFollowUpPlan: "הפעלת תוכנית מעקב", followUpSettings: "הגדרות מעקב", followUpDescription: "יצירת תזכורות מעקב אוטומטיות לאחר השלמת טיפול.", defaultIntervalDays: "מרווח ברירת מחדל בימים", planType: "סוג התוכנית", fixedInterval: "מרווח קבוע", sessionPlan: "תוכנית לפי טיפולים", createNextReminderAutomatically: "יצירת התזכורת הבאה אוטומטית", totalRecommendedSessions: "מספר טיפולים מומלץ", whatsappMessageArabic: "הודעת וואטסאפ בערבית", whatsappMessageHebrew: "הודעת וואטסאפ בעברית", whatsappMessageEnglish: "הודעת וואטסאפ באנגלית", sessionsFrom: "מטיפול מספר", sessionsTo: "עד טיפול מספר", intervalDays: "מרווח בימים", addRule: "הוספת כלל", removeRule: "מחיקת כלל", followUpRuleHelper: "המערכת תיצור תזכורת אוטומטית לאחר כל טיפול שהושלם.", phaseTitle: (index: number) => `שלב טיפול ${index}`, reminderAfterDays: (days: number) => `תזכורת לאחר ${days} ימים`, previewSessionLine: (session: number, days: number) => `טיפול ${session} → לאחר ${days} ימים`, planPreview: "תצוגה מקדימה של התוכנית", laserPreset: "לייזר 8 טיפולים", hijamaPreset: "חיג'אמה מונעת", skincarePreset: "ניקוי עור חודשי", applyPreset: "החלת תבנית", editPhase: "עריכה", deletePhase: "מחיקת שלב", overlappingRanges: "יש חפיפה בין טווחי טיפולים.", uncoveredSessions: (range: string) => `לטיפולים ${range} אין כלל מעקב`, invalidIntervals: "מרווח הימים חייב להיות מספר חיובי.", invalidRangeOrder: "מספר הטיפול הראשון חייב להיות קטן או שווה לאחרון.", deleteService: "מחיקה לצמיתות", deleteServiceConfirmTitle: "מחיקת השירות לצמיתות", deleteServiceConfirmBody: "האם אתה בטוח? השירות יימחק לצמיתות ולא ניתן יהיה לשחזרו.", deleteServiceConfirmButton: "מחק לצמיתות", deleteServiceBlocked: "לא ניתן למחוק: שירות זה מקושר לתורים, חשבוניות או בקשות הזמנה.", deleteServiceBlockedTooltip: "לא ניתן למחוק שירות זה כיוון שהוא מקושר לתורים, חשבוניות או בקשות הזמנה. ניתן לארכב אותו במקום.", deleted: "השירות נמחק לצמיתות." },
-    staff: { title: "צוות", subtitle: "ניהול משתמשי צוות, תפקידים וסטטוס גישה.", addStaff: "הוספת איש צוות", editStaff: "עריכת איש צוות", detailsTitle: "פרטי איש צוות", searchPlaceholder: "חיפוש לפי שם או אימייל", filterAllRoles: "כל התפקידים", filterAllStatuses: "כל הסטטוסים", emptyTitle: "עדיין אין משתמשי צוות", emptyBody: "צרו את משתמש הצוות הראשון של המרכז.", noResultsTitle: "לא נמצא צוות תואם", noResultsBody: "נסו שם, אימייל, תפקיד או סטטוס אחר.", loading: "טוען צוות...", loadError: "לא ניתן לטעון צוות. נסו שוב.", fullName: "שם מלא", email: "אימייל", password: "סיסמה", passwordOptional: "אופציונלי בעריכה", role: "תפקיד", status: "סטטוס", createdAt: "נוצר", updatedAt: "עודכן", submit: "יצירת איש צוות", update: "עדכון איש צוות", saved: "איש הצוות נשמר.", activated: "איש הצוות הופעל.", deactivated: "איש הצוות הושבת.", notFound: "איש הצוות לא נמצא.", fieldRequired: "שדה זה חובה.", invalidEmail: "הזינו אימייל צוות תקין.", duplicateEmail: "כבר קיים משתמש עם האימייל הזה.", invalidPassword: "הסיסמה חייבת לכלול לפחות 8 תווים.", permissionsTitle: "הרשאות גישה", centerLabel: "מרכז", phone: "טלפון" },
-    billing: { title: "חיוב", subtitle: "ניהול חשבוניות ידניות ורשומות תשלום של המרכז.", addInvoice: "הוספת חשבונית", invoiceTitle: "פרטי חשבונית", searchPlaceholder: "חיפוש לפי שם מטופל או טלפון", filterAllStatuses: "כל הסטטוסים", filterAll: "הכל", emptyTitle: "אין עדיין חשבוניות פעילות", emptyBody: "צרו את החשבונית הראשונה של המרכז.", emptyPendingTitle: "אין חשבוניות ממתינות", emptyPendingBody: "כל החשבוניות שולמו או בוטלו.", emptyPartialTitle: "אין חשבוניות בתשלום חלקי", emptyPartialBody: "אין חשבוניות עם תשלומים חלקיים כרגע.", emptyPaidTitle: "אין עדיין חשבוניות ששולמו", emptyPaidBody: "סמנו חשבונית כשולמה כדי שתופיע כאן.", emptyCancelledTitle: "אין חשבוניות מבוטלות", emptyCancelledBody: "חשבוניות מבוטלות יופיעו כאן.", loading: "טוען חשבוניות...", loadError: "לא ניתן לטעון חשבוניות. נסו שוב.", patient: "מטופל", service: "שירות", customService: "שירות שאינו ברשימה", customServiceName: "שם שירות מותאם", customServiceDuration: "משך שירות מותאם", customServicePrice: "מחיר שירות מותאם", saveCustomService: "שמירה כשירות עתידי", customServiceBadge: "שירות מותאם", provider: "מטפל", providerOptional: "אופציונלי", noProvider: "ללא מטפל", selectPatient: "בחרו מטופל", selectService: "בחרו שירות", amount: "סכום", currency: "מטבע", status: "סטטוס", notes: "הערות", notesOptional: "אופציונלי", createdAt: "נוצר", updatedAt: "עודכן", submit: "יצירת חשבונית", markedPaid: "החשבונית סומנה כשולמה.", invoiceFullyPaid: "החשבונית שולמה במלואה. לא ניתן להוסיף תשלום חדש.", cancelled: "החשבונית בוטלה.", notFound: "החשבונית לא נמצאה.", fieldRequired: "שדה זה חובה.", invalidAmount: "הזינו סכום תקין גדול מאפס.", markAsPaid: "סמן כשולם", cancelInvoice: "ביטול חשבונית", reopenInvoice: "פתיחה מחדש", reopened: "החשבונית נפתחה מחדש כממתינה.", addPayment: "הוספת תשלום", paymentHistory: "היסטוריית תשלומים", paymentMethod: "אמצעי תשלום", paymentDate: "תאריך תשלום", paymentNotes: "הערות", paymentNotesOptional: "אופציונלי", methodCash: "מזומן", methodBankTransfer: "העברה בנקאית", methodCheck: "המחאה", methodOther: "אחר", paymentAdded: "התשלום נרשם בהצלחה.", noPayments: "עדיין לא נרשמו תשלומים.", invoiceTotal: "סך החשבונית", paidAmount: "שולם", balanceDue: "יתרה לתשלום", paymentBy: "על ידי", overpaymentError: "רישום התשלום נכשל. נסו שוב.", overpaymentCreditHint: "הסכום העודף ישמר כזיכוי למטופל.", invalidPaymentDate: "הזינו תאריך תשלום תקין.", creditBalance: "יתרת זיכוי", useCredit: "שימוש בזיכוי", creditAmount: "סכום זיכוי", creditApplied: "הזיכוי הוחל בהצלחה.", noCreditAvailable: "אין זיכוי זמין למטופל זה.", insufficientCredit: "יתרת הזיכוי אינה מספיקה.", noCreditDue: "אין יתרה לתשלום לשימוש בזיכוי.", creditAdded: "זיכוי נוסף לחשבון המטופל.", overpaymentCreditNotice: "תשלום עודף נשמר כזיכוי למטופל.", creditSourceOverpayment: "מתשלום עודף", creditSourceManual: "התאמה ידנית", creditSourceAdjustment: "התאמה", creditUsageLabel: "זיכוי בשימוש" },
-    reports: { title: "דוחות פיננסיים", subtitle: "הכנסות, יתרות פתוחות ופעילות לתקופה שנבחרה.", loading: "טוען דוח...", loadError: "שגיאה בטעינת הנתונים.", todayRevenue: "הכנסות היום", revenueThisMonth: "הכנסות החודש", paidInvoices: "חשבוניות ששולמו", pendingInvoices: "חשבוניות ממתינות", overdueInvoices: "חשבוניות באיחור", averageInvoiceValue: "ערך חשבונית ממוצע", totalPaid: "סך הכול שנגבה", outstanding: "יתרה לגביה", patientCredit: "זיכוי מטופלים", cancelledInvoices: "חשבוניות מבוטלות", appointmentsToday: "תורים היום", periodToday: "היום", periodLast7Days: "7 הימים האחרונים", periodWeek: "השבוע", periodMonth: "החודש", periodCustom: "מותאם אישית", filterFrom: "מ-", filterTo: "עד", applyFilter: "החל", revenue: "הכנסות", appointments: "תורים", revenueByDay: "הכנסות לפי יום", revenueByPaymentStatus: "הכנסות לפי סטטוס תשלום", revenueByService: "הכנסות לפי שירות", noChartData: "אין נתוני תרשים לתקופה זו.", statusPaid: "שולם", statusPending: "ממתין", statusPartial: "חלקי", statusOverdue: "באיחור", topPatientsTitle: "מטופלים מובילים", topPatientsEmpty: "אין נתונים לתקופה זו.", topPatientsTotalPaid: "סה״כ שולם", topPatientsVisits: "ביקורים", topPatientsCredit: "זיכוי", topPatientsVip: "VIP" },
+    patients: { title: "מטופלים", subtitle: "ניהול רשומות מטופלים של המרכז הזה בלבד.", addPatient: "הוספת מטופל", addFirstPatient: "הוספת מטופל ראשון", editPatient: "עריכת מטופל", detailsTitle: "פרטי מטופל", searchPlaceholder: "חיפוש לפי שם מטופל או טלפון", totalPatients: "סך מטופלים", activePatients: "מטופלים פעילים", archivedPatients: "מטופלים בארכיון", newPatientsThisMonth: "מטופלים חדשים החודש", filters: "מסננים", allGenders: "כל המינים", allStatuses: "כל הסטטוסים", archiveFilter: "מצב ארכיון", allArchiveStates: "כל הרשומות", activeOnly: "פעילים בלבד", archivedOnly: "בארכיון בלבד", hasUpcomingAppointment: "יש תור קרוב", hasReceivables: "יש יתרה לגבייה", unavailableFilter: "נדרש נתון סיכום", filterAll: "הכול", filterYes: "כן", filterNo: "לא", treatmentPlansCount: "תוכניות טיפול", overdueSessionsCount: "טיפולים באיחור", lastSession: "ביקור אחרון", appointmentsCount: "מספר תורים", nextSession: "הטיפול הבא", outstandingBalance: "יתרה לגבייה", upcomingAppointmentsCount: "תורים קרובים", noData: "אין", quickActions: "פעולות מהירות", createAppointment: "יצירת תור", createTreatmentPlan: "יצירת תוכנית טיפול", createInvoice: "יצירת חשבונית", unavailableAction: "פעולה זו אינה זמינה כרגע.", moreActions: "פעולות נוספות", paginationSummary: (shown, total) => `מציג ${shown} מתוך ${total} מטופלים`, paginationPrepared: "מוכן לחלוקה לעמודים ברשימות גדולות", emptyTitle: "עדיין אין מטופלים", emptyBody: "צרו את רשומת המטופל הראשונה של המרכז.", noResultsTitle: "לא נמצאו מטופלים תואמים", noResultsBody: "נסו שם או מספר טלפון אחר.", loading: "טוען מטופלים...", fullName: "שם מלא", fullNameAr: "שם בערבית", fullNameHe: "שם בעברית", fullNameEn: "שם באנגלית", namesOptionalHint: "אופציונלי: הזינו את שם המטופל בשפות נוספות לתצוגה רב-לשונית.", phone: "טלפון", email: "אימייל", gender: "מין", dateOfBirth: "תאריך לידה", nationalId: "מספר זהות", notes: "הערות", status: "סטטוס", createdAt: "נוצר", updatedAt: "עודכן", submit: "יצירת מטופל", update: "עדכון מטופל", fieldRequired: "שדה זה חובה.", invalidPhone: "הזינו מספר טלפון תקין.", duplicatePhone: "כבר קיים מטופל עם מספר הטלפון הזה.", loadError: "לא ניתן לטעון מטופלים. נסו שוב.", saved: "המטופל נשמר.", archived: "המטופל הועבר לארכיון.", activated: "המטופל הופעל.", notFound: "המטופל לא נמצא.", deletePatient: "מחיקה לצמיתות", deleteConfirmTitle: "מחיקת מטופל לצמיתות", deleteConfirmBody: "האם אתה בטוח? המטופל יימחק לצמיתות ואין דרך לבטל פעולה זו.", deleteConfirmButton: "מחק לצמיתות", deleteBlocked: "לא ניתן למחוק: למטופל יש פגישות, חשבוניות או מעקבים מקושרים.", deleteBlockedTooltip: "לא ניתן למחוק מטופל זה כי הוא מקושר לרשומות כמו תורים, חשבוניות או מעקבים. ניתן להעביר אותו לארכיון במקום.", deleteBlockedWithCounts: (counts) => { const parts = []; if (counts.appointments > 0) parts.push(`${counts.appointments} תורים`); if (counts.invoices > 0) parts.push(`${counts.invoices} חשבוניות`); if (counts.payments > 0) parts.push(`${counts.payments} תשלומים`); if (counts.followUps > 0) parts.push(`${counts.followUps} מעקבים`); if (counts.creditTransactions > 0) parts.push(`${counts.creditTransactions} עסקאות זיכוי`); return `לא ניתן למחוק: מקושר ל-${parts.join(", ")}. ניתן להעביר לארכיון במקום.`; }, deleted: "המטופל נמחק לצמיתות.", patientPortal: { title: "פורטל מטופל", generate: "צור קישור לפורטל מטופל", generating: "יוצר קישור…", copyLink: "העתק קישור", copied: "הועתק!", openPortal: "פתח פורטל", shareWhatsApp: "שתף בוואטסאפ", error: "לא ניתן ליצור קישור לפורטל. נסה שוב." } },
+    services: { title: "שירותים", subtitle: "ניהול שירותי המרכז, משך השירות, מחירים וסטטוס פעילות.", addService: "הוספת שירות", editService: "עריכת שירות", detailsTitle: "פרטי שירות", searchPlaceholder: "חיפוש לפי שם שירות", filterAll: "הכול", filterActive: "פעילים", filterArchived: "בארכיון", emptyTitle: "עדיין אין שירותים", emptyBody: "צרו את השירות הראשון של המרכז.", noResultsTitle: "לא נמצאו שירותים תואמים", noResultsBody: "נסו שם שירות אחר.", loading: "טוען שירותים...", loadError: "לא ניתן לטעון שירותים. נסו שוב.", nameEn: "שם באנגלית", nameAr: "שם בערבית", nameHe: "שם בעברית", descriptionEn: "תיאור באנגלית", descriptionAr: "תיאור בערבית", descriptionHe: "תיאור בעברית", bufferMinutes: "זמן מרווח אחרי השירות (דקות)", durationMinutes: "משך", price: "מחיר", currency: "מטבע", status: "סטטוס", createdAt: "נוצר", updatedAt: "עודכן", submit: "יצירת שירות", update: "עדכון שירות", saved: "השירות נשמר.", archived: "השירות הועבר לארכיון.", activated: "השירות הופעל.", notFound: "השירות לא נמצא.", optional: "אופציונלי", fieldRequired: "שדה זה חובה.", invalidBuffer: "הזינו זמן מרווח תקין.", invalidDuration: "הזינו משך תקין.", invalidPrice: "הזינו מחיר תקין.", invalidCurrency: "הזינו קוד מטבע תקין.", durationUnitMinutes: "דקות", durationUnitHours: "שעות", enableFollowUpPlan: "הפעלת תוכנית מעקב", followUpSettings: "הגדרות מעקב", followUpDescription: "יצירת תזכורות מעקב אוטומטיות לאחר השלמת טיפול.", followUp: { none: "ללא מעקב", sessionBasedPlan: "תוכנית טיפול לפי מספר מפגשים", sessionBasedHelper: "מסתיימת אוטומטית לאחר השלמת כל המפגשים.", recurring: "מעקב מחזורי מתמשך", recurringHelper: "ממשיך לשלוח תזכורות תקופתיות ללא מספר מפגשים מוגדר." }, defaultIntervalDays: "מרווח תזכורת (ימים)", planType: "סוג התוכנית", fixedInterval: "תוכנית טיפול לפי מספר מפגשים", sessionPlan: "תוכנית טיפול לפי מספר מפגשים", createNextReminderAutomatically: "יצירת התזכורת הבאה אוטומטית", totalRecommendedSessions: "מספר טיפולים מומלץ", totalSessionsSummary: (count: number) => `סה״כ מפגשים: ${count}`, totalSessionsCalculated: "מחושב אוטומטית משלבי הטיפול", whatsappMessageArabic: "הודעת וואטסאפ בערבית", whatsappMessageHebrew: "הודעת וואטסאפ בעברית", whatsappMessageEnglish: "הודעת וואטסאפ באנגלית", sessionsFrom: "מטיפול מספר", sessionsTo: "עד טיפול מספר", intervalDays: "מרווח בימים", addRule: "הוספת כלל", removeRule: "מחיקת כלל", followUpRuleHelper: "חלקו את התוכנית לשלבים לפי מספר טיפולים ומרווח התזכורת.", treatmentPhases: "שלבי הטיפול", phaseTitle: (index: number) => `שלב טיפול ${index}`, reminderAfterDays: (days: number) => `תזכורת לאחר ${days} ימים`, previewSessionLine: (session: number, days: number) => days === 0 ? `טיפול ${session} (יום הפגישה)` : `טיפול ${session} → לאחר ${days} ימים`, planPreview: "תצוגה מקדימה של התוכנית", laserPreset: "לייזר 8 טיפולים", hijamaPreset: "חיג'אמה מונעת", skincarePreset: "ניקוי עור חודשי", applyPreset: "החלת תבנית", editPhase: "עריכה", deletePhase: "מחיקת שלב", planCalcExplanation: "הטיפול הראשון הוא הפגישה עצמה. כל טיפול עוקב נקבע לאחר מרווח השלב.", planPreviewPhaseLabel: (from: number, to: number, days: number) => `טיפולים ${from}–${to} · כל ${days} ימים`, overlappingRanges: "לא ניתן לחפיפה בין שלבי הטיפול.", uncoveredSessions: (range: string) => `לטיפולים ${range} אין כלל מעקב`, invalidIntervals: "ערך המרווח חייב להיות מספר שלם חיובי.", invalidRangeOrder: "מספר הטיפול הראשון חייב להיות קטן או שווה לאחרון.", firstPhaseMustStartAtOne: "השלב הראשון חייב להתחיל מטיפול 1.", noGapsAllowed: "שלבי הטיפול חייבים להיות רצופים ללא פערים.", deleteService: "מחיקה לצמיתות", deleteServiceConfirmTitle: "מחיקת השירות לצמיתות", deleteServiceConfirmBody: "האם אתה בטוח? השירות יימחק לצמיתות ולא ניתן יהיה לשחזרו.", deleteServiceConfirmButton: "מחק לצמיתות", deleteServiceBlocked: "לא ניתן למחוק: שירות זה מקושר לתורים, חשבוניות או בקשות הזמנה.", deleteServiceBlockedTooltip: "לא ניתן למחוק שירות זה כיוון שהוא מקושר לתורים, חשבוניות או בקשות הזמנה. ניתן לארכב אותו במקום.", deleted: "השירות נמחק לצמיתות.", followUpBadge: "תוכנית מעקב", noFollowUpBadge: "ללא מעקב", sessionBasedPlanLabel: "תוכנית טיפול לפי מספר מפגשים", recurringContinuousLabel: "מעקב מחזורי מתמשך", templateCountBadge: (count: number) => `${count} תבניות`, defaultTemplateSummary: (name: string, sessions: number) => `ברירת מחדל: ${name} · ${sessions} טיפולים`, totalSessionsBadge: (count: number) => `${count} טיפולים בסה"כ`, intervalDaysBadge: (days: number) => `כל ${days} ימים`, followUpAutoHint: "שירות זה יוצר תוכנית מעקב אוטומטית עם השלמת הפגישה" },
+    staff: { title: "צוות", subtitle: "ניהול משתמשי צוות, תפקידים וסטטוס גישה.", addStaff: "הוספת איש צוות", editStaff: "עריכת איש צוות", detailsTitle: "פרטי איש צוות", searchPlaceholder: "חיפוש לפי שם או אימייל", filterAllRoles: "כל התפקידים", filterAllStatuses: "כל הסטטוסים", emptyTitle: "עדיין אין משתמשי צוות", emptyBody: "צרו את משתמש הצוות הראשון של המרכז.", noResultsTitle: "לא נמצא צוות תואם", noResultsBody: "נסו שם, אימייל, תפקיד או סטטוס אחר.", loading: "טוען צוות...", loadError: "לא ניתן לטעון צוות. נסו שוב.", fullName: "שם מלא", email: "אימייל", password: "סיסמה", passwordOptional: "אופציונלי בעריכה", providerEnabled: "מוצג כמטפל בתורים", providerEnabledHelper: "כאשר מופעל, איש צוות פעיל יופיע ברשימת המטפלים בתורים ללא תלות בתפקיד.", role: "תפקיד", status: "סטטוס", createdAt: "נוצר", updatedAt: "עודכן", submit: "יצירת איש צוות", update: "עדכון איש צוות", saved: "איש הצוות נשמר.", activated: "איש הצוות הופעל.", deactivated: "איש הצוות הושבת.", notFound: "איש הצוות לא נמצא.", fieldRequired: "שדה זה חובה.", invalidEmail: "הזינו אימייל צוות תקין.", duplicateEmail: "כבר קיים משתמש עם האימייל הזה.", invalidPassword: "הסיסמה חייבת לכלול לפחות 8 תווים.", permissionsTitle: "הרשאות גישה", centerLabel: "מרכז", phone: "טלפון" },
+    billing: { title: "חיוב", subtitle: "ניהול חשבוניות ידניות ורשומות תשלום של המרכז.", addInvoice: "הוספת חשבונית", invoiceTitle: "פרטי חשבונית", searchPlaceholder: "חיפוש לפי שם מטופל או טלפון", filterAllStatuses: "כל הסטטוסים", filterAll: "הכל", emptyTitle: "אין עדיין חשבוניות פעילות", emptyBody: "צרו את החשבונית הראשונה של המרכז.", emptyPendingTitle: "אין חשבוניות ממתינות", emptyPendingBody: "כל החשבוניות שולמו או בוטלו.", emptyPartialTitle: "אין חשבוניות בתשלום חלקי", emptyPartialBody: "אין חשבוניות עם תשלומים חלקיים כרגע.", emptyPaidTitle: "אין עדיין חשבוניות ששולמו", emptyPaidBody: "סמנו חשבונית כשולמה כדי שתופיע כאן.", emptyCancelledTitle: "אין חשבוניות מבוטלות", emptyCancelledBody: "חשבוניות מבוטלות יופיעו כאן.", loading: "טוען חשבוניות...", loadError: "לא ניתן לטעון חשבוניות. נסו שוב.", patient: "מטופל", service: "שירות", customService: "שירות שאינו ברשימה", customServiceName: "שם שירות מותאם", customServiceDuration: "משך שירות מותאם", customServicePrice: "מחיר שירות מותאם", saveCustomService: "שמירה כשירות עתידי", customServiceBadge: "שירות מותאם", provider: "מטפל", providerOptional: "אופציונלי", noProvider: "ללא מטפל", selectPatient: "בחרו מטופל", selectService: "בחרו שירות", amount: "סכום", currency: "מטבע", status: "סטטוס", notes: "הערות", notesOptional: "אופציונלי", createdAt: "נוצר", updatedAt: "עודכן", submit: "יצירת חשבונית", markedPaid: "החשבונית סומנה כשולמה.", invoiceFullyPaid: "החשבונית שולמה במלואה. לא ניתן להוסיף תשלום חדש.", cancelled: "החשבונית בוטלה.", notFound: "החשבונית לא נמצאה.", fieldRequired: "שדה זה חובה.", invalidAmount: "הזינו סכום תקין גדול מאפס.", markAsPaid: "סמן כשולם", cancelInvoice: "ביטול חשבונית", reopenInvoice: "פתיחה מחדש", reopened: "החשבונית נפתחה מחדש כממתינה.", addPayment: "הוספת תשלום", paymentHistory: "היסטוריית תשלומים", paymentMethod: "אמצעי תשלום", paymentDate: "תאריך תשלום", paymentNotes: "הערות", paymentNotesOptional: "אופציונלי", methodCash: "מזומן", methodBankTransfer: "העברה בנקאית", methodCheck: "המחאה", methodOther: "אחר", paymentAdded: "התשלום נרשם בהצלחה.", noPayments: "עדיין לא נרשמו תשלומים.", invoiceTotal: "סך החשבונית", paidAmount: "שולם", balanceDue: "יתרה לתשלום", paymentBy: "על ידי", overpaymentError: "רישום התשלום נכשל. נסו שוב.", overpaymentCreditHint: "הסכום העודף ישמר כזיכוי למטופל.", invalidPaymentDate: "הזינו תאריך תשלום תקין.", creditBalance: "יתרת זיכוי", useCredit: "שימוש בזיכוי", creditAmount: "סכום זיכוי", creditApplied: "הזיכוי הוחל בהצלחה.", noCreditAvailable: "אין זיכוי זמין למטופל זה.", insufficientCredit: "יתרת הזיכוי אינה מספיקה.", noCreditDue: "אין יתרה לתשלום לשימוש בזיכוי.", creditAdded: "זיכוי נוסף לחשבון המטופל.", overpaymentCreditNotice: "תשלום עודף נשמר כזיכוי למטופל.", creditSourceOverpayment: "מתשלום עודף", creditSourceManual: "התאמה ידנית", creditSourceAdjustment: "התאמה", creditUsageLabel: "זיכוי בשימוש", invoiceTotalDesc: "הערך המלא של כל השירותים בתור זה.", paidAmountDesc: "הסכום הכולל שנגבה מהמטופל.", balanceDueDesc: "הסכום שעל המטופל עדיין לשלם.", balanceDueTooltip: "יתרה לתשלום = סך החשבונית − שולם", creditBalanceDesc: "זיכוי שמור למטופל לשימוש בחשבוניות עתידיות.", statusPaidDesc: "החשבונית נגבתה במלואה.", statusPartialDesc: "חלק שולם — ישנה יתרה.", statusPendingDesc: "טרם התקבל תשלום." },
+    reports: { title: "דוחות פיננסיים", subtitle: "הכנסות, יתרות פתוחות ופעילות לתקופה שנבחרה.", loading: "טוען דוח...", loadError: "שגיאה בטעינת הנתונים.", todayRevenue: "הכנסות היום", revenueThisMonth: "הכנסות החודש", paidInvoices: "חשבוניות ששולמו", pendingInvoices: "חשבוניות ממתינות", overdueInvoices: "חשבוניות באיחור", averageInvoiceValue: "ערך חשבונית ממוצע", totalPaid: "סך הכול שנגבה", outstanding: "יתרה לגביה", patientCredit: "זיכוי מטופלים", cancelledInvoices: "חשבוניות מבוטלות", appointmentsToday: "תורים היום", periodToday: "היום", periodLast7Days: "7 הימים האחרונים", periodWeek: "השבוע", periodMonth: "החודש", periodCustom: "מותאם אישית", filterFrom: "מ-", filterTo: "עד", applyFilter: "החל", revenue: "הכנסות", appointments: "תורים", revenueByDay: "הכנסות לפי יום", revenueByPaymentStatus: "הכנסות לפי סטטוס תשלום", revenueByService: "הכנסות לפי שירות", noChartData: "אין מספיק נתונים לתקופה זו.", viewSessions: "הצג טיפולים", statusPaid: "שולם", statusPending: "לא שולם", statusPartial: "שולם חלקית", statusOverdue: "באיחור", topPatientsTitle: "מטופלים מובילים", topPatientsEmpty: "אין נתונים לתקופה זו.", topPatientsTotalPaid: "סה״כ שולם", topPatientsVisits: "ביקורים", topPatientsCredit: "זיכוי", topPatientsVip: "VIP", receivablesSectionTitle: "חובות פתוחים", receivablesSectionHelper: "מציג את כל היתרות הפתוחות גם אם הן מחוץ לתקופה שנבחרה.", receivablesDetailsTitle: "פירוט חובות", totalReceivables: "סך חובות פתוחים", patientsWithDebt: "מטופלים עם יתרה", unpaidInvoices: "חשבוניות שלא שולמו", partiallyPaidInvoices: "חשבוניות ששולמו חלקית", highestDebt: "החוב הגבוה ביותר", invoiceCountIncluded: "חשבוניות בטווח שנבחר", noFinancialDataInRange: "אין נתונים פיננסיים בטווח שנבחר.", selectedDateRange: "טווח תאריכים נבחר", openReceivablesOnly: "חובות פתוחים בלבד", overdueOnly: "באיחור בלבד", receivablesByPaymentStatus: "חובות לפי סטטוס תשלום", topPatientsByDebt: "מטופלים עם החוב הגבוה ביותר", revenueVsReceivables: "הכנסות מול חובות", revenueLabel: "הכנסות", receivablesLabel: "חובות", patient: "מטופל", phone: "טלפון", service: "שירות", invoiceTotal: "סך חשבונית", paidAmount: "שולם", remainingAmount: "נותר", paymentStatus: "סטטוס תשלום", lastPayment: "תשלום אחרון", dueDate: "תאריך יעד", notRecorded: "לא נרשם", noReceivablesData: "אין חובות התואמים לסינון.", todayOverviewTitle: "סיכום יומי", appointmentsTodayTotal: "תורים היום", appointmentsTodayCompleted: "הושלמו היום", appointmentsTodayUpcoming: "ממתינים היום", delayedFollowUps: "מעקבים מאוחרים", newPatientsThisMonth: "מטופלים חדשים החודש", activeTreatmentPlans: "תוכניות טיפול פעילות", revenueInsightsTitle: "ניתוח הכנסות", appointmentAnalyticsTitle: "ניתוח תורים", totalInPeriod: "סך תורים", noShowCount: "אי-הגעה", cancellationRate: "שיעור ביטולים", noShowRate: "שיעור אי-הגעה", topProvidersTitle: "מטפלים מובילים", viewFullReceivables: "הצג חובות מלאים", hideFullReceivables: "הסתר חובות", topDebtorsTitle: "יתרות גבוהות ביותר", completedWithoutInvoiceTitle: "טיפולים שהושלמו ללא חשבונית", completedWithoutInvoiceAlert: (count: number) => `${count} טיפולים שהושלמו ללא חשבונית עדיין`, completedWithoutInvoiceEmpty: "לכל הטיפולים שהושלמו יש חשבוניות.", showAllUnbilled: "כל הזמן — התעלם מטווח תאריכים", showPeriodUnbilled: "הצג תקופה בלבד" },
     profile: { title: "הפרופיל שלי", subtitle: "פרטי החשבון שלך והרשאות הגישה.", center: "מרכז", memberSince: "חבר מאז", permissionsTitle: "הרשאות גישה", noPermissions: "לא הוקצו הרשאות.", changePassword: "שינוי סיסמה", currentPassword: "סיסמה נוכחית", newPassword: "סיסמה חדשה", confirmPassword: "אישור סיסמה חדשה", updatePassword: "עדכון סיסמה", updating: "מעדכן...", passwordUpdated: "הסיסמה עודכנה בהצלחה.", passwordMismatch: "הסיסמאות החדשות אינן תואמות.", passwordTooShort: "הסיסמה חייבת לכלול לפחות 8 תווים.", wrongPassword: "הסיסמה הנוכחית שגויה.", loadError: "לא ניתן לטעון את הפרופיל. נסו שוב." },
-    permissionLabels: { patientsView: "צפייה במטופלים", patientsCreate: "יצירת מטופלים", patientsUpdate: "עריכת מטופלים", patientsStatus: "עדכון סטטוס מטופלים", staffView: "צפייה בצוות", staffCreate: "יצירת צוות", staffUpdate: "עריכת צוות", staffActivate: "הפעלה / השבתת צוות", servicesView: "צפייה בשירותים", servicesCreate: "יצירת שירותים", servicesUpdate: "עריכת שירותים", servicesArchive: "ארכוב שירותים", servicesActivate: "עדכון סטטוס שירותים", appointmentsView: "צפייה בתורים", appointmentsCreate: "יצירת תורים", appointmentsUpdate: "עריכת תורים", appointmentsCancel: "ביטול תורים", appointmentsStatusUpdate: "עדכון סטטוס תורים", billingView: "צפייה בחשבוניות", billingCreate: "יצירת חשבוניות", billingUpdate: "עריכת חשבוניות", billingMarkPaid: "ביטול חשבוניות", paymentsView: "צפייה בתשלומים", paymentsCreate: "רישום תשלומים", reportsView: "צפייה בדוחות", settingsView: "צפייה בהגדרות", permissionsView: "צפייה בהרשאות תפקידים", permissionsUpdate: "עריכת הרשאות תפקידים" },
-    appointments: { title: "תורים", subtitle: "תזמון, עדכון ומעקב אחר תורי המרכז.", addAppointment: "הוספת תור", editAppointment: "עריכת תור", detailsTitle: "פרטי תור", searchPlaceholder: "חיפוש לפי שם מטופל או טלפון", filterAll: "כל הסטטוסים", today: "היום", upcoming: "קרובים", dateFilter: "תאריך", providerFilter: "מטפל", allProviders: "כל המטפלים", emptyTitle: "אין עדיין תורים", emptyBody: "צרו את התור הראשון למרכז הזה.", noResultsTitle: "לא נמצאו תורים תואמים", noResultsBody: "נסו מטופל, סטטוס, תאריך או מטפל אחר.", loading: "טוען תורים...", loadError: "לא ניתן לטעון תורים. נסו שוב.", patient: "מטופל", service: "שירות", customService: "שירות שאינו ברשימה", customServiceName: "שם שירות מותאם", customServiceDuration: "משך הטיפול (דקות)", customServiceDurationPlaceholder: "לדוגמה: 15", customServiceDurationHelper: "משך הטיפול נמדד בדקות", customServicePrice: "מחיר השירות (₪)", customServicePricePlaceholder: "לדוגמה: 80", customServicePriceHelper: "המחיר מחושב בשקלים (ILS)", saveCustomService: "שמירה כשירות עתידי", customServiceBadge: "שירות מותאם", provider: "מטפל", appointmentDate: "תאריך התור", startTime: "שעת התחלה", endTime: "שעת סיום", durationMinutes: "משך התור (בדקות)", durationMinutesPlaceholder: "לדוגמה: 15", durationMinutesHelper: "משך התור מחושב בדקות.", status: "סטטוס", notes: "הערות טיפול", notesHelper: "מופיעות בהיסטוריית הטיפול ובמעקבים עתידיים.", internalNotes: "הערות פנימיות לצוות", internalNotesHelper: "לא מוצגות למטופל או בהודעות מעקב.", cancellationReason: "סיבת ביטול", reminderSent: "נשלחה תזכורת", createdAt: "נוצר", updatedAt: "עודכן", createdBy: "נוצר על ידי", submit: "יצירת תור", update: "עדכון תור", saved: "התור נשמר.", saveError: "לא ניתן לשמור את התור. נסו שוב.", cancelled: "התור בוטל.", statusUpdated: "סטטוס התור עודכן.", notFound: "התור לא נמצא.", fieldRequired: "שדה זה חובה.", invalidDate: "בחרו תאריך תור תקין.", invalidTime: "בחרו שעה תקינה.", invalidDuration: "הזינו משך תקין.", overlap: "התור הזה חופף לתור אחר.", cancelAppointment: "ביטול תור", confirmCancel: "אישור ביטול", changeStatus: "שינוי סטטוס", conflictTitle: "זוהתה התנגשות בתורים", conflictMessage: "נא לבחור שעה אחרת", conflictPatient: "מטופל", conflictService: "שירות", conflictProvider: "מטפל", conflictDate: "תאריך", conflictStart: "שעת התחלה", conflictEnd: "שעת סיום", startsInMinutes: "מתחיל בעוד {n} דקות", inProgressNow: "בתהליך כעת", endOfDayError: "התור חייב להסתיים לפני חצות.", invoiceSection: "חשבונית", noInvoice: "אין עדיין חשבונית", noInvoiceBody: "צרו חשבונית כדי לעקוב אחר התשלום לתור זה.", createInvoice: "יצירת חשבונית", openInvoice: "פתיחת חשבונית", invoiceCreated: "החשבונית נוצרה בהצלחה.", noServicePrice: "לשירות זה אין מחיר. פתחו את החיוב ליצירת חשבונית ידנית.", invoiceUnpaid: "לא שולם", viewInvoice: "צפייה בחשבונית", invoiceRequiresCompleted: "ניתן ליצור חשבונית רק לאחר השלמת התור.", invoiceFullyPaid: "החשבונית שולמה במלואה.", bookingRequestDetails: "פרטי בקשת התור", bookingRequester: "מבקש התור", bookingRequesterPhone: "טלפון המבקש", bookingRequestNotes: "הערות הבקשה", requestedBy: (name: string) => `נתבקש על ידי: ${name}`, slotBooked: "תפוס", loadingSlots: "טוען שעות פנויות...", noSlots: "אין שעות פנויות לתאריך זה.", selectServiceAndDate: "בחרו שירות ותאריך לצפייה בשעות הפנויות.", calendarView: "לוח שנה", listView: "רשימה", dayView: "יום", weekView: "שבוע", calendarToday: "היום", calendarPrev: "הקודם", calendarNext: "הבא", reminderSection: "תזכורת למטופל", lastReminderSent: "תזכורת אחרונה נשלחה", reminderCountLabel: "תזכורות שנשלחו", sendReminderNow: "שליחת תזכורת בוואטסאפ", reminderSentSuccess: "התזכורת מוכנה. פתחו וואטסאפ לשליחה.", reminderNotSentYet: "לא נשלחה תזכורת עדיין.", reminder24hSentLabel: "תזכורת 24 שעות נשלחה", reminder2hSentLabel: "תזכורת 2 שעות נשלחה", openWhatsApp: "פתיחת וואטסאפ", copyMessage: "העתקת הודעה", reminderSending: "מכין...", reminderHelperText: "וואטסאפ נפתח עם הודעה מוכנה.", followUpCreatedAfterCompletionHelper: "המעקב ייווצר אוטומטית לאחר סימון התור כהושלם.", followUpPlanLockedHelper: "תוכנית המעקב זמינה רק בעת שמירת השירות כשירות עתידי.", followUpActiveInService: "תוכנית מעקב מופעלת עבור שירות זה.", editServiceFollowUp: "ערוך הגדרות מעקב בשירות", savedServiceBadge: "שירות זה שמור ברשימת השירותים", followUpPlanActive: "תוכנית מעקב פעילה", followUpUpcoming: "מעקב קרוב", followUpDue: (date: string) => `מעקב קרוב: ${date}`, followUpMissing: "מעקב לא נוצר", followUpBooked: "נקבע תור", followUpCompleted: "מעקב הושלם", followUpContacted: "נוצר קשר", followUpMissed: "מועד המעקב חלף", followUpCancelled: "המעקב בוטל", reactivateAppointment: "הפעל מחדש את הפגישה", reactivateConfirm: "האם ברצונך להפעיל מחדש את הפגישה? היא תוחזר לסטטוס מאושר.", reactivated: "הפגישה הופעלה מחדש בהצלחה.", invoiceBlockedCancelled: "לא ניתן ליצור חשבונית עבור פגישה מבוטלת.", followUpPlanExists: "יש תוכנית מעקב", followUpPlanNone: "אין תוכנית מעקב" },
+    permissionLabels: { patientsView: "צפייה במטופלים", patientsCreate: "יצירת מטופלים", patientsUpdate: "עריכת מטופלים", patientsStatus: "עדכון סטטוס מטופלים", staffView: "צפייה בצוות", staffCreate: "יצירת צוות", staffUpdate: "עריכת צוות", staffActivate: "הפעלה / השבתת צוות", servicesView: "צפייה בשירותים", servicesCreate: "יצירת שירותים", servicesUpdate: "עריכת שירותים", servicesArchive: "ארכוב שירותים", servicesActivate: "עדכון סטטוס שירותים", appointmentsView: "צפייה בתורים", appointmentsCreate: "יצירת תורים", appointmentsUpdate: "עריכת תורים", appointmentsCancel: "ביטול תורים", appointmentsStatusUpdate: "עדכון סטטוס תורים", billingView: "צפייה בחשבוניות", billingCreate: "יצירת חשבוניות", billingUpdate: "עריכת חשבוניות", billingMarkPaid: "ביטול חשבוניות", paymentsView: "צפייה בתשלומים", paymentsCreate: "רישום תשלומים", expensesView: "צפייה בהוצאות", expensesCreate: "יצירת הוצאות", expensesEdit: "עריכת הוצאות", expensesDelete: "מחיקת הוצאות", expensesReports: "דוחות הוצאות", reportsView: "צפייה בדוחות", settingsView: "צפייה בהגדרות", permissionsView: "צפייה בהרשאות תפקידים", permissionsUpdate: "עריכת הרשאות תפקידים" },
+    appointments: { title: "תורים", subtitle: "תזמון, עדכון ומעקב אחר תורי המרכז.", addAppointment: "הוספת תור", editAppointment: "עריכת תור", detailsTitle: "פרטי תור", searchPlaceholder: "חיפוש לפי שם מטופל או טלפון", filterAll: "כל הסטטוסים", today: "היום", upcoming: "קרובים", dateFilter: "תאריך", providerFilter: "מטפל", allProviders: "כל המטפלים", allBranches: "כל הסניפים", branch: "סניף", chooseBranch: "בחר סניף", emptyTitle: "אין עדיין תורים", emptyBody: "צרו את התור הראשון למרכז הזה.", noResultsTitle: "לא נמצאו תורים תואמים", noResultsBody: "נסו מטופל, סטטוס, תאריך או מטפל אחר.", loading: "טוען תורים...", loadError: "לא ניתן לטעון תורים. נסו שוב.", patient: "מטופל", service: "שירות", customService: "שירות שאינו ברשימה", customServiceName: "שם שירות מותאם", customServiceDuration: "משך הטיפול (דקות)", customServiceDurationPlaceholder: "לדוגמה: 15", customServiceDurationHelper: "משך הטיפול נמדד בדקות", customServicePrice: "מחיר השירות (₪)", customServicePricePlaceholder: "לדוגמה: 80", customServicePriceHelper: "המחיר מחושב בשקלים (ILS)", saveCustomService: "שמירה כשירות עתידי", customServiceBadge: "שירות מותאם", provider: "מטפל", appointmentDate: "תאריך התור", startTime: "שעת התחלה", endTime: "שעת סיום", durationMinutes: "משך התור (בדקות)", durationMinutesPlaceholder: "לדוגמה: 15", durationMinutesHelper: "משך התור מחושב בדקות.", status: "סטטוס", notes: "הערות טיפול", notesHelper: "מופיעות בהיסטוריית הטיפול ובמעקבים עתידיים.", internalNotes: "הערות פנימיות לצוות", internalNotesHelper: "לא מוצגות למטופל או בהודעות מעקב.", cancellationReason: "סיבת ביטול", reminderSent: "נשלחה תזכורת", createdAt: "נוצר", updatedAt: "עודכן", createdBy: "נוצר על ידי", submit: "יצירת תור", update: "עדכון תור", saved: "התור נשמר.", saveError: "לא ניתן לשמור את התור. נסו שוב.", cancelled: "התור בוטל.", statusUpdated: "סטטוס התור עודכן.", notFound: "התור לא נמצא.", fieldRequired: "שדה זה חובה.", invalidDate: "בחרו תאריך תור תקין.", invalidTime: "בחרו שעה תקינה.", invalidDuration: "הזינו משך תקין.", overlap: "התור הזה חופף לתור אחר.", cancelAppointment: "ביטול תור", confirmCancel: "אישור ביטול", changeStatus: "שינוי סטטוס", conflictTitle: "זוהתה התנגשות בתורים", conflictMessage: "נא לבחור שעה אחרת", conflictPatient: "מטופל", conflictService: "שירות", conflictProvider: "מטפל", conflictDate: "תאריך", conflictStart: "שעת התחלה", conflictEnd: "שעת סיום", startsInMinutes: "מתחיל בעוד {n} דקות", inProgressNow: "בתהליך כעת", endOfDayError: "התור חייב להסתיים לפני חצות.", invoiceSection: "חשבונית", noInvoice: "אין עדיין חשבונית", noInvoiceBody: "צרו חשבונית כדי לעקוב אחר התשלום לתור זה.", createInvoice: "יצירת חשבונית", openInvoice: "פתיחת חשבונית", invoiceCreated: "החשבונית נוצרה בהצלחה.", noServicePrice: "לשירות זה אין מחיר. פתחו את החיוב ליצירת חשבונית ידנית.", invoiceUnpaid: "לא שולם", viewInvoice: "צפייה בחשבונית", invoiceRequiresCompleted: "ניתן ליצור חשבונית רק לאחר השלמת התור.", invoiceFullyPaid: "החשבונית שולמה במלואה.", needsInvoiceBadge: "דרושה חשבונית", bookingRequestDetails: "פרטי בקשת התור", bookingRequester: "מבקש התור", bookingRequesterPhone: "טלפון המבקש", bookingRequestNotes: "הערות הבקשה", requestedBy: (name: string) => `נתבקש על ידי: ${name}`, slotBooked: "תפוס", currentAppointmentSlot: "התור הנוכחי", loadingSlots: "טוען שעות פנויות...", noSlots: "אין שעות פנויות לתאריך זה.", selectServiceAndDate: "בחרו שירות ותאריך לצפייה בשעות הפנויות.", enterDurationToSeeSlots: "הזינו את משך הטיפול לצפייה בשעות הפנויות.", calendarView: "לוח שנה", listView: "רשימה", dayView: "יום", weekView: "שבוע", calendarToday: "היום", calendarPrev: "הקודם", calendarNext: "הבא", reminderSection: "תזכורת למטופל", lastReminderSent: "תזכורת אחרונה נשלחה", reminderCountLabel: "תזכורות שנשלחו", sendReminderNow: "שליחת תזכורת בוואטסאפ", reminderSentSuccess: "התזכורת מוכנה. פתחו וואטסאפ לשליחה.", reminderNotSentYet: "לא נשלחה תזכורת עדיין.", reminder24hSentLabel: "תזכורת 24 שעות נשלחה", reminder2hSentLabel: "תזכורת 2 שעות נשלחה", openWhatsApp: "פתיחת וואטסאפ", copyMessage: "העתקת הודעה", reminderSending: "מכין...", reminderHelperText: "וואטסאפ נפתח עם הודעה מוכנה.", followUpCreatedAfterCompletionHelper: "המעקב ייווצר אוטומטית לאחר סימון התור כהושלם.", followUpPlanLockedHelper: "תוכנית המעקב זמינה רק בעת שמירת השירות כשירות עתידי.", followUpActiveInService: "תוכנית מעקב מופעלת עבור שירות זה.", editServiceFollowUp: "ערוך הגדרות מעקב בשירות", savedServiceBadge: "שירות זה שמור ברשימת השירותים", followUpPlanActive: "תוכנית מעקב פעילה", followUpUpcoming: "מעקב קרוב", followUpDue: (date: string) => `מעקב קרוב: ${date}`, followUpMissing: "מעקב לא נוצר", followUpBooked: "נקבע תור", followUpCompleted: "מעקב הושלם", followUpContacted: "נוצר קשר", followUpMissed: "מועד המעקב חלף", followUpCancelled: "המעקב בוטל", reactivateAppointment: "הפעל מחדש את הפגישה", reactivateConfirm: "האם ברצונך להפעיל מחדש את הפגישה? היא תוחזר לסטטוס מאושר.", reactivated: "הפגישה הופעלה מחדש בהצלחה.", invoiceBlockedCancelled: "לא ניתן ליצור חשבונית עבור פגישה מבוטלת.", followUpPlanExists: "יש תוכנית מעקב", followUpPlanNone: "אין תוכנית מעקב", followUpPlanSection: "תוכנית מעקב", viewInFollowUps: "הצג במעקבים", followUpPlanLoading: "טוען תוכנית...", followUpSession: (n: number) => `מפגש ${n}`, followUpPlanNoRecord: "אין תוכנית מעקב לתור זה", followUpRecurringBadge: "♾ מעקב מחזורי", followUpNextDue: "המעקב הבא", followUpLastCompleted: "הושלם לאחרונה", followUpPhaseHeader: (phase: number, days: number) => `שלב ${phase} — כל ${days} ימים`, followUpPhaseTitle: (phase: number) => `שלב טיפול ${phase}`, followUpPhaseSubtitle: (from: number, to: number, days: number) => `טיפולים ${from} → ${to} • כל ${days} ימים`, followUpNextSessionBadge: "הפגישה הבאה", followUpRelativeToday: "היום", followUpRelativeOverdue: (days: number) => `${days} ימים באיחור`, followUpRelativeRemaining: (days: number) => `נותרו ${days} ימים`, reminderMessagesSection: "הודעות תזכורת", followUpEvery: "כל", followUpIntervalDay: (n: number) => n === 1 ? "יום" : "ימים", followUpIntervalWeek: (n: number) => n === 1 ? "שבוע" : "שבועות", followUpIntervalMonth: (n: number) => n === 1 ? "חודש" : "חודשים", followUpIntervalYear: (n: number) => n === 1 ? "שנה" : "שנים" },
     rolePermissions: { title: "הרשאות תפקידים", subtitle: "הגדירו אילו פעולות כל תפקיד יכול לבצע במרכז זה.", selectRole: "בחרו תפקיד לניהול הרשאותיו.", ownerProtected: "לתפקיד בעלי המרכז יש גישה מלאה ואינו ניתן לשינוי.", savePermissions: "שמירת הרשאות", saving: "שומר...", saved: "ההרשאות נשמרו.", loadError: "לא ניתן לטעון הרשאות. נסו שוב.", paymentsSection: "תשלומים" },
     notifications: { title: "התראות", subtitle: "התראות מינוי והתראות מערכת עבור מרכז זה.", navLabel: "התראות", loading: "טוען התראות...", loadError: "לא ניתן לטעון התראות. נסו שוב.", markAsRead: "סמן כנקרא", markingRead: "מסמן...", markedRead: "סומן כנקרא", viewAll: "צפייה בכל ההתראות", filterAll: "הכול", filterUnread: "לא נקראו", emptyTitle: "אין התראות", emptyBody: "כאן יופיעו התראות מינוי והתראות מערכת.", emptyUnreadTitle: "אין התראות שלא נקראו", emptyUnreadBody: "כל ההתראות נקראו.", unreadCount: (n: number) => `${n} לא נקראו`, typeExpiring: "המינוי מסתיים בקרוב", typeExpired: "המינוי פג תוקף", typeBookingRequest: "בקשת תור", newBookingToast: "בקשת תור חדשה התקבלה עכשיו.", openBookingRequests: "פתח בקשות תור", statusPending: "ממתין", statusSent: "נשלח", statusFailed: "נכשל", widgetTitle: "התראות", widgetNoUnread: "אין התראות חדשות.", corruptedFallback: "התראה חדשה" },
     gallery: { title: "גלריה", subtitle: "נהלו את התמונות המוצגות בפרופיל הציבורי של המרכז.", uploadButton: "העלאת תמונה", uploadingText: "מעלה...", deleteButton: "מחיקה", emptyTitle: "אין עדיין תמונות", emptyBody: "העלו תמונות כדי להציג את המרכז שלכם בדף הציבורי.", loadError: "לא ניתן לטעון את הגלריה. נסו שוב.", uploadError: "ההעלאה נכשלה. בדקו את הקובץ ונסו שוב.", maxImages: "מותר עד 20 תמונות.", recommendedSize: "מומלץ: JPG או PNG, לפחות 800 x 600 פיקסל.", moveUp: "הזזה למעלה", moveDown: "הזזה למטה" },
@@ -1855,10 +2213,7 @@ export const centerAdminDictionaries: Record<
     comingSoon: "בקרוב",
     patientStatuses: { ACTIVE: "פעיל", INACTIVE: "לא פעיל", ARCHIVED: "בארכיון" },
     patientGenders: { MALE: "זכר", FEMALE: "נקבה", OTHER: "אחר", UNKNOWN: "לא צוין" },
-    roles: { CENTER_OWNER: "בעלי המרכז", CENTER_MANAGER: "מנהל המרכז", DOCTOR: "רופא", RECEPTIONIST: "קבלה", ACCOUNTANT: "הנהלת חשבונות", STAFF: "צוות" },
+    roles: { CENTER_OWNER: "בעל המרכז", CENTER_MANAGER: "מנהל המרכז", DOCTOR: "רופא", RECEPTIONIST: "קבלה", ACCOUNTANT: "הנהלת חשבונות", STAFF: "צוות" },
     statuses: { TRIAL: "ניסיון", ACTIVE: "פעיל", PAST_DUE: "באיחור בתשלום", SUSPENDED: "מושעה", CANCELLED: "מבוטל", ARCHIVED: "בארכיון" },
   },
 };
-
-
-

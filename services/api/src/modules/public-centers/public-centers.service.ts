@@ -23,7 +23,11 @@ const VISIBLE_SUBSCRIPTION_STATUSES = [
   'TRIALING',
   'PAST_DUE',
 ] as const;
-const PUBLIC_PROVIDER_ROLES = ['CENTER_MANAGER', 'DOCTOR', 'STAFF'] as const;
+const publicBranchOrderBy: Prisma.CenterBranchOrderByWithRelationInput[] = [
+  { isMain: 'desc' },
+  { sortOrder: 'asc' },
+  { createdAt: 'asc' },
+];
 
 function visibleSubscriptionWhere(): Prisma.SubscriptionWhereInput {
   return {
@@ -40,6 +44,19 @@ const publicCenterSelect = {
   nameHe: true,
   type: true,
   primaryLanguage: true,
+  owner: {
+    select: {
+      phone: true,
+    },
+  },
+  subscriptions: {
+    where: visibleSubscriptionWhere(),
+    select: {
+      notificationPhone: true,
+    },
+    orderBy: { currentPeriodEnd: 'desc' },
+    take: 1,
+  },
   branding: {
     select: {
       logoUrl: true,
@@ -71,6 +88,7 @@ const publicCenterSelect = {
       workingHoursHe: true,
       websiteSectionOrder: true,
       websiteSectionVisibility: true,
+      publicBookingMode: true,
       facebookUrl: true,
       instagramUrl: true,
       tiktokUrl: true,
@@ -78,10 +96,67 @@ const publicCenterSelect = {
       longitude: true,
     },
   },
+  branches: {
+    where: { isActive: true },
+    select: {
+      addressAr: true,
+      addressEn: true,
+      addressHe: true,
+      cityAr: true,
+      cityEn: true,
+      cityHe: true,
+      id: true,
+      isMain: true,
+      mapsUrl: true,
+      name: true,
+      phone: true,
+      sortOrder: true,
+      whatsapp: true,
+      workingHoursTextAr: true,
+      workingHoursTextEn: true,
+      workingHoursTextHe: true,
+    },
+    orderBy: publicBranchOrderBy,
+  },
 } as const;
 
 function optionalTrimmed(value?: string | null) {
   return typeof value === 'string' ? value.trim() : value;
+}
+
+function firstNonBlank(...values: Array<string | null | undefined>) {
+  for (const value of values) {
+    const trimmed = optionalTrimmed(value);
+    if (trimmed) return trimmed;
+  }
+  return null;
+}
+
+function serializePublicCenter<
+  T extends {
+    branding: null | { whatsappPhone: string | null };
+    owner?: { phone: string | null } | null;
+    subscriptions?: Array<{ notificationPhone: string | null }>;
+  },
+>(center: T) {
+  const { owner, subscriptions, ...publicCenter } = center;
+  const globalWhatsapp = firstNonBlank(
+    subscriptions?.[0]?.notificationPhone,
+    owner?.phone,
+  );
+
+  return {
+    ...publicCenter,
+    branding: publicCenter.branding
+      ? {
+          ...publicCenter.branding,
+          whatsappPhone: firstNonBlank(
+            publicCenter.branding.whatsappPhone,
+            globalWhatsapp,
+          ),
+        }
+      : publicCenter.branding,
+  };
 }
 
 function validationFailed(errors: Record<string, string>) {
@@ -102,6 +177,15 @@ function parseBookingTime(value: string | undefined) {
   if (!time) return 'missing';
   if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(time)) return 'invalid';
   return time;
+}
+
+function isUuid(value?: string | null) {
+  return Boolean(
+    value &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value,
+    ),
+  );
 }
 
 @Injectable()
@@ -140,7 +224,7 @@ export class PublicCentersService {
       orderBy: { name: 'asc' },
     });
 
-    return { data: centers };
+    return { data: centers.map((center) => serializePublicCenter(center)) };
   }
 
   async getPublicCenter(slug: string) {
@@ -170,13 +254,16 @@ export class PublicCentersService {
             durationMinutes: true,
             price: true,
             currency: true,
+            coverImageUrl: true,
+            coverImageAlt: true,
           },
           orderBy: { nameEn: 'asc' },
         },
         userRoles: {
           where: {
+            providerEnabled: true,
             status: 'ACTIVE',
-            role: { key: { in: [...PUBLIC_PROVIDER_ROLES] } },
+            role: { status: 'ACTIVE' },
             user: { deletedAt: null, status: 'ACTIVE' },
           },
           select: {
@@ -195,10 +282,16 @@ export class PublicCentersService {
     }
 
     const { userRoles, ...publicCenter } = center;
+    const uniqueProviders = new Map<string, (typeof userRoles)[number]>();
+    for (const provider of userRoles) {
+      if (!uniqueProviders.has(provider.user.id)) {
+        uniqueProviders.set(provider.user.id, provider);
+      }
+    }
 
     return {
-      ...publicCenter,
-      providers: userRoles.map((provider) => ({
+      ...serializePublicCenter(publicCenter),
+      providers: Array.from(uniqueProviders.values()).map((provider) => ({
         id: provider.user.id,
         name: provider.user.fullName,
         roleKey: provider.role.key,
@@ -340,7 +433,25 @@ export class PublicCentersService {
           some: visibleSubscriptionWhere(),
         },
       },
-      select: { id: true, nameEn: true, name: true },
+      select: {
+        id: true,
+        nameEn: true,
+        name: true,
+        branding: { select: { publicBookingMode: true } },
+        branches: {
+          where: { isActive: true },
+          select: {
+            id: true,
+            name: true,
+            cityAr: true,
+            cityEn: true,
+            cityHe: true,
+            phone: true,
+            whatsapp: true,
+          },
+          orderBy: publicBranchOrderBy,
+        },
+      },
     });
 
     if (!center) {
@@ -358,10 +469,18 @@ export class PublicCentersService {
     const phone = optionalTrimmed(dto.phone);
     const serviceId = optionalTrimmed(dto.serviceId);
     const offerId = optionalTrimmed(dto.offerId);
+    const requestedBranchId = optionalTrimmed(dto.branchId);
     const providerId = optionalTrimmed(dto.providerId);
+    const patientArea = optionalTrimmed(dto.patientArea);
     const notes = optionalTrimmed(dto.notes);
-    const requestedDate = parseBookingDate(dto.requestedDate);
-    const requestedTime = parseBookingTime(dto.requestedTime);
+    const bookingMode = center.branding?.publicBookingMode ?? 'SIMPLE_REQUEST';
+    const isSimpleRequest = bookingMode === 'SIMPLE_REQUEST';
+    const requestedDate = isSimpleRequest
+      ? null
+      : parseBookingDate(dto.requestedDate);
+    const requestedTime = isSimpleRequest
+      ? null
+      : parseBookingTime(dto.requestedTime);
 
     if (!fullName || fullName.length < 2) {
       errors.fullName = 'Full name is required (at least 2 characters).';
@@ -371,24 +490,68 @@ export class PublicCentersService {
       errors.phone = 'Enter a valid phone number.';
     }
 
-    if (!serviceId && !offerId) {
+    if (patientArea && patientArea.length > 120) {
+      errors.patientArea = 'City / area must be 120 characters or fewer.';
+    }
+
+    const activeBranches = center.branches;
+    const hasMultipleBranches = activeBranches.length > 1;
+    let branchId: string | null = null;
+
+    if (isSimpleRequest) {
+      if (hasMultipleBranches && !requestedBranchId) {
+        errors.branchId = 'Choose a branch.';
+      } else if (requestedBranchId && !isUuid(requestedBranchId)) {
+        errors.branchId = 'Choose a valid branch.';
+      } else if (requestedBranchId) {
+        const branch = activeBranches.find(
+          (item) => item.id === requestedBranchId,
+        );
+        if (!branch) {
+          errors.branchId = 'Choose a valid branch.';
+        } else {
+          branchId = branch.id;
+        }
+      } else if (activeBranches.length === 1) {
+        branchId = activeBranches[0].id;
+      }
+    } else if (requestedBranchId) {
+      if (!isUuid(requestedBranchId)) {
+        errors.branchId = 'Choose a valid branch.';
+      } else {
+        const branch = activeBranches.find(
+          (item) => item.id === requestedBranchId,
+        );
+        if (!branch) errors.branchId = 'Choose a valid branch.';
+        else branchId = branch.id;
+      }
+    } else if (activeBranches.length === 1) {
+      branchId = activeBranches[0].id;
+    }
+
+    if (!isSimpleRequest && !serviceId && !offerId) {
       errors.serviceId = 'Select a service.';
     }
 
-    if (requestedDate === 'missing' || requestedDate === 'invalid') {
+    if (
+      !isSimpleRequest &&
+      (requestedDate === 'missing' || requestedDate === 'invalid')
+    ) {
       errors.requestedDate = 'Select a valid date.';
-    } else {
+    } else if (!isSimpleRequest && requestedDate instanceof Date) {
+      const bookingDate = requestedDate;
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const todayUtc = new Date(
         Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()),
       );
-      if (requestedDate < todayUtc) {
+      if (bookingDate < todayUtc) {
         errors.requestedDate = 'Requested date must be today or in the future.';
       }
     }
 
     if (
+      !isSimpleRequest &&
       !offerId &&
       (requestedTime === 'missing' || requestedTime === 'invalid')
     ) {
@@ -460,15 +623,19 @@ export class PublicCentersService {
 
     const service = serviceQuery;
 
-    const provider = await this.validatePublicProvider(center.id, providerId);
+    const provider = isSimpleRequest
+      ? null
+      : await this.validatePublicProvider(center.id, providerId);
 
     // Check slot availability only when a service and time are selected
     const resolvedTime =
-      requestedTime !== 'missing' && requestedTime !== 'invalid'
+      requestedTime !== null &&
+      requestedTime !== 'missing' &&
+      requestedTime !== 'invalid'
         ? requestedTime
         : null;
 
-    if (service && resolvedTime) {
+    if (!isSimpleRequest && service && resolvedTime) {
       const isSlotAvailable = await this.scheduleService.isSlotAvailable({
         centerId: center.id,
         date: (dto.requestedDate as string).trim(),
@@ -504,6 +671,7 @@ export class PublicCentersService {
     const bookingRequest = await prisma.bookingRequest.create({
       data: {
         centerId: center.id,
+        branchId,
         providerId: provider?.id ?? null,
         serviceId: service?.id ?? null,
         offerId: resolvedOffer?.id ?? null,
@@ -512,19 +680,27 @@ export class PublicCentersService {
         offerCurrency: snapshotOfferCurrency,
         fullName: fullName!,
         phone: phone!.replace(/[\s\-().+]/g, ''),
+        patientArea: patientArea || null,
         notes: notes || null,
-        requestedDate: requestedDate as Date,
-        requestedTime: resolvedTime,
+        requestedDate: isSimpleRequest ? null : (requestedDate as Date),
+        requestedTime: isSimpleRequest ? null : resolvedTime,
+        source: 'PUBLIC_WEBSITE',
         status: 'PENDING',
       },
       select: {
         id: true,
+        branchId: true,
         fullName: true,
         phone: true,
+        patientArea: true,
         requestedDate: true,
         requestedTime: true,
       },
     });
+
+    const areaSuffix = bookingRequest.patientArea
+      ? ` - ${bookingRequest.patientArea}`
+      : '';
 
     await this.notificationsService.createNotification({
       centerId: center.id,
@@ -533,16 +709,19 @@ export class PublicCentersService {
       titleAr: 'طلب حجز جديد',
       titleEn: 'New Booking Request',
       titleHe: 'בקשת תור חדשה',
-      messageAr: `${bookingRequest.fullName} طلب موعد جديد`,
-      messageEn: `${bookingRequest.fullName} submitted a booking request`,
-      messageHe: `${bookingRequest.fullName} שלח/ה בקשת תור`,
+      messageAr: `${bookingRequest.fullName} طلب موعد جديد${areaSuffix}`,
+      messageEn: `${bookingRequest.fullName} submitted a booking request${areaSuffix}`,
+      messageHe: `${bookingRequest.fullName} שלח/ה בקשת תור${areaSuffix}`,
       actionUrl: '/tenant/booking-requests',
       dedupKey: `booking-request:${bookingRequest.id}`,
       metadata: {
         bookingRequestId: bookingRequest.id,
         fullName: bookingRequest.fullName,
         phone: bookingRequest.phone,
-        requestedDate: bookingRequest.requestedDate.toISOString().slice(0, 10),
+        patientArea: bookingRequest.patientArea,
+        branchId: bookingRequest.branchId,
+        requestedDate:
+          bookingRequest.requestedDate?.toISOString().slice(0, 10) ?? null,
         requestedTime: bookingRequest.requestedTime,
         serviceId: service?.id ?? null,
         offerId: resolvedOffer?.id ?? null,
@@ -583,8 +762,9 @@ export class PublicCentersService {
       trackingEventId,
       centerName: center.nameEn || center.name,
       serviceName,
-      requestedDate: dto.requestedDate,
-      requestedTime: resolvedTime ?? '',
+      requestedDate:
+        bookingRequest.requestedDate?.toISOString().slice(0, 10) ?? '',
+      requestedTime: bookingRequest.requestedTime ?? '',
     };
   }
 
@@ -597,7 +777,8 @@ export class PublicCentersService {
     const provider = await prisma.userRole.findFirst({
       where: {
         centerId,
-        role: { key: { in: [...PUBLIC_PROVIDER_ROLES] } },
+        providerEnabled: true,
+        role: { status: 'ACTIVE' },
         status: 'ACTIVE',
         user: { deletedAt: null, id: providerId, status: 'ACTIVE' },
       },

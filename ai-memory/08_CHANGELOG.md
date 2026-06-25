@@ -1,5 +1,627 @@
 # RoyalCare - Changelog
 
+# 2026-06-22 - Appointment API Stale Prisma Runtime Recovery
+
+- Reproduced authenticated `500` responses from `GET /api/v1/tenant/appointments` and `/tenant/appointments/options` and captured PostgreSQL `42703: column "followUpType" does not exist`.
+- Confirmed the database and regenerated Prisma client enums match exactly: `NONE`, `SESSION_BASED_PLAN`, `RECURRING_CONTINUOUS`.
+- Root cause was the pre-refactor API process still holding the old appointment/service Prisma select in memory after migration removed `Service.followUpType`; the rebuilt source no longer selects that column.
+- Updated obsolete QA/inspection scripts that still queried `followUpType`: `scripts/_inspect-appointment-follow-up.mjs`, `services/api/qa-followup-check.cjs`, and `services/api/qa-repair-followup-plan.cjs`.
+- Removed stale `.next`, API `dist`, and available `node_modules/.cache` directories; regenerated Prisma, rebuilt API/web, and restarted both local production servers.
+- Runtime QA returned `200` for appointments, cancelled filtering, options, and `/tenant/appointments`. Service create/edit accepted both new modes. Completing a recurring QA appointment created exactly one continuous recurring row; all QA data was removed afterward.
+
+
+# 2026-06-22 - Follow-up Plan Naming and UX Refactor
+
+- Replaced the overlapping fixed/session/recurring naming model with one authoritative `ServiceFollowUpMode`: `NONE`, `SESSION_BASED_PLAN`, or `RECURRING_CONTINUOUS`.
+- Removed `ServiceFollowUpType` and `Service.followUpType`; session phase intervals remain in `followUpRules` with `defaultIntervalDays` fallback.
+- Added and applied migrations `20260622140000_refactor_follow_up_plan_types`, `20260622141000_backfill_session_plan_rules`, and `20260622141100_backfill_json_null_session_plan_rules`, preserving existing configuration while mapping 8 services to session-based plans, 5 to continuous recurring plans, and 40 to none; former fixed-interval plans receive an equivalent single session-range rule when count and interval exist, including Prisma JSON-null rows.
+- Service and custom-appointment forms now show only the session-count treatment plan and continuous recurring follow-up choices, with localized helper text under each option. Arabic uses `خطة علاج بعدد جلسات` and `متابعة دورية مستمرة`.
+- Completing the last finite-plan session now marks the entire plan completed; continuous recurring completion still creates the next reminder cycle.
+- Prisma format/validate/generate/migrate status, database package typecheck, API build, web typecheck, and web production build passed.
+
+# 2026-06-17 - Public Booking Branch Selection
+
+- Added nullable `BookingRequest.branchId` with migration `20260617124500_add_booking_request_branch`.
+- Public simple booking now requires branch selection only when the center has multiple active branches, auto-assigns the single active branch, and keeps city/area optional.
+- `/c/[slug]/book` shows localized branch cards above patient info with branch name, city, phone, and WhatsApp.
+- `/tenant/booking-requests` cards now display the selected branch and optional patient area.
+- Live API verification on `laser-care`: missing branch returned `400 branchId`, selected branch returned `201`, and the created row stored the branch id.
+- Verification: Prisma format/generate/migrate deploy, API production build, and web production build passed.
+
+# 2026-06-17 - Simple Booking Request Validation Fix
+
+- Hardened public booking request validation so `SIMPLE_REQUEST` mode does not parse or require `requestedDate`, `requestedTime`, or `providerId`.
+- `DIRECT_BOOKING` continues to validate date/time and slot availability.
+- Verification: API production build and web production build passed; scoped whitespace check for the touched backend file passed.
+
+# 2026-06-17 - Public Booking Request Area Field
+
+- Added optional `BookingRequest.patientArea` with migration `20260617123000_add_booking_request_patient_area`.
+- Updated public booking request creation to accept/store `patientArea`, validate it to 120 characters, include it in booking notifications, and expose it in tenant booking-request responses.
+- Added a lightweight city/area field to `/c/[slug]/book` using a searchable browser datalist with common cities and manual typing fallback.
+- Updated `/tenant/booking-requests` cards to show the submitted city/area when present.
+- Verification: Prisma format/generate/migrate deploy/status, API production build, and web production build passed. `git diff --check` still reports a pre-existing blank-line-at-EOF issue in unrelated `services/api/src/modules/auth/services/tenant-dashboard.service.ts`.
+
+# 2026-06-17 - Public Booking Simple Request Mode
+
+- Added center-level public booking mode setting with `SIMPLE_REQUEST` as the default and `DIRECT_BOOKING` preserving the previous provider/date/time flow.
+- Added `PublicBookingMode`, `BookingRequestSource`, `BrandingSettings.publicBookingMode`, `BookingRequest.source`, nullable `BookingRequest.requestedDate`, and migration `20260617120000_add_public_booking_mode`.
+- Updated public center APIs to expose the mode and public booking creation to create request-only `BookingRequest` rows with `status=PENDING`, `source=PUBLIC_WEBSITE`, phone, note, and optional service/offer context.
+- Updated `/tenant/settings/website` with a localized Public booking mode control.
+- Updated `/c/[slug]/book` so simple mode shows the clear Arabic message `اترك بياناتك وسنتواصل معك لتأكيد الموعد.` and hides provider/date/time selection.
+- Updated `/tenant/booking-requests` to display request-only rows as contact requests and keep manual scheduling as the admin follow-up path.
+- Verification: Prisma format/validate/generate, migration deploy, API production build, web production build, focused API lint, focused web lint with existing `<img>` warnings only, and diff whitespace check passed.
+
+# 2026-06-14 - Tenant Expenses Sidebar Visibility Fix
+
+- Diagnosed why the implemented Expenses module was not visible in tenant navigation.
+- Confirmed `/tenant/expenses`, `/tenant/expenses/list`, `/tenant/expenses/new`, `/tenant/expenses/categories`, and `/tenant/expenses/reports` exist and are included in the Next.js build route manifest.
+- Updated the tenant shell to normalize legacy dot-form tenant permissions such as `expenses.view` into canonical colon-form keys such as `expenses:view` before sidebar/page access checks.
+- Added an Expenses sidebar section with localized EN/AR/HE subitems for overview, all expenses, add expense, and categories, placed in the daily operations group near billing.
+- Ensured existing saved `CENTER_MANAGER` role permissions receive effective Expenses permissions by default while preserving normalized tenant RBAC checks.
+- Verification: API production build, web production build, focused API lint for touched RBAC services, focused web lint for the tenant shell, and diff whitespace check passed.
+
+# 2026-06-14 - Tenant Expenses Recovery And Stabilization
+
+- Audited the interrupted Expenses module implementation after shutdown.
+- Confirmed the module had started across Prisma schema/migration, API module/routes, tenant sidebar/RBAC, tenant routes, API client, reports integration, and Expenses UI.
+- Applied pending migration `20260614120000_add_tenant_expenses` and regenerated Prisma Client so API builds recognize expense models.
+- Fixed API TypeScript issues in `ExpensesService` and kept the new Expenses API path focused-lint clean.
+- Fixed web TypeScript blockers in `/tenant/expenses` and permission-label typing.
+- Added list-row edit and delete actions using existing tenant expense update/delete APIs, gated by `expenses:edit` and `expenses:delete`.
+- Verified Prisma schema/migration status, API production build, web production build, and focused lint for touched Expenses API/web files.
+
+# 2026-06-14 - Tenant Center Account Profile Editing
+
+- Converted `/tenant/profile` from a read-only user info page into an editable Center Account Profile for operational identity.
+- Added backend `GET/PATCH /auth/center/account-profile` to update the existing system sources: owner user name/phone/email, center primary language, active/latest subscription `notificationPhone` as primary WhatsApp, and center avatar via the existing branding logo field.
+- Added validation for required full name, main phone, main WhatsApp, email, preferred language, and avatar URL; duplicate email/phone conflicts are mapped to field errors.
+- Rebuilt the tenant profile UI around clear sections for center account identity, Primary Center Contact, password management, sticky save state, dirty-state detection, avatar upload, and before-unload protection for unsaved changes.
+- Kept website WhatsApp override and branch-specific contact responsibilities separate from the operational center profile source.
+- Verification: API production build and web production build passed.
+
+# 2026-06-14 - Tenant/Public Website WhatsApp Source Refactor
+
+- Clarified WhatsApp source architecture without adding duplicate storage: `BrandingSettings.whatsappPhone` is now treated as the optional public website override, while the global operational WhatsApp is derived from the active subscription `notificationPhone` with center owner phone fallback.
+- Updated public center API responses so public `branding.whatsappPhone` resolves as website override first, then global operational WhatsApp; existing public website CTA/contact/offer paths continue reading the same public field.
+- Updated branch contact cards so branch-specific WhatsApp wins, then falls back to the resolved center website/global WhatsApp.
+- Updated public booking follow-up WhatsApp links to use the resolved center WhatsApp instead of platform support WhatsApp.
+- Updated tenant settings and website settings labels/helpers to distinguish primary center WhatsApp from optional website WhatsApp override in EN/AR/HE.
+- Verification: API production build and web production build passed.
+
+# 2026-06-13 - Tenant Settings UX Refactor
+
+- Refactored the shared tenant public-profile settings surface used by `/tenant/settings` into a calmer SaaS settings experience with section cards for public profile, visual identity, branches, working hours, links/social, SEO, and website settings.
+- Added in-form language tabs so Arabic, English, and Hebrew public-profile and branch fields are edited one language at a time instead of rendering repeated multilingual fields together.
+- Redesigned branch management into compact summary cards showing branch name, city, phone, status, and main-branch badge by default; full branch details, status toggles, maps URL, working-hours text, save/deactivate, and ordering remain available when expanded.
+- Kept existing public-profile image uploads, branch create/update/deactivate/reorder behavior, primary-branch logic, and API contracts intact.
+- Verification: web production build passed.
+
+# 2026-06-13 - Tenant Patient Card Terminology Cleanup
+
+- Removed the technical "linked records" metric from `/tenant/patients` summary cards and replaced it with the more practical appointment-count metric for reception workflow.
+- Renamed the card label from latest session to latest visit in Arabic/Hebrew/English patient card copy while keeping the existing backend summary calculations intact.
+- The card summary now focuses on treatment plans, overdue sessions, outstanding balance, last visit, and appointment count.
+- Verification: web production build passed.
+
+# 2026-06-13 - Tenant Patient Card Summary Simplification
+
+- Simplified `/tenant/patients` summary cards so they no longer display a single upcoming appointment count or next session date, avoiding misleading output for patients with multiple future appointments across multiple treatment plans.
+- Added `overdueSessionsCount` to the existing patient summary contract and render the card summary as aggregate/history fields only: treatment plan count, overdue sessions, latest visit, outstanding balance, and appointment count.
+- Kept existing backend upcoming summary fields intact for filters/future detail use; full patient profile/details remain accessible through the existing primary View action.
+- Verification: API production build and web production build passed.
+
+# 2026-06-13 - Tenant 12-Hour Time Formatting
+
+- Standardized tenant-facing appointment/session time display on shared deterministic helpers in `apps/web/src/i18n/formatters.ts`.
+- Hardened `formatTime12h(time)` to handle `HH:mm`, `HH:mm:ss`, and ISO-like date-time strings while always rendering English `AM`/`PM`.
+- Added `formatAppointmentDateTime(date, time, locale)` and updated patient summaries, dashboard appointment rows, appointment calendar labels, appointment conflict modal, booking requests, follow-up linked appointment labels, appointment form linked-session banner, and report unbilled-session rows to avoid raw 24-hour time output and duplicated `00:00` date/time labels.
+- Verification: web production build passed.
+
+# 2026-06-13 - Tenant Patient Summary Data Fix
+
+- Fixed `/tenant/patients` summary cards showing `لا يوجد` despite related appointment, follow-up, invoice, or linked-record data.
+- Added a computed patient `summary` to `GET /api/v1/patients` and `GET /api/v1/patients/:patientId`, using batched center-scoped queries instead of per-card fetches.
+- Summary fields now include latest completed/booked appointment, nearest upcoming scheduled/confirmed appointment, treatment/follow-up plan count, outstanding invoice balance, upcoming appointment count, and total linked records.
+- Updated the patients dashboard to render real summary values and enabled the upcoming-appointment and receivables filters from the same summary data.
+- Verification: API production build and web production build passed.
+
+# 2026-06-13 - Tenant Patients Dashboard UX Refresh
+
+- Improved `/tenant/patients` as a patient summary dashboard without changing patient API logic or backend schema.
+- Added compact KPI cards for total patients, active patients, archived patients, and patients created this month.
+- Reworked patient rows into summary cards with avatar initials, identity details, status badge, registration/gender metadata, summary placeholders for unavailable clinical/financial data, and linked-record context from existing API counts.
+- Added a responsive filters bar for gender, status, archive state, upcoming appointments, and receivables.
+- Reorganized actions so View is primary, Edit is secondary, and archive/delete live under a More actions menu; permanent delete keeps the existing blocked-delete tooltip behavior.
+- Added quick actions for appointment creation and invoice creation where routes already exist, plus a disabled treatment-plan placeholder for future support.
+- Added a richer empty state with icon and "Add First Patient" action, plus a pagination-ready footer for larger patient lists.
+- Verification: `npm run build` passed in `apps/web`.
+
+# 2026-06-13 - Tenant Reports Dashboard UX Refresh
+
+- Improved `/tenant/reports` frontend hierarchy without changing financial report calculations or API behavior.
+- Split the page into a compact date filter bar, four primary KPI cards, five secondary KPI cards, and a two-column desktop analysis grid.
+- Added CSS-only bar visuals for revenue/payment status, revenue by service, and top providers using existing report response data.
+- Clarified outstanding receivables with focused metrics and a top-debtors list, while keeping the expandable full receivables table.
+- Cleaned the completed-without-invoice amber alert so it only appears when sessions need invoicing, keeps the session list, appointment links, and explicit invoice creation actions.
+- Updated reports empty-state copy in EN/AR/HE to read as intentional low-data states.
+- Verification: `npm run build` passed in `apps/web`.
+
+# 2026-06-08 - Tenant Phantom Invoice Auto-Creation Fix
+
+- Traced tenant invoice creation and found the hidden source: `/tenant/appointments` auto-created an invoice when an appointment status changed to `COMPLETED` and the user had `billing:create`.
+- Removed that silent auto-create path; appointment status changes now preserve any existing invoice summary but do not create a new invoice.
+- Added `Invoice.source` with `MANUAL`, `AUTO_APPOINTMENT`, `AUTO_FOLLOW_UP`, and `AUTO_RECALCULATION`; current explicit tenant invoice actions save `MANUAL`.
+- Confirmed `invoice.create` remains centralized in tenant billing service and frontend invoice creation calls remain tied to explicit invoice buttons.
+- Verification: Prisma generate, Prisma migrate deploy, API production build, and web production build passed.
+
+# 2026-06-08 - Service Treatment Plan Templates
+
+- Added service-level treatment plan templates/protocols so one service can support different patient session counts such as 5, 8, or 10 sessions without duplicating the service.
+- Added `ServiceTreatmentTemplate` plus appointment and patient follow-up snapshot fields so selected templates are copied into patient plans and future template edits do not mutate historical plans.
+- Tenant service create/edit now includes a responsive `Treatment plan templates` section with add/edit/delete, active/default, ordering, total sessions, interval, and optional phase rules.
+- Appointment create/edit now shows `Choose treatment plan` when the selected service has active templates, defaults to the service default template, applies session/phase fields, and still allows patient-specific overrides.
+- Follow-up and patient treatment summaries now prefer patient-plan snapshot totals and phases over mutable service defaults.
+- Verification: Prisma format/generate, API production build, and web production build passed.
+
+# 2026-06-06 - Super Admin Center Creation Logo Persistence Fix
+
+- Fixed the Super Admin new-center wizard so selecting a center logo uploads the image immediately through the existing Super Admin public image upload helper and stores the returned `/uploads/branding/...` URL in `branding.logoUrl`.
+- The create-center payload now includes `branding.logoUrl`, matching the backend `CreateCenterBrandingDto.logoUrl` field already persisted into `BrandingSettings.logoUrl`.
+- Super Admin center summaries now include `branding.logoUrl` in API responses so newly created centers can show the saved logo immediately instead of initials.
+- Verification: API and web production builds passed. Runtime API QA uploaded a logo, created a QA center with that URL, confirmed center details returned the same `branding.logoUrl`, and confirmed tenant `/auth/center/me` returned the same logo for sidebar/session use.
+
+# 2026-06-06 - Super Admin Center Public Visibility Permission Fix
+
+- Fixed the Super Admin center details public visibility toggle so it uses the same platform-session/PermissionGuard flow as other center management actions.
+- Added `PATCH /api/v1/centers/:centerId/public-visibility` and `/api/v1/super-admin/centers/:centerId/public-visibility` behind `edit:centers`; the frontend now calls `/centers/:centerId/public-visibility` instead of the legacy `/admin/centers/:centerId/public-visibility` header-only endpoint.
+- Verification: API and web production builds passed. Runtime API check toggled and restored QA Recovery public visibility with a platform Super Admin cookie (`200`), while the same request without platform cookie returned `403`.
+
+# 2026-06-06 - Tenant Financial Reports Partial Invoice Receivables Fix
+
+- Hardened receivables calculation for invoices whose stored status is `PARTIAL`. Because the current `Invoice` model does not store `paidAmount` or `remainingAmount`, reports compute balances from invoice amount, `Payment` rows, and `CREDIT_USE` rows; an open invoice with status `PARTIAL` is now counted as partially paid even if no derived paid amount is present.
+- Removed temporary reports debug logging after the calculation fix.
+- Verification: API and web production builds passed.
+
+# 2026-06-06 - Tenant Financial Reports Open Receivables Range Fix
+
+- Fixed `/tenant/reports` receivables logic so open balances are no longer hidden by the selected report date range.
+- Financial reports now separate period revenue, period invoice activity, and all-center open receivables. Revenue still uses actual collection dates, invoice activity uses invoice creation date, and receivables use every non-cancelled invoice with computed remaining balance greater than zero.
+- Receivables KPIs now count partially paid invoices, unpaid invoices, patients with balances, total receivables, and highest debt from all open balances until fully paid.
+- Added helper copy under the receivables section explaining that it shows every open balance even outside the selected period.
+- Verification: API and web production builds passed.
+
+# 2026-06-06 - Tenant Financial Reports Date Filter Clarity
+
+- Clarified `/tenant/reports` date-filter behavior so selected-period invoice KPIs are visibly tied to invoices issued in the range, while revenue continues using actual payment/credit-use collection dates.
+- `GET /api/v1/tenant/reports/financial` now returns `reportMeta` with `rangeType`, `startDate`, `endDate`, `invoiceCountIncluded`, and `paymentCountIncluded`; `summary.invoiceCountIncluded` was added for the new KPI.
+- Added an active date-range summary near the KPI cards, a new `Invoices in selected range` KPI, and a clear empty-state message when the selected range has no invoices.
+- Backend comments now document which date field drives revenue versus receivables/invoice-count metrics.
+- Verification: API and web production builds passed.
+
+# 2026-06-06 - Tenant Financial Reports Receivables Dashboard
+
+- Expanded `/tenant/reports` from revenue-only reporting into a financial dashboard with an Outstanding Receivables section.
+- `GET /api/v1/tenant/reports/financial` now returns receivables KPIs, receivable details, receivables by payment status, top patients by debt, and revenue-vs-receivables chart data.
+- Receivable calculations derive paid and remaining amounts from invoice total, payments, credit uses, and payment status logic rather than relying on `totalAmount` alone.
+- Corrected financial report consistency so revenue is based on actual payment/credit-use dates, while receivables and invoice counts are derived from computed remaining balance (`invoice.amount - payments - credit uses`) and overdue/unpaid/partial flags.
+- Added open-receivables-only and overdue-only filters, plus a responsive receivables detail table with patient, phone, service, invoice total, paid, remaining, status, last payment, and due date.
+- Verification: API and web production builds passed.
+
+# 2026-06-05 - Follow-up Linked Appointment Details Consistency
+
+- Follow-up API responses now include a full `linkedAppointment` object for booked follow-up sessions: id, date, start/end time, status, and provider.
+- Booked follow-up session cards now read appointment date, start time, end time, status, and provider from the linked appointment data instead of showing placeholder `Not recorded` values.
+- Corrected booked-session isolation so `appointmentId` is never treated as a linked session appointment in `/tenant/follow-ups`; only the current session's `nextAppointmentId`, `linkedAppointmentId`, `nextAppointment`, or `linkedAppointment` can show booked UI/actions.
+- View/Edit appointment actions and duplicate-booking hiding continue to use the same linked appointment resolver.
+- Verification: API and web production builds passed.
+
+# 2026-06-05 - Follow-up Duplicate Booking Prevention
+
+- Appointment creation now accepts `followUpId` and rejects duplicate booking when the follow-up session already has `nextAppointmentId`; in the current schema `appointmentId` is the source completed appointment that created the follow-up, not the newly booked appointment.
+- Backend duplicate protection runs inside the appointment create transaction: the appointment is created and linked to the follow-up only if the follow-up is still unlinked; competing duplicate requests roll back with `400 This follow-up session already has an appointment.`
+- Appointment create from follow-up now sends `followUpId` in the payload, and the appointment form disables saving when the loaded follow-up already has a linked appointment.
+- The existing follow-up session card continues hiding `Book session` for linked sessions and shows View/Edit appointment actions instead.
+- Fixed the follow-up session Actions dropdown itself so `Book session` is rendered only when there is no `nextAppointment`/`nextAppointmentId` and the status is not `BOOKED`, `COMPLETED`, or `CANCELLED`; linked sessions render View/Edit appointment actions instead.
+- Booked follow-up cards now show visible primary View Appointment and secondary Edit Appointment buttons whenever a linked appointment id exists, even if the full linked appointment object is not present in the response.
+- Added a single frontend `getLinkedAppointmentId()` resolver for follow-up session actions and booked-state UI. It checks `linkedAppointmentId`, `nextAppointmentId`, `appointment?.id`, and `nextAppointment?.id`, with `appointmentId` used only as a legacy fallback for `BOOKED` rows because current API data uses `appointmentId` for the source completed appointment.
+- Follow-up API responses now include `linkedAppointmentId` as an explicit alias for `nextAppointmentId`; booked rows without any resolvable appointment id show a visible warning instead of silently hiding appointment actions.
+- Verification: API and web production builds passed.
+
+# 2026-06-05 - Follow-up Booked Session Visual States
+
+- Follow-up session cards now derive their visual state from linked appointment existence and appointment status: unbooked, booked, completed, missed, or cancelled.
+- Booked sessions show a distinct blue appointment state, linked appointment badge, appointment date/time/status/provider, and View/Edit appointment actions; the Book Session action is hidden once a linked appointment exists.
+- Treatment summary progress now counts completed, booked, and remaining finite sessions from the derived visual state so the top summary matches the timeline cards.
+- Follow-up API `nextAppointment` now includes the linked appointment provider for accurate provider display in booked-session cards.
+- Verification: web and API production builds passed.
+
+# 2026-06-05 - Dynamic Business Data No-Translation Hardening
+
+- Fixed frontend display helpers so user/business data values are no longer selected or transformed by the active UI locale.
+- Patient names, provider/staff names, center names, service names, custom service names, invoice service names, appointment conflict service names, follow-up service names, and patient-portal service/center names now render from stable stored values with deterministic fallbacks.
+- UI labels, statuses, helper text, RTL direction, and date formatting remain localized; only dynamic business data display was hardened.
+- Removed development console logs from the public booking form after touching the page for service/center display safety.
+- Verification: `apps/web` production build passed.
+
+# 2026-06-05 - Follow-ups Identity Labeling Fix
+
+- Fixed `/tenant/follow-ups` identity confusion by explicitly labeling patient, phone, service, provider, plan, and session values in collapsed rows, expanded treatment summaries, and session cards.
+- Provider/staff names now appear only under the Provider label, with Arabic label `المعالج / المقدم`, so owner/staff names no longer look like patient names.
+- Added frontend normalization helpers for patient display name, service display name, provider display name, treatment plan label, and session label using the existing follow-up API response fields.
+- Updated the appointment-from-follow-up banner to show labeled patient, service, session, and due date values.
+- Removed temporary console/debug logs from the follow-ups and appointment form pages.
+- Verification: web production build passed.
+
+# 2026-06-05 - Follow-up Appointment Prefill and Link Fix
+
+- Fixed appointment creation from a follow-up session so `/tenant/appointments/new?patientId=...&serviceId=...&followUpId=...` hydrates only after follow-up and appointment option data are loaded.
+- The form now auto-fills patient, service, provider from the follow-up/last-treatment provider when available, appointment date from the follow-up due date, duration from the selected service, `SCHEDULED` status, and note `موعد من خطة متابعة`.
+- Available slot loading now waits for provider, appointment date, and duration to be ready, then loads automatically after hydration while preserving manual edits after the initial prefill.
+- Added a source follow-up banner showing that the appointment is created from a follow-up plan, including session number, service name, and due date.
+- Follow-up status updates now optionally accept `nextAppointmentId`; the API validates same-center/same-patient/same-service ownership and stores the appointment link when marking a follow-up `BOOKED`.
+- Verification: web and API builds passed.
+
+# 2026-06-05 - Tenant Follow-ups Treatment Journey UX
+
+- Redesigned expanded `/tenant/follow-ups` patient plans from technical session rows into a clearer medical treatment journey.
+- Added a Treatment Summary card above the timeline using existing API data only: diagnosis/condition notes where available, main treatment, plan type, progress, provider, last completed session, next upcoming session, medical notes, start date, and expected completion.
+- Session cards now show journey-style titles such as `Session 1 — Service Name`, visible status, due date, provider, notes, and stronger completed/today/overdue/upcoming status colors/icons.
+- Preserved existing filters, WhatsApp links, booking action, status updates, due-date edits, note saving, lazy plan loading, and current API logic.
+- Verification: `apps/web` production build passed.
+
+# 2026-06-04 - Tenant Staff Owner/Manager Duplicate Display Fix
+
+- Fixed `/tenant/staff` so users with multiple center roles appear once in the staff list.
+- Tenant staff list API now aggregates `UserRole` rows by user and returns `roles[]` plus `isCenterOwner` for display-only role badge merging.
+- The staff page now renders multiple localized role badges on one card, so a center owner who is also manager shows both `Center Owner` and `Center Manager` / `مالك المركز` and `مدير المركز` / `בעל המרכז` and `מנהל המרכז`.
+- Center owner status changes are protected: the UI disables the status toggle for the owner and the API rejects attempts to deactivate the center owner.
+- Other staff list search/status/role filters continue to work over the aggregated unique staff users.
+- Verification: API and web builds passed.
+
+# 2026-06-03 - Session-Based Follow-up Plan Total UX
+
+- Fixed session-based fixed follow-up plans so `SESSION_PLAN` no longer exposes the editable `totalRecommendedSessions` input in tenant service create/edit or appointment custom-service follow-up settings.
+- Added `calculateTotalSessionsFromRules(rules)` helpers on the frontend and backend; the derived total is the highest `toSessionNumber` across treatment phases.
+- The UI now shows a readonly localized summary card such as `Total sessions: 8 sessions` / `إجمالي الجلسات: 8 جلسات` / `סה״כ מפגשים: 8` with helper text explaining the number is calculated from treatment phases.
+- Payload generation now sends the derived total for `FINITE_PLAN + SESSION_PLAN`, while non-session fixed plans keep the manual total field.
+- Backend service/custom-service validation and persistence now derive `totalRecommendedSessions` from session rules and reject session plans without valid phase rules, preventing stale manual totals from driving plan generation.
+- Verification: web and API builds passed.
+
+# 2026-06-03 - Follow-up Mode Label Localization
+
+- Added `services.followUp.none`, `services.followUp.fixedPlan`, and `services.followUp.recurring` translation keys in EN/AR/HE.
+- Service create/edit follow-up mode radio labels now read from the new dictionary keys.
+- Appointment custom-service follow-up mode radio labels now read from the same dictionary keys.
+- Removed the old `followUpMode*` dictionary fields and hardcoded form fallback/copy labels for the three follow-up modes.
+- Arabic now renders `بدون متابعة`, `خطة علاج ثابتة`, and `متابعة دورية مستمرة`; Hebrew renders `ללא מעקב`, `תוכנית טיפול קבועה`, and `מעקב מחזורי מתמשך`.
+- Verification: web build passed, and source search found no remaining hardcoded follow-up mode labels in the service/appointment form code.
+
+# 2026-06-03 - Patient Create/Edit Optional Field Labels
+
+- The shared patient create/edit modal now displays a secondary localized optional marker for non-required patient fields.
+- Required labels such as full name and phone remain unchanged with the existing red `*`.
+- Optional fields now marked include localized name variants, email, gender, date of birth, national ID, and notes.
+- The notes label now reads "Additional notes" / "ملاحظات إضافية" / "הערות נוספות" with the optional marker appended by the field component.
+- The status field now shows the required `*` because it is a controlled default selector rather than optional patient information.
+- Web build passed.
+
+# 2026-06-03 - Tenant Billing Summary Clarity UX
+
+- Tenant invoice details now add muted helper descriptions to invoice total, paid amount, balance due, and patient credit summary cards.
+- Balance due summary cards include a desktop hover tooltip explaining `Balance Due = Invoice Total - Paid`.
+- Invoice status badges now show short explanatory copy underneath for paid, partial, and unpaid/pending states.
+- Billing status colors were clarified: paid uses green, partial uses amber/orange, pending/unpaid uses red, and credit stays indigo.
+- The appointment details invoice section received the same billing summary descriptions and status explanation treatment for consistency.
+- Web build passed.
+
+# 2026-06-03 - Tenant Follow-ups Search Fix
+
+- Removed the extra quick CRM chips below the `/tenant/follow-ups` search input, leaving only the main search input and existing status filter row.
+- Fixed follow-up search so an active query loads the same-center queue with `includeAll=true`, ignores the current status/date filter for matching, and filters locally by patient name, phone, service name, and provider name.
+- Improved Arabic search normalization by trimming, removing diacritics/tatweel, normalizing Alef variants, Ya/Alef Maqsura, and Ta Marbuta, and lowercasing comparisons.
+- Phone search now ignores spaces/symbols and supports partial numeric matches in addition to exact phone matches.
+- Search auto-expands only when there is a single matching patient group and keeps `q` plus `filter` in URL state.
+- Verification: web build passed.
+
+# 2026-06-03 - Tenant Follow-ups Smart Search and CRM Filtering
+
+- Added sticky realtime search to `/tenant/follow-ups` with localized placeholders for AR/EN/HE.
+- Search matches patient names, phone numbers, service names, and provider names where available, ranks exact phone and exact patient-name matches first, and highlights matched patient/phone/service text in compact patient rows.
+- Search input is debounced by 300ms, persists to `q` in the URL, auto-expands matching patient accordions, and scrolls the single matching patient into view.
+- When search is active, it loads the same-center queue with `includeAll=true` and applies search client-side, so search results override the currently selected status/date filter.
+- Added CRM quick chips for Today, Overdue, Recurring, Treatment plans, Not contacted, Booked, and Completed. Recurring/treatment/not-contacted chips use client-side filtering over the same `includeAll=true` queue.
+- Added localized search empty states and a `Search results` badge above matched rows.
+- Verification: web and API builds passed.
+
+# 2026-06-03 - Recurring Follow-up Creation on Appointment Completion Status Change
+
+- Fixed recurring follow-up creation when an existing appointment changes from a non-completed status to `COMPLETED`.
+- `PatientFollowUpsService.createFromCompletedAppointment()` now treats `service.followUpMode === RECURRING` as the authoritative recurring trigger instead of letting legacy `followUpEnabled` / `autoCreateNextReminder` checks block the recurring path first.
+- Recurring due dates are now based on `appointment.completedAt` when available, falling back to `appointment.appointmentDate`.
+- Finite-plan behavior remains guarded by `followUpMode`, `followUpEnabled`, and `autoCreateNextReminder`.
+- Verification: API build passed. Runtime API QA on port `3005` patched a scheduled `حجامة` appointment to `COMPLETED`, created exactly one recurring follow-up due `2026-09-03`, confirmed `GET /tenant/follow-ups?filter=UPCOMING` includes it, and confirmed re-saving `COMPLETED` leaves the follow-up count at `1`.
+
+# 2026-06-03 - Tenant Follow-ups Recurring vs Treatment Plan Visual Separation
+
+- Updated `/tenant/follow-ups` patient rows and expanded follow-up cards to show explicit follow-up type badges: recurring reminders use an indigo `♾ Recurring` / `♾ متابعة دورية` / `♾ מעקב מחזורי` badge, while finite treatment plans use a blue `📋 Treatment Plan` / `📋 خطة علاج` / `📋 תוכנית טיפול` badge.
+- Recurring rows now show lifecycle reminder copy, interval text, last session date when available, and next follow-up date. They no longer show session progress, progress dots, session numbers, or plan completion counts.
+- Finite treatment plans still show session progress and plan dots, with recurring follow-ups excluded from finite-plan progress totals.
+- The recurring action menu labels due-date editing as snooze/postpone while preserving WhatsApp, booking, contacted, booked, and completed actions.
+- Verification: `apps/web` and `services/api` builds passed.
+
+# 2026-06-03 - Follow-up Settings UI Mode Separation
+
+- Fixed follow-up settings UI separation in tenant services and appointment custom-service settings.
+- `NONE` now hides all follow-up fields.
+- `FINITE_PLAN` shows only fixed treatment-plan fields: plan type, default interval, total sessions, auto-create next reminder, presets, session rules, plan preview, and existing WhatsApp templates.
+- `RECURRING` shows only the recurring interval UI: "Repeat every" value and unit, plus helper text. Treatment session count, fixed interval/session-rule fields, presets, plan preview, and WhatsApp templates are hidden.
+- Updated labels to EN `No follow-up`, `Fixed treatment plan`, `Recurring lifetime follow-up`; AR `بدون متابعة`, `خطة علاج بجلسات محددة`, `متابعة دورية مستمرة`; HE `ללא מעקב`, `תוכנית טיפול מוגדרת`, `מעקב מחזורי מתמשך`.
+- Recurring units now use singular labels: EN Day/Week/Month/Year, AR يوم/أسبوع/شهر/سنة, HE יום/שבוע/חודש/שנה.
+- Added appointment custom-service payload/backend wiring for `followUpMode`, `recurringIntervalValue`, and `recurringIntervalUnit`.
+- Verification: API and web builds passed. Runtime API QA confirmed saving a recurring service stores `followUpMode=RECURRING` with recurring interval fields and no session/default interval fields; saving a finite plan stores `followUpMode=FINITE_PLAN` with sessions/default interval and no recurring fields; saving a custom service from an appointment stores `followUpMode=RECURRING` with `6-MONTH` and no finite-plan fields.
+
+# 2026-06-03 - Recurring Lifetime Follow-ups
+
+- Added recurring lifetime follow-up support alongside existing finite treatment plans.
+- Added Prisma migration `20260603120000_add_recurring_follow_ups` with `ServiceFollowUpMode`, `RecurringIntervalUnit`, recurring service settings, and recurring metadata on `PatientFollowUp`.
+- Tenant services now support `followUpMode=NONE|FINITE_PLAN|RECURRING`, recurring interval value/unit, automatic WhatsApp reminder flags, and reminder lead days.
+- Appointment completion now creates only one active recurring follow-up for recurring services and enforces max one active recurring row per patient/service across `UPCOMING`, `DUE`, `CONTACTED`, `BOOKED`, and `MISSED`.
+- Marking a recurring follow-up `COMPLETED` creates exactly one next recurring follow-up from the completed row's stored interval snapshot, skips if a newer active recurring row exists, and does not recursively regenerate old completed rows.
+- Recurring follow-up cards display EN `Recurring Follow-up`, AR `متابعة دورية`, HE `מעקב מחזורי`, and recurring rows are excluded from treatment progress/session bars.
+- Follow-up analytics now returns `recurringDueToday`, `recurringThisWeek`, and `recurringPatientsRetention`.
+- Verification: migration applied locally, Prisma generate passed, API and web production builds passed. Runtime API QA created a recurring Botox service every 4 months, completed an appointment on `2026-06-04`, generated exactly one recurring follow-up due `2026-10-04`, blocked duplicate generation after a second completed appointment, completed that recurring follow-up and generated exactly one next row due `2027-02-04`, re-completing the old row kept total recurring rows at 2 and active rows at 1, and filter checks confirmed recurring rows follow due-date filters only.
+
+# 2026-06-03 - Tenant Follow-ups Next 7 Days Filter Fix
+
+- Changed the `/tenant/follow-ups` `THIS_WEEK` filter from current calendar-week behavior to the product-defined next-7-days window.
+- New rule: `dueDate >= today` and `dueDate <= today + 7 days`, excluding `COMPLETED`, `BOOKED`, and `CANCELLED`.
+- Backend list filtering and analytics now use the same inclusive next-7-days date window, implemented as `< today + 8 days` for date-only database fields.
+- Frontend expanded-plan visibility filtering mirrors the same rule.
+- Updated filter/priority labels to EN `Next 7 Days`, AR `خلال 7 أيام`, and HE `7 הימים הקרובים`.
+- Decision: Today is allowed to overlap with Next 7 Days because the required next-7-days rule starts at today. In current QA data there were no due-today rows.
+- Verification: API and web `npm run build` passed. Runtime API QA on 2026-06-03 returned `THIS_WEEK total=2`, `violations=0`, and confirmed a follow-up due `2026-06-08` (`today + 5`) appeared in the filter.
+
+# 2026-06-03 - Tenant Follow-ups Filter Date Consistency Fix
+
+- Fixed `/tenant/follow-ups` filter logic so `TODAY`, `THIS_WEEK`, `OVERDUE`, and `UPCOMING` rely only on actual due-date bucket rules plus status exclusions, not the visual next-follow-up badge.
+- Root cause was date-boundary inconsistency: frontend and backend were deriving "today" with UTC `toISOString()` date keys, which can classify yesterday as today around local midnight in the Asia/Jerusalem tenant context. The backend also used a rolling 7-day window for `THIS_WEEK`.
+- Backend list filters and analytics now share local-calendar day boundaries, a current-calendar-week end boundary, and date-filter status logic that excludes `COMPLETED` and `CANCELLED`.
+- Frontend expanded-plan visibility filtering now mirrors the backend with local date keys and temporary debug logs for `filterType`, `dueDate`, `todayStart`, `todayEnd`, and `computedVisibility`.
+- Verification: API and web `npm run build` passed. Runtime API QA for 2026-06-03 returned `TODAY total=0`, `OVERDUE total=10`, `UPCOMING total=105`, `THIS_WEEK total=0`, `COMPLETED total=1`, `CONTACTED total=1`, and `BOOKED total=1`, all with zero rule violations. Targeted QA confirmed due date `2026-06-02` appeared 5 times in `OVERDUE` and 0 times in every other filter.
+
+# 2026-06-03 - Tenant Profile Header Logo Avatar
+
+- Fixed `/tenant/profile` so the large profile header avatar uses the same resolved center logo source as `CenterAdminShell` instead of always showing user initials.
+- `CenterAdminShell` now passes `centerLogoUrl` to child page render context, preserving the shared fallback order: `center.logoUrl`, `center.branding.logoUrl`, public `public_logo_url`, then initials.
+- The profile header keeps the existing `h-16 w-16` rounded layout and falls back to initials if the image source is missing or fails to load.
+- Verification: web `npm run build` passed. Browser QA confirmed `/tenant/profile` header avatar, sidebar bottom avatar, and sidebar top logo all rendered `/uploads/branding/center-branding-1779703246249-e2d6cffc-b46f-4099-b11f-b3eaaf7d43be.webp` with no initials fallback.
+
+# 2026-06-03 - Tenant Sidebar Branding Consistency
+
+- Fixed the bottom tenant sidebar profile/avatar area to use the same resolved center logo source as tenant branding instead of always showing user initials.
+- Logo resolution now prefers `center.logoUrl`, then `center.branding.logoUrl`, then public platform `public_logo_url`, and falls back to initials only when no usable logo exists or image loading fails.
+- Tenant favicon manager now receives the same resolved logo source so refresh/navigation branding stays consistent.
+- Verification: web `npm run build` passed. Browser QA on `/tenant/dashboard` confirmed the bottom profile link renders an image avatar with `/uploads/branding/center-branding-1779703246249-e2d6cffc-b46f-4099-b11f-b3eaaf7d43be.webp`, no initials fallback, and the same image persisted after forced refresh.
+
+# 2026-06-03 - Tenant Follow-up Due Date Refresh Fix
+
+- Fixed `/tenant/follow-ups` due-date editing so a successful "Save date" mutation immediately updates the edited session card, due-date input draft, patient summary row, remaining-days badge, next-actionable highlight, and active filtered list without requiring a manual refresh.
+- Root cause was frontend stale state: the page discarded the `PATCH /tenant/follow-ups/:followUpId/due-date` response and triggered a broad async refresh that could leave grouped patient summaries and expanded accordion content rendering old follow-up objects.
+- Mutation refresh now applies the returned follow-up row optimistically, invalidates older in-flight list responses, reloads the opened patient's full plan with `includeAllForPatient=true`, reloads the active filtered list, preserves the opened accordion, and refreshes analytics counts.
+- Added temporary debug logs around due-date save: before save, after response, after targeted state refresh, and after state update.
+- Verification: web and API `npm run build` passed. Browser DevTools network QA changed follow-up `48e561cd-2508-429d-8245-267cd35f288e` from `2026-06-15` to `2026-06-30`; the PATCH payload was `{"dueDate":"2026-06-30"}`, response status was `200`, response body returned `dueDate:"2026-06-30"` and updated `updatedAt:"2026-06-02T22:01:21.600Z"`, and the expanded UI immediately showed `30/06/2026` with recalculated `27d left`. After a forced page reload, the expanded session still showed `30/06/2026`, the old `15/06/2026` date was absent, and neighboring sessions `22/06/2026` and `29/06/2026` were unchanged.
+
+# 2026-06-02 - Tenant Follow-ups Phase 2 UX Scalability Polish
+
+Improved `/tenant/follow-ups` for production-scale patient queues.
+
+- Patient rows now default to collapsed compact accordions; only overdue/today rows, or direct `patientId` deep links, auto-expand.
+- Full session timelines, editable session cards, notes, WhatsApp, booking, and status controls now render only inside expanded patient accordions.
+- Added a sticky priority bar with counts for Overdue, Today, This week, and Upcoming.
+- Replaced noisy per-session action clusters with a single `Actions` dropdown while keeping WhatsApp as a compact quick action.
+- Changed the list layout to a full-width single-column CRM queue to remove large empty desktop whitespace.
+- Compact patient rows now show patient name, phone, service, progress, next due date, remaining days, urgency badge, and active follow-up count.
+- Backend follow-up list cap was increased from 200 to 1000 rows, and analytics now returns `thisWeek` and `upcoming` counts for the sticky bar.
+
+Verified:
+- Web production build passed.
+- API build passed.
+- Existing 1-patient / 8-session QA fixture was reset and returned sessions 1-8 through the full-plan endpoint.
+- Added non-destructive QA scale data with 20 patients and 100 follow-ups in the QA center.
+- Live API check returned 20 distinct scale patients, 100 scale follow-ups, 104 upcoming rows total, and sample full-plan sessions 1-5.
+- Session notes, due-date, and status edits worked on one card and were restored; neighboring session due date stayed unchanged.
+- Authenticated Chrome screenshots captured:
+  - `C:\tmp\royalcare-followups-today.png`
+  - `C:\tmp\royalcare-followups-upcoming.png`
+
+# 2026-06-02 - Tenant Appointment Edit Current Slot Validation Fix
+
+Fixed tenant appointment edit validation so editing notes/internal notes/status on an existing appointment does not get blocked by the appointment's own booked slot.
+
+- Updated the tenant appointment form slot rendering to add a selectable current-slot override only in edit mode.
+- The override applies only when the form still matches the loaded appointment's date, provider, service, start time, and calculated end time.
+- The current slot now shows a localized label: EN `Current appointment`, AR `الموعد الحالي`, HE `התור הנוכחי`.
+- Create appointment flow remains unchanged and still renders availability directly.
+- Backend update validation was inspected and already excludes the edited appointment id from both availability and overlap checks.
+
+Verified:
+- Web production build passed.
+- API build passed.
+- Runtime tenant API QA created temporary appointments in `QA Recovery Center 1779095621868`.
+- Availability with `excludeAppointmentId` returned the current slot as available.
+- Updating only treatment notes on the existing appointment succeeded.
+- Editing that appointment into another booked slot returned `409`.
+- Creating a new appointment into that same booked slot returned `409`.
+
+# 2026-06-02 - QA Recovery Operational Data Hard Delete
+
+Added and ran a hard-delete QA cleanup script for `QA Recovery Center 1779095621868`.
+
+- Added `services/api/scripts/qa-hard-delete-center-operational-data.ts`.
+- Added API package command `qa:hard-delete-center-data`.
+- The script finds the center by exact name, prints id/name/slug/owner, prints operational counts before deletion, deletes inside a transaction, prints deleted counts, prints after counts, and throws if any operational counts remain.
+- Deleted only center-scoped operational/test data: appointments, booking requests, booking-related marketing tracking logs, credit transactions, customers, invoices, notification logs, notifications, patient follow-ups, patient portal tokens, patients, payments, and sessions.
+- Preserved center, owner/user, staff/user roles, subscriptions, plans, settings, services, and audit logs.
+
+Verified:
+- API build passed.
+- First run deleted: 10 appointments, 7 booking requests, 5 invoices, 7 booking-related marketing tracking logs, 8 notifications, 12 patient follow-ups, and 6 patients.
+- After counts for all operational tables were zero.
+- Second run was idempotent with all operational counts already zero.
+- Protected records remained: center `1`, owner user `1`, services `11`, subscriptions `1`, user roles `2`, audit logs kept.
+- Tenant API checks after cleanup returned `0` patients, `0` appointments, `0` booking requests, and `0` follow-ups; login-as still created the owner tenant session.
+
+# 2026-06-02 - Tenant Follow-ups Expanded Plan Card Correction
+
+Corrected the expanded patient plan UI so the treatment timeline is not mistaken for the follow-up plan.
+
+- Expanded Upcoming patient groups now show a patient summary/header followed by a clear "Full follow-up plan" section.
+- The full-plan section renders every fetched follow-up row as its own editable card.
+- Each expanded plan card keeps independent due-date editing, notes editing, WhatsApp, appointment creation, mark contacted, mark booked, and mark completed actions.
+- Treatment timeline rendering is now opt-in on `FollowUpCard`; expanded full-plan cards suppress the internal timeline so the main view is separate follow-up cards, not a timeline inside one card.
+- Created a local QA patient `b3cbf72b-5cfc-44e8-84d9-a1815dbaaa56` in the QA center with 8 follow-up rows for regression verification.
+
+Verified:
+- `GET /tenant/follow-ups?filter=UPCOMING` includes the QA patient because it has upcoming follow-ups.
+- `GET /tenant/follow-ups?patientId=b3cbf72b-5cfc-44e8-84d9-a1815dbaaa56&includeAllForPatient=true` returned `FULL_PLAN_TOTAL=8`.
+- The returned plan included separate sessions 1-8 with mixed statuses: `COMPLETED`, `CONTACTED`, `DUE`, `UPCOMING`, and `BOOKED`.
+- Editing session 5 due date to `2026-07-22` worked independently and was restored.
+- Editing session 3 notes worked independently and was restored.
+- Changing session 6 status to `CONTACTED` worked independently and was restored to `UPCOMING`.
+- API build passed.
+- Web build passed.
+
+# 2026-06-02 - Tenant Follow-ups Full Patient Plan Expansion
+
+Corrected the Upcoming grouped follow-ups UX so expanded patient cards show the full treatment/follow-up plan, not only the upcoming rows that caused the patient to appear in the summary.
+
+- Added `includeAllForPatient=true` support to `GET /api/v1/tenant/follow-ups` for patient-scoped full-plan loading while keeping normal filters unchanged.
+- Upcoming still shows one summary card per patient based on the active Upcoming filter.
+- Expanding a patient now fetches all follow-ups for that patient regardless of status and renders them as editable cards.
+- Expanded plan rows sort by session number when available, then due date, then created date.
+- The highlighted card now uses the next-actionable rule instead of the first visible card: first non-completed/non-booked future row, or nearest pending/overdue row when no future actionable row exists.
+- Updated the Arabic and Hebrew next-follow-up labels to the requested text.
+- Mutations made inside an expanded plan refresh both the filtered summary list and the full patient plan.
+
+Verified:
+- API build passed.
+- Web build passed.
+- Live tenant API check: all existing filters returned `200`.
+- `GET /tenant/follow-ups?filter=UPCOMING` returned three patient summary rows in local QA data.
+- `GET /tenant/follow-ups?patientId=<id>&includeAllForPatient=true` returned the selected patient's same-center full plan.
+- Due-date edit to `2026-07-22` returned `200`, and the row was restored to `2026-07-06`.
+- Unauthenticated due-date edit returned `401`.
+- Local QA data did not include an 8-follow-up patient fixture; the maximum same-center patient follow-up count found was 1, so the 8-card visual case still needs a seeded/browser fixture for full manual UI confirmation.
+
+# 2026-06-02 - Tenant Follow-ups Grouped Upcoming UX
+
+Improved `/tenant/follow-ups` so Upcoming follow-ups are grouped by patient.
+
+- Upcoming now renders one patient summary card per `patientId`, showing patient name, phone, number of follow-ups, nearest follow-up date, remaining-time badge, and latest treatment summary when available.
+- Expanding a patient shows all upcoming follow-up cards for that patient sorted by due date ascending.
+- The nearest follow-up inside each expanded patient group is highlighted with a gold border/background and localized label: EN `Next Follow-up`, AR `المتابعة القادمة`, HE `מעקב הבא`.
+- Extracted the follow-up card rendering into a reusable local component so existing actions stay available inside expanded groups: WhatsApp reminder, appointment creation, mark contacted, mark booked, mark completed, notes update, and due-date edit.
+- Added a due-date editor to follow-up cards with EN/AR/HE labels.
+- Added minimal tenant-safe backend support: `PATCH /api/v1/tenant/follow-ups/:followUpId/due-date` accepts `{ dueDate: "YYYY-MM-DD" }`, requires `appointments:update`, scopes by the authenticated session center, and recalculates `DUE`/`UPCOMING` status from the new date while preserving other workflow statuses.
+- Verification passed: API build, web build, live Upcoming list returned rows, setting a QA follow-up due date to `2026-07-22` (50 days after `2026-06-02`) returned `200` with the updated due date, and the QA row was restored to its original `2026-07-01` due date.
+
+# 2026-06-02 - Super Admin Center Public Profile Auth Fix
+
+Fixed the Super Admin Center Details public-profile loading error.
+
+- Root cause: `GET/PATCH/POST /api/v1/admin/centers/:centerId/public-profile...` still required the legacy `x-royalcare-super-admin-user-id` header, while the Super Admin details page API client correctly sends the current `royalcare_platform_session` cookie with `credentials: "include"`.
+- Changed the admin center public-profile controller to use `PermissionGuard` instead of manual legacy header auth.
+- `GET /api/v1/admin/centers/:centerId/public-profile` now requires `view:centers`.
+- `PATCH /api/v1/admin/centers/:centerId/public-profile` and `POST /api/v1/admin/centers/:centerId/public-profile/upload-image` now require `edit:centers`.
+- Imported `PermissionsModule` into `CenterPublicProfileModule` so the guard dependencies resolve normally.
+- Tenant `GET/PATCH/POST /api/v1/tenant/public-profile...` behavior was not changed.
+- Verification passed: API build, web build, cookie-auth admin profile request returned `200`, no-cookie admin request returned permission `403`, legacy-header-only admin request returned permission `403`, and unauthenticated tenant profile request still returned tenant-session `401`.
+
+# 2026-06-01 - Public Marketing Pricing UI Polish
+
+Polished the public homepage pricing preview and `/pricing` page as UI-only work.
+
+- Redesigned pricing cards with wider layouts, stronger shadows, subtle warm gradients, larger pricing typography, roomier feature rows, and hover elevation.
+- Treated the Professional/popular plan as the hero plan with a larger/elevated card, gold accent glow, and redesigned Most Popular badge.
+- Updated Enterprise/contact pricing cards with a more premium contact-style price block.
+- Replaced green WhatsApp CTA styling in pricing surfaces with RoyalCare navy/gold branded CTAs while preserving WhatsApp URL/message logic and tracking events.
+- Improved homepage section rhythm with a warm pricing preview, clean white Why RoyalCare section, subtle navy-tinted FAQ, and the existing dark footer.
+- Improved Why RoyalCare cards with modern numbered icon containers, better spacing, and subtle hover states.
+- Web production build passed after the UI-only changes.
+
+# 2026-05-31 - Homepage Pricing Preview
+
+Added a compact public pricing preview to the homepage.
+
+Changed:
+- The public homepage now fetches `GET /api/v1/public/plans` and shows up to three compact plan cards for Basic, Professional, and Enterprise.
+- The section appears directly after the homepage hero and before longer content sections.
+- Cards show localized plan names, yearly price or contact pricing, the popular badge, and a short list of included features.
+- Added a `/pricing` button with EN/AR/HE labels and WhatsApp CTAs using the same shared pricing WhatsApp message helper as the full pricing page.
+- Extracted shared pricing WhatsApp and localized plan/feature helpers for reuse between `/pricing` and the homepage preview.
+
+Verified:
+- Web production build passed.
+
+# 2026-05-31 - Public Footer Link Targets
+
+Fixed public footer navigation link targets.
+
+Changed:
+- Replaced the generic `href="#"` footer group links with explicit destinations.
+- Footer Pricing now links to `/pricing` in EN/AR/HE.
+- Footer Open Your Center links to `/open-center`; platform feature/service/center links route to the matching `/centers` sections.
+- Support links to the configured public support email, and Contact Us links to the current page footer contact anchor.
+- Privacy Policy and Terms remain non-clickable labels until real legal pages exist, avoiding invalid placeholder links.
+
+Verified:
+- No bare `href="#"` remains in `PublicFooter`.
+- Web production build passed.
+
+# 2026-05-31 - Public Navigation Pricing Link
+
+Added the public Pricing navigation item to the shared public header.
+
+Changed:
+- Public header desktop and mobile navigation now include `/pricing`.
+- Added EN/AR/HE labels: `Pricing`, `الأسعار`, and `מחירים`.
+- The `/pricing` nav item is marked active when the current path is `/pricing`; `/centers` remains active only on `/centers`.
+
+Verified:
+- Web production build passed.
+
+# 2026-05-31 - Super Admin Settings Session Auth Fix
+
+Fixed Super Admin Global Platform Settings authorization so saving settings uses the current platform session cookie instead of the removed legacy Super Admin header.
+
+Changed:
+- `GET/PATCH /api/v1/admin/settings` now use `PermissionGuard` with `manage:settings`.
+- `POST /api/v1/admin/uploads/public-image` now uses the same session-cookie guard and no longer requires `x-royalcare-super-admin-user-id`.
+- Added `manage:settings` to platform permission definitions; the existing RBAC foundation seeds it onto the `super_admin` role on API startup.
+- Public settings endpoints remain public-safe and unauthenticated.
+
+Verified:
+- API build passed.
+- API restarted successfully and `GET /api/v1/health` returned `200`.
+- A no-cookie settings PATCH now returns the expected `Missing required permission: manage:settings` guard response instead of `SUPER_ADMIN role is required`.
+
+# 2026-05-31 - Public Pricing WhatsApp CTA Flow
+
+Completed the public `/pricing` CTA flow so plan actions open WhatsApp directly instead of checkout or lead capture.
+
+Changed:
+- Added/finished `/pricing` as a public pricing page backed by live public plan data.
+- Pricing CTAs now build `https://wa.me/{salesWhatsappNumber}?text={encodedMessage}` using live plan names, yearly price, currency, and contact-pricing status.
+- WhatsApp messages start with an Arabic greeting, include Arabic + English plan name, center-name/city/center-type placeholders, and omit the price line for contact-pricing/Enterprise plans.
+- Added public-safe `GET /api/v1/public/platform-contact` support for `salesWhatsappNumber`, with fallback to public support WhatsApp/phone.
+- No checkout, lead storage, or subscription logic changes were added.
+
+Verified:
+- API build passed.
+- Web `npx tsc --noEmit` passed.
+- Web production build passed.
+
 # 2026-05-26 - Center Website Builder v1
 
 Implemented center-controlled homepage section visibility and ordering without changing the public website architecture.
@@ -3691,3 +4313,104 @@ Verified:
 - Prisma format, validate, and generate passed.
 - API lint and build passed.
 - Web lint passed with existing warnings only, web `tsc --noEmit` passed, and web build passed.
+# 2026-06-07 - Public Before/After Results UX
+
+- Replaced the public before/after result card slider UI with a clearer side-by-side comparison layout.
+- Each result now shows separate "Before" and "After" images with clear top badges, matching aspect ratio, rounded image frames, and `object-cover` cropping.
+- The confusing bottom range slider was removed. Mobile stacks the images vertically; larger screens show them side by side.
+- Before/after images now open a simple lightbox preview on click, with dark backdrop, centered full-size image, label/title, close button, backdrop close, and ESC close.
+- Web build passed.
+
+# 2026-06-06 - Multi-Branch Public Profile Support
+
+- Added `CenterBranch` Prisma model and migration `20260606120000_add_center_branches` for multiple center locations/contact rows.
+- Added Super Admin and tenant public-profile branch CRUD/reorder endpoints.
+- Public center profile API now returns active branches sorted by main branch first and then sort order.
+- Super Admin center details and tenant public profile settings now include a "Branches and Addresses" management section with branch cards, multilingual city/address/hours fields, phone, WhatsApp, maps URL, main/active flags, and ordering controls.
+- Public center pages now show a "Branches & Contact" / "الفروع والتواصل" section when branches exist and fall back to legacy single address/contact fields for older centers.
+- Local verification: `prisma db push`, API build, web build passed. Runtime API QA added two active branches to `laser-care`; `GET /api/v1/public/centers/laser-care` returned both branches with independent WhatsApp/maps/hours data.
+## 2026-06-07 - Tenant/Public Navigation Performance
+
+- Added short-lived in-memory caching for tenant `/permissions/me` session hydration, including promise dedupe and cache clearing on login/logout/failure.
+- Added short-lived public settings and public center resource caches to avoid refetching unchanged branding/profile sections during fast SPA navigation.
+- Added explicit tenant nav route prefetch on sidebar/profile links and a dashboard-shell skeleton while session hydration is pending.
+- Added async/lazy image hints to public center gallery, before/after, offers, team, and directory imagery without changing the existing upload/storage flow.
+- Verified `apps/web` production build passes and production server responds on port 3002.
+## 2026-06-07 - Staff Provider Visibility Fix
+
+- Added `UserRole.providerEnabled` so appointment provider visibility is controlled explicitly per staff assignment instead of being inferred from role.
+- Tenant staff create/edit now includes a localized "Show as appointment provider" checkbox in EN/AR/HE.
+- Tenant appointment options, appointment save validation, schedule providers, and public booking providers now require active staff with `providerEnabled=true`; active `CENTER_OWNER` assignments default to provider-enabled.
+- Local DB was synced and existing active `CENTER_OWNER`, `CENTER_MANAGER`, `DOCTOR`, and `STAFF` assignments plus active owner assignments were backfilled as providers.
+- Verified Rawan was active `CENTER_OWNER`; enabled `providerEnabled=true` for her local development row and confirmed she now satisfies the provider list condition.
+- API and web builds passed.
+
+## 2026-06-08 - Center Owner Provider Dropdown Fix
+
+- Center owner assignments are provider-enabled by default during center creation and when a staff assignment is changed to `CENTER_OWNER`.
+- Existing active owner assignments were backfilled to `providerEnabled=true` in the development database and in the migration.
+- Appointment provider options, schedule provider lists, and public provider lists now de-duplicate staff users with multiple center roles so the owner appears once with the stored `fullName`.
+- Staff form label was clarified in Arabic/English/Hebrew as a provider capability, separate from administrative role.
+- Verification: API and web production builds passed.
+
+## 2026-06-08 - Runtime Owner Provider Inclusion Fix
+
+- Confirmed `/tenant/appointments/new` loads providers from `GET /api/v1/tenant/appointments/options`.
+- Fixed that exact endpoint to fetch `Center.ownerUserId` and include active staff assignments when `providerEnabled=true OR userId=center.ownerUserId`.
+- Appointment create/update provider validation now uses the same owner-aware condition, preventing the owner from appearing in the dropdown but failing on save.
+- Tenant schedule provider validation/listing uses the same owner-aware condition so selecting the owner can load availability and schedule settings.
+- Removed temporary availability runtime logging. API and web production builds passed.
+
+## 2026-06-07 - Shared Before/After Pair UI
+
+- Added a shared `BeforeAfterPair` component for side-by-side before/after images with badges, missing-image placeholders, responsive stacking, and optional lightbox preview.
+- Updated the public before/after cards to use the shared component while preserving the public page lightbox behavior.
+- Updated tenant admin `/tenant/settings/before-after` cards and form preview to remove the old slider/range preview and use the same side-by-side comparison layout.
+- Added a quick publish/hide action to admin result cards while preserving edit/delete/category/status behavior.
+- Verified `apps/web` production build passes.
+# 2026-06-08 - Follow-up Early Treatment Plan Closure
+
+Added early closure support for finite follow-up treatment plans.
+
+- Added `PatientFollowUpStatus.CLOSED_EARLY`, `PatientFollowUpPlanStatus`, and closure metadata fields on `PatientFollowUp`.
+- Added migration `20260608120000_add_follow_up_early_closure`.
+- Added tenant endpoint `PATCH /api/v1/tenant/follow-ups/:followUpId/close-early`.
+- Backend closes only future unbooked actionable sessions and preserves completed/booked/linked appointment history.
+- Follow-up list/analytics date filters exclude closed-early sessions from today, upcoming, overdue, and reminder queues.
+- `/tenant/follow-ups` now shows an early-close confirmation modal, localized reason choices, closed-plan summary details, and read-only closed future sessions without booking or WhatsApp reminder actions.
+- API build and web build passed.
+# 2026-06-08
+
+- Fixed linked follow-up plan schedules when editing appointment dates. Appointment updates can now explicitly request follow-up schedule recalculation; the backend updates only the edited linked session and unbooked actionable future sessions from the saved plan snapshot, while preserving completed/booked/cancelled history. The appointment edit UI shows an RTL-safe warning and asks for confirmation before recalculating.
+## 2026-06-20 - Appointment Details Follow-up Relation Consistency
+
+- Unified appointment cards and appointment details on persisted `PatientFollowUp` relations.
+- Added canonical `followUpPlanId` and linked `followUpPlan[]` data to the tenant appointment details response.
+- Removed the details page's separate patient/service follow-up lookup, which could incorrectly show that no plan existed.
+- Appointment create/status/cancel responses now reload relations after follow-up mutations to avoid stale plan detection.
+- Corrected recurring-plan detection for rows that belong to the same patient/service recurrence but are not directly linked to the current appointment.
+- Appointment list/details now return the same `followUpPlanSummary`; recurring appointment cards again show the existing-plan badge, and details render the matching recurring rows.
+- Runtime verification for appointment `1ed5f4cb-d6dc-447a-936c-5375daf0666e` corrected pre-completion recurring-plan display: list/details now return `hasFollowUpPlan=true` and a 3-month recurring summary even though no reminder row exists yet.
+## 2026-06-20 - Dedicated Recurring Follow-ups Workflow
+
+- Added separate EN/AR/HE recurring and session-plan tabs to `/tenant/follow-ups`.
+- Added recurring-specific filters, KPI counters, operational cards, branch/appointment/recurrence context, and WhatsApp/contact/book/skip/pause actions.
+- Added recurring reminder/contact audit metadata and lifecycle states with migration `20260620120000_add_recurring_follow_up_workflow`.
+- Booking a recurring reminder now preserves the booked cycle and schedules the next cycle from the appointment date.
+- API and web production builds passed; focused QA verified reminder, contact, skip, next-cycle creation, pause, and booking lifecycle behavior.
+
+## 2026-06-20 - Completed Appointment Recurring Generation
+
+- Hardened recurring creation so disabled services cannot generate lifecycle rows and new rows explicitly start with `planStatus=ACTIVE`.
+- Added an idempotent completed-appointment backfill when the recurring queue is loaded and restricted that queue to ACTIVE recurring lifecycles.
+- Focused runtime QA verified `2026-03-12 + 3 months = 2026-06-12`, status `DUE`, plan status `ACTIVE`, and inclusion in the overdue recurring response; temporary QA data was removed.
+- Exact branch runtime diagnosis found appointment `3d2ff4b6-65d2-4389-941e-a37447742e7e` stored with an inverted source date and a September reminder. A targeted dry-run/apply repair moved its existing recurring row to `nextDueDate=2026-06-12`, `DUE`, `ACTIVE`.
+- Standardized recurring API/UI display and filtering on `nextDueDate`, made recurring analytics branch-aware, and added `scripts/repair-recurring-follow-ups.ts` for controlled branch/appointment dry-run repairs.
+- Authenticated localhost QA for branch `9ad69bba-8e6a-48c0-9e10-91ffff7d0df6` returned THIS_WEEK `0`, OVERDUE `1`, and `recurringOverdue=1`; API/web builds passed and both local servers were restarted.
+- Corrected recurring due-window boundaries with one shared `nextDueDate` classifier for list filters and counters. Runtime QA for `2026-03-22 + 3 months` on `2026-06-20` returned days-until-due `2`, THIS_WEEK list `1`, `recurringThisWeek=1`, and OVERDUE `0` on the exact branch.
+# 2026-06-22 - Laser Care Development Test Data Reset
+
+- Added `scripts/reset-laser-care-test-data.ts`, a development-only Prisma transaction reset guarded by the exact Laser Care center UUID, slug, and name plus local `royalcare_dev`, non-production, `CONFIRM_RESET`, and `--apply` checks.
+- Removed Laser Care appointments, patients, booking requests, invoices, payments/credits, follow-ups, sessions, portal tokens, related notifications/logs, booking tracking logs, and operational audit logs while preserving services/templates, branches, staff/accounts, roles/permissions, subscriptions, branding, SEO, translations, and center settings.
+- Applied the reset to center `17c0114c-0c7a-4a72-9944-a01263d6cecf`; all targeted remaining counts verified as zero in the transaction.
+- Script typecheck, API build, and web production build passed.

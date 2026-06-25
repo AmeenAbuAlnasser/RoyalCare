@@ -11,6 +11,25 @@ export type LinkedRecordCounts = {
   creditTransactions: number;
 };
 
+export type PatientSummaryAppointment = {
+  appointmentId: string;
+  appointmentDate: string;
+  startTime: string;
+  status: string;
+  serviceName: string | null;
+};
+
+export type PatientSummary = {
+  latestSession: PatientSummaryAppointment | null;
+  upcomingSession: PatientSummaryAppointment | null;
+  treatmentPlansCount: number;
+  overdueSessionsCount: number;
+  outstandingBalance: string;
+  outstandingCurrency: string;
+  upcomingAppointmentsCount: number;
+  linkedRecordsCount: number;
+};
+
 export type CenterPatient = {
   id: string;
   centerId: string;
@@ -27,6 +46,7 @@ export type CenterPatient = {
   status: PatientStatus;
   canDelete: boolean;
   linkedRecordCounts: LinkedRecordCounts;
+  summary: PatientSummary;
   createdAt: string;
   updatedAt: string;
 };

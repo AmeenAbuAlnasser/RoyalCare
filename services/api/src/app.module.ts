@@ -57,6 +57,10 @@ import { CenterAnalyticsModule } from './modules/center-analytics/center-analyti
 import { TenantCenterAnalyticsController } from './modules/center-analytics/center-analytics.controller';
 import { PatientFollowUpsModule } from './modules/patient-follow-ups/patient-follow-ups.module';
 import { PatientFollowUpsController } from './modules/patient-follow-ups/controllers/patient-follow-ups.controller';
+import { PlansModule } from './modules/plans/plans.module';
+import { ExpensesModule } from './modules/expenses/expenses.module';
+import { ExpensesController } from './modules/expenses/expenses.controller';
+import { TenantBranchesModule } from './modules/branches/tenant-branches.module';
 
 @Module({
   imports: [
@@ -98,6 +102,9 @@ import { PatientFollowUpsController } from './modules/patient-follow-ups/control
     TenantDomainsModule,
     CenterAnalyticsModule,
     PatientFollowUpsModule,
+    PlansModule,
+    ExpensesModule,
+    TenantBranchesModule,
   ],
 })
 export class AppModule implements NestModule {
@@ -124,6 +131,7 @@ export class AppModule implements NestModule {
         TenantDomainsController,
         TenantCenterAnalyticsController,
         PatientFollowUpsController,
+        ExpensesController,
       );
   }
 }

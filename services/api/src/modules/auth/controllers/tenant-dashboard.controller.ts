@@ -1,4 +1,4 @@
-import { Controller, Get, Req } from '@nestjs/common';
+import { Controller, Get, Query, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import {
   centerSessionCookieName,
@@ -29,12 +29,22 @@ export class TenantDashboardController {
   ) {}
 
   @Get('stats')
-  async getStats(@Req() request: Request) {
+  async getStats(
+    @Req() request: Request,
+    @Query('clientNow') clientNow?: string,
+    @Query('clientDate') clientDate?: string,
+    @Query('branchId') branchId?: string,
+  ) {
     const token = getCookie(request, centerSessionCookieName);
     const session = await this.centerAuthService.getSession(
       verifyCenterSessionToken(token),
     );
 
-    return this.tenantDashboardService.getStats(session.center.id);
+    return this.tenantDashboardService.getStats(
+      session.center.id,
+      clientNow,
+      clientDate,
+      branchId,
+    );
   }
 }

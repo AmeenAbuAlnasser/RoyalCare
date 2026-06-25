@@ -2,16 +2,18 @@
 
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { buttonClassName } from "@/components/ui/button-styles";
 import { useLanguage } from "@/i18n/LanguageProvider";
 import type { CenterAdminDictionary } from "@/i18n/dictionaries/center-admin";
+import { formatTime12h } from "@/i18n/formatters";
 import {
   createTenantAppointment,
   getTenantAppointment,
   getTenantAppointmentOptions,
   getTenantAvailability,
   updateTenantAppointment,
+  type AppointmentService,
   type AppointmentConflictDetails,
   type AppointmentStatus,
   type TenantAppointment,
@@ -23,12 +25,14 @@ import {
   updateTenantFollowUpStatus,
   type TenantPatientFollowUp,
 } from "@/lib/api/tenant-follow-ups";
+import { linkBookingRequestAppointment } from "@/lib/api/tenant-booking-requests";
 import { AppointmentConflictAlert } from "./AppointmentConflictAlert";
 import { ApiRequestError } from "@/lib/api/super-admin-centers";
 import { CenterAdminShell } from "../layout/CenterAdminShell";
 
 type SlotState =
   | { status: "prompt" }
+  | { status: "needs_duration" }
   | { status: "loading" }
   | { status: "ready"; slots: TenantAvailabilitySlot[] }
   | { status: "error" };
@@ -38,10 +42,12 @@ import {
 } from "../subscription-access";
 import {
   getAppointmentProviderName,
+  getBranchLabel,
   getLocalizedAppointmentServiceName,
 } from "./appointment-display";
 import {
   appointmentToForm,
+  calculateTotalSessionsFromRules,
   formToAppointmentPayload,
   type TenantAppointmentFormErrors,
   type TenantAppointmentFormState,
@@ -56,16 +62,40 @@ const appointmentStatuses: AppointmentStatus[] = [
   "NO_SHOW",
 ];
 
+const treatmentTemplateSelectCopy = {
+  en: {
+    label: "Choose treatment plan",
+    helper:
+      "The selected template fills the plan, and you can still customize it for this patient.",
+  },
+  ar: {
+    label: "اختر خطة العلاج",
+    helper:
+      "القالب يملأ الخطة تلقائيًا ويمكنك تعديلها لهذا المريض فقط.",
+  },
+  he: {
+    label: "בחירת תוכנית טיפול",
+    helper:
+      "התבנית ממלאת את התוכנית ואפשר עדיין להתאים אותה למטופל הזה.",
+  },
+} as const;
+
 function validateForm(
   form: TenantAppointmentFormState,
   dictionary: CenterAdminDictionary,
   isOfferAppointment: boolean,
   isCustomService: boolean,
+  isEditWithUnchangedScheduling: boolean,
+  branchRequired: boolean,
 ) {
   const errors: TenantAppointmentFormErrors = {};
 
   if (!form.patientId) {
     errors.patientId = dictionary.appointments.fieldRequired;
+  }
+
+  if (branchRequired && !form.branchId) {
+    errors.branchId = dictionary.appointments.fieldRequired;
   }
 
   if (!form.serviceId && !isCustomService && !isOfferAppointment) {
@@ -84,12 +114,47 @@ function validateForm(
     errors.appointmentDate = dictionary.appointments.invalidDate;
   }
 
-  if (!form.startTime) {
+  // In edit mode with unchanged scheduling the startTime is already booked;
+  // skip the empty-check so notes-only edits are never blocked.
+  if (!form.startTime && !isEditWithUnchangedScheduling) {
     errors.startTime = dictionary.appointments.invalidTime;
   }
 
   if (!form.durationMinutes || Number(form.durationMinutes) <= 0) {
     errors.durationMinutes = dictionary.appointments.invalidDuration;
+  }
+
+  if (isCustomService && form.saveCustomService) {
+    if (form.followUpMode === "SESSION_BASED_PLAN") {
+        const hasInvalidRule = form.followUpRules.some((rule) => {
+          const from = Number(rule.fromSessionNumber);
+          const to = Number(rule.toSessionNumber);
+          const interval = Number(rule.intervalDays);
+          return (
+            !Number.isInteger(from) ||
+            !Number.isInteger(to) ||
+            !Number.isInteger(interval) ||
+            from <= 0 ||
+            to < from ||
+            interval <= 0
+          );
+        });
+
+        if (form.followUpRules.length === 0 || hasInvalidRule) {
+          errors.followUpRules = dictionary.services.invalidDuration;
+        }
+    }
+
+    if (form.followUpMode === "RECURRING_CONTINUOUS") {
+      const recurringValue = Number(form.recurringIntervalValue);
+      if (
+        !form.recurringIntervalValue ||
+        !Number.isInteger(recurringValue) ||
+        recurringValue <= 0
+      ) {
+        errors.recurringIntervalValue = dictionary.services.invalidDuration;
+      }
+    }
   }
 
   if (form.startTime && form.durationMinutes && Number(form.durationMinutes) > 0) {
@@ -207,11 +272,68 @@ function calculateEndTime(startTime: string, durationMinutes: string) {
     .padStart(2, "0")}:${(total % 60).toString().padStart(2, "0")}`;
 }
 
+function isCurrentAppointmentSlot(
+  mode: "create" | "edit",
+  loadedAppointment: TenantAppointment | null,
+  form: TenantAppointmentFormState,
+  time: string,
+) {
+  if (mode !== "edit" || !loadedAppointment) return false;
+
+  return (
+    loadedAppointment.startTime === time &&
+    loadedAppointment.endTime ===
+      calculateEndTime(form.startTime, form.durationMinutes) &&
+    loadedAppointment.appointmentDate.slice(0, 10) === form.appointmentDate &&
+    loadedAppointment.staffUserId === form.staffUserId &&
+    (loadedAppointment.serviceId ?? "") === form.serviceId
+  );
+}
+
+function withCurrentAppointmentSlot(
+  slots: TenantAvailabilitySlot[],
+  mode: "create" | "edit",
+  loadedAppointment: TenantAppointment | null,
+  form: TenantAppointmentFormState,
+) {
+  if (!loadedAppointment || mode !== "edit") return slots;
+
+  const currentSlotMatchesForm = isCurrentAppointmentSlot(
+    mode,
+    loadedAppointment,
+    form,
+    loadedAppointment.startTime,
+  );
+
+  if (!currentSlotMatchesForm) return slots;
+
+  const existingSlot = slots.find((slot) => slot.time === loadedAppointment.startTime);
+
+  if (existingSlot) {
+    return slots.map((slot) =>
+      slot.time === loadedAppointment.startTime
+        ? { ...slot, available: true, reason: "CURRENT_APPOINTMENT" }
+        : slot,
+    );
+  }
+
+  return [
+    ...slots,
+    {
+      available: true,
+      reason: "CURRENT_APPOINTMENT",
+      time: loadedAppointment.startTime,
+    },
+  ].sort((a, b) => a.time.localeCompare(b.time));
+}
+
 type FollowUpFormSlice = {
   followUpEnabled: boolean;
-  followUpType: "FIXED_INTERVAL" | "SESSION_PLAN";
+  followUpMode: "NONE" | "SESSION_BASED_PLAN" | "RECURRING_CONTINUOUS";
   defaultIntervalDays: string;
   totalRecommendedSessions: string;
+  recurringIntervalValue: string;
+  recurringIntervalUnit: "DAY" | "WEEK" | "MONTH" | "YEAR";
   followUpRules: Array<{
     fromSessionNumber: string;
     toSessionNumber: string;
@@ -228,9 +350,9 @@ function parseFollowUpRuleValue(value: string) {
 
 function getFollowUpRuleWarnings(
   form: FollowUpFormSlice,
-  dictionary: { services: { invalidRangeOrder: string; invalidIntervals: string; overlappingRanges: string; uncoveredSessions: (range: string) => string } },
+  dictionary: { services: { invalidRangeOrder: string; invalidIntervals: string; overlappingRanges: string; firstPhaseMustStartAtOne: string; noGapsAllowed: string } },
 ): string[] {
-  if (!form.followUpEnabled || form.followUpType !== "SESSION_PLAN") {
+  if (form.followUpMode !== "SESSION_BASED_PLAN") {
     return [];
   }
   const warnings: string[] = [];
@@ -245,6 +367,7 @@ function getFollowUpRuleWarnings(
         rule.from !== null && rule.to !== null && rule.interval !== null,
     )
     .sort((a, b) => a.from - b.from);
+
   if (normalized.some((rule) => rule.from <= 0 || rule.to <= 0 || rule.from > rule.to)) {
     warnings.push(dictionary.services.invalidRangeOrder);
   }
@@ -252,50 +375,35 @@ function getFollowUpRuleWarnings(
     warnings.push(dictionary.services.invalidIntervals);
   }
   if (normalized.some((rule, index) => {
-    const nextRule = normalized[index + 1];
-    return Boolean(nextRule && rule.to >= nextRule.from);
+    const next = normalized[index + 1];
+    return Boolean(next && rule.to >= next.from);
   })) {
     warnings.push(dictionary.services.overlappingRanges);
   }
-  const totalSessions = parseFollowUpRuleValue(form.totalRecommendedSessions);
-  if (totalSessions && normalized.length > 0) {
-    const uncovered: number[] = [];
-    for (let session = 1; session <= totalSessions; session += 1) {
-      const covered = normalized.some((rule) => session >= rule.from && session <= rule.to);
-      if (!covered) uncovered.push(session);
-    }
-    if (uncovered.length > 0) {
-      const ranges: string[] = [];
-      let start = uncovered[0];
-      let previous = uncovered[0];
-      for (const session of uncovered.slice(1)) {
-        if (session === previous + 1) {
-          previous = session;
-        } else {
-          ranges.push(start === previous ? `${start}` : `${start} - ${previous}`);
-          start = session;
-          previous = session;
-        }
-      }
-      ranges.push(start === previous ? `${start}` : `${start} - ${previous}`);
-      warnings.push(dictionary.services.uncoveredSessions(ranges.join(", ")));
-    }
+  if (normalized.length > 0 && normalized[0].from !== 1) {
+    warnings.push(dictionary.services.firstPhaseMustStartAtOne);
+  }
+  if (normalized.some((rule, index) => {
+    const next = normalized[index + 1];
+    return Boolean(next && next.from !== rule.to + 1);
+  })) {
+    warnings.push(dictionary.services.noGapsAllowed);
   }
   return warnings;
 }
 
 function getFollowUpPlanPreview(form: FollowUpFormSlice) {
-  const totalSessions = parseFollowUpRuleValue(form.totalRecommendedSessions) ?? 8;
+  if (form.followUpMode !== "SESSION_BASED_PLAN") {
+    return [];
+  }
+
+  const totalSessions = calculateTotalSessionsFromRules(form.followUpRules) ?? 8;
   const sessions = Array.from(
     { length: Math.min(totalSessions, 12) },
     (_, index) => index + 1,
   );
   return sessions
     .map((session) => {
-      if (form.followUpType === "FIXED_INTERVAL") {
-        const interval = parseFollowUpRuleValue(form.defaultIntervalDays);
-        return interval && interval > 0 ? { session, interval } : null;
-      }
       const match = form.followUpRules.find((rule) => {
         const from = parseFollowUpRuleValue(rule.fromSessionNumber);
         const to = parseFollowUpRuleValue(rule.toSessionNumber);
@@ -327,6 +435,11 @@ const followUpContextCopy = {
     duration: "Previous duration",
     treatmentDetails: "Treatment details",
     timeline: "Treatment timeline",
+    bookingFromFollowUp: "This appointment is being created from a follow-up plan",
+    alreadyBooked: "This follow-up session already has an appointment.",
+    linkedAppointment: "Linked appointment",
+    viewAppointment: "View appointment",
+    editAppointment: "Edit appointment",
     completed: "Completed",
     followUp: "Upcoming follow-up",
     session: "Session",
@@ -336,10 +449,15 @@ const followUpContextCopy = {
     title: "معلومات من الجلسة السابقة",
     previousNotes: "ملاحظات علاجية",
     internalNotes: "ملاحظات داخلية للطاقم",
-    provider: "المعالج السابق",
+    provider: "المعالج / المقدم السابق",
     duration: "مدة الجلسة السابقة",
     treatmentDetails: "تفاصيل العلاج",
     timeline: "سجل العلاج",
+    bookingFromFollowUp: "يتم إنشاء هذا الموعد من خطة متابعة",
+    alreadyBooked: "هذه الجلسة لديها موعد محجوز بالفعل.",
+    linkedAppointment: "موعد مرتبط",
+    viewAppointment: "عرض الموعد",
+    editAppointment: "تعديل الموعد",
     completed: "مكتملة",
     followUp: "متابعة قادمة",
     session: "الجلسة",
@@ -353,6 +471,11 @@ const followUpContextCopy = {
     duration: "משך טיפול קודם",
     treatmentDetails: "פרטי טיפול",
     timeline: "ציר טיפולים",
+    bookingFromFollowUp: "התור הזה נוצר מתוך תוכנית מעקב",
+    alreadyBooked: "למפגש המעקב הזה כבר יש תור.",
+    linkedAppointment: "תור מקושר",
+    viewAppointment: "הצג תור",
+    editAppointment: "עריכת תור",
     completed: "הושלם",
     followUp: "מעקב קרוב",
     session: "טיפול",
@@ -360,9 +483,172 @@ const followUpContextCopy = {
   },
 } as const;
 
+const followUpModeCopy = {
+  en: {
+    repeatEvery: "Repeat every",
+    helper: "A new follow-up will be created automatically after each completed session.",
+    day: "Day",
+    week: "Week",
+    month: "Month",
+    year: "Year",
+  },
+  ar: {
+    repeatEvery: "تتكرر كل",
+    helper: "سيتم إنشاء متابعة جديدة تلقائيًا بعد كل جلسة مكتملة.",
+    day: "يوم",
+    week: "أسبوع",
+    month: "شهر",
+    year: "سنة",
+  },
+  he: {
+    repeatEvery: "חוזר כל",
+    helper: "מעקב חדש ייווצר אוטומטית לאחר כל טיפול שהושלם.",
+    day: "יום",
+    week: "שבוע",
+    month: "חודש",
+    year: "שנה",
+  },
+} as const;
+
+const followUpScheduleChangeCopy = {
+  en: {
+    banner: "Changing this appointment date may affect the follow-up plan.",
+    confirm:
+      "This appointment is linked to a follow-up plan. Recalculate upcoming session dates?",
+    keep: "Keep dates unchanged",
+    recalculate: "Recalculate dates",
+  },
+  ar: {
+    banner: "تغيير تاريخ هذا الموعد قد يؤثر على خطة المتابعة.",
+    confirm:
+      "هذا الموعد مرتبط بخطة متابعة. هل تريد إعادة حساب تواريخ الجلسات القادمة؟",
+    keep: "إبقاء التواريخ كما هي",
+    recalculate: "إعادة حساب التواريخ",
+  },
+  he: {
+    banner: "שינוי תאריך התור הזה עשוי להשפיע על תוכנית המעקב.",
+    confirm:
+      "התור הזה מקושר לתוכנית מעקב. לחשב מחדש את תאריכי המפגשים הבאים?",
+    keep: "השארת התאריכים כפי שהם",
+    recalculate: "חשב מחדש תאריכים",
+  },
+} as const;
+
 function formatDateOnly(value: string) {
   const [year, month, day] = value.slice(0, 10).split("-");
   return `${day}/${month}/${year}`;
+}
+
+function resolveFollowUpProviderId(
+  followUp: TenantPatientFollowUp,
+  options: TenantAppointmentOptions,
+) {
+  const preferredIds = [
+    followUp.lastTreatment?.provider?.id,
+    ...followUp.treatmentTimeline
+      .slice()
+      .reverse()
+      .map((item) => item.provider?.id),
+  ].filter((value): value is string => Boolean(value));
+
+  return preferredIds.find((id) =>
+    options.providers.some((provider) => provider.id === id),
+  ) ?? "";
+}
+
+function getFollowUpServiceName(
+  followUp: TenantPatientFollowUp,
+  _locale: "en" | "ar" | "he",
+) {
+  if (!followUp.service) return "";
+  return followUp.service.nameEn || followUp.service.nameAr || followUp.service.nameHe;
+}
+
+type TreatmentTemplateOption = NonNullable<AppointmentService["treatmentTemplates"]>[number];
+
+function getActiveTreatmentTemplates(service?: AppointmentService | null) {
+  return (service?.treatmentTemplates ?? [])
+    .filter((template) => template.isActive)
+    .sort((a, b) => {
+      if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1;
+      return a.sortOrder - b.sortOrder;
+    });
+}
+
+function getTreatmentTemplateName(
+  template: TreatmentTemplateOption,
+  _locale: "en" | "ar" | "he",
+) {
+  const name = template.nameAr || template.nameEn || template.nameHe;
+  return name || `${getTreatmentTemplateSessionCount(template) ?? ""}`;
+}
+
+function getTreatmentTemplateSessionCount(
+  template: TreatmentTemplateOption,
+  service?: AppointmentService | null,
+) {
+  if (typeof template.totalSessions === "number" && template.totalSessions > 0) {
+    return template.totalSessions;
+  }
+
+  const phaseTotals = (template.phases ?? [])
+    .map((rule) => rule.toSessionNumber)
+    .filter((value) => Number.isInteger(value) && value > 0);
+
+  if (phaseTotals.length > 0) {
+    return Math.max(...phaseTotals);
+  }
+
+  if (
+    typeof service?.totalRecommendedSessions === "number" &&
+    service.totalRecommendedSessions > 0
+  ) {
+    return service.totalRecommendedSessions;
+  }
+
+  const servicePhaseTotals = Array.isArray(service?.followUpRules)
+    ? service.followUpRules
+        .map((rule) => rule.toSessionNumber)
+        .filter((value) => Number.isInteger(value) && value > 0)
+    : [];
+
+  return servicePhaseTotals.length > 0 ? Math.max(...servicePhaseTotals) : null;
+}
+
+function planFieldsFromTreatmentTemplate(
+  template: TreatmentTemplateOption | null | undefined,
+  service?: AppointmentService | null,
+) {
+  if (!template) {
+    return {
+      treatmentTemplateId: "",
+    };
+  }
+
+  const sessionCount = getTreatmentTemplateSessionCount(template, service);
+  const phases =
+    template.phases && template.phases.length > 0
+      ? template.phases.map((rule) => ({
+          fromSessionNumber: rule.fromSessionNumber.toString(),
+          toSessionNumber: rule.toSessionNumber.toString(),
+          intervalDays: rule.intervalDays.toString(),
+        }))
+      : [
+          {
+            fromSessionNumber: "1",
+            toSessionNumber: (sessionCount ?? "").toString(),
+            intervalDays: (template.defaultIntervalDays ?? 30).toString(),
+          },
+        ];
+
+  return {
+    defaultIntervalDays: template.defaultIntervalDays?.toString() ?? "",
+    followUpEnabled: true,
+    followUpMode: "SESSION_BASED_PLAN" as const,
+    followUpRules: phases,
+    treatmentTemplateId: template.id,
+    totalRecommendedSessions: (sessionCount ?? "").toString(),
+  };
 }
 
 export function TenantAppointmentFormPage({
@@ -378,6 +664,9 @@ export function TenantAppointmentFormPage({
   const prefillPatientId = searchParams.get("patientId");
   const prefillServiceId = searchParams.get("serviceId");
   const sourceFollowUpId = searchParams.get("followUpId");
+  const sourceBookingRequestId = searchParams.get("bookingRequestId");
+  const prefillNotes = searchParams.get("notes");
+  const prefillBranchId = searchParams.get("branchId");
   const [form, setForm] = useState<TenantAppointmentFormState>(() =>
     appointmentToForm(),
   );
@@ -390,10 +679,22 @@ export function TenantAppointmentFormPage({
   const [loadError, setLoadError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [showFollowUpScheduleDialog, setShowFollowUpScheduleDialog] =
+    useState(false);
   const [slotState, setSlotState] = useState<SlotState>({ status: "prompt" });
   const [customServiceMode, setCustomServiceMode] = useState(false);
   const [sourceFollowUp, setSourceFollowUp] =
     useState<TenantPatientFollowUp | null>(null);
+  const followUpHydratedRef = useRef(false);
+  const urlPrefillHydratedRef = useRef(false);
+  const [originalScheduling, setOriginalScheduling] = useState<{
+    appointmentDate: string;
+    durationMinutes: string;
+    endTime: string;
+    serviceId: string;
+    staffUserId: string;
+    startTime: string;
+  } | null>(null);
 
   const isOfferAppointment =
     mode === "edit" &&
@@ -403,7 +704,54 @@ export function TenantAppointmentFormPage({
   useEffect(() => {
     let isMounted = true;
 
-    if (isOfferAppointment || usesCustomService || !form.serviceId || !form.appointmentDate) {
+    if (isOfferAppointment) {
+      queueMicrotask(() => {
+        if (isMounted) setSlotState({ status: "prompt" });
+      });
+      return () => { isMounted = false; };
+    }
+
+    if (usesCustomService) {
+      const duration = Number(form.durationMinutes);
+      if (!form.durationMinutes || !Number.isFinite(duration) || duration <= 0) {
+        queueMicrotask(() => {
+          if (isMounted) setSlotState({ status: "needs_duration" });
+        });
+        return () => { isMounted = false; };
+      }
+
+      if (!form.appointmentDate) {
+        queueMicrotask(() => {
+          if (isMounted) setSlotState({ status: "prompt" });
+        });
+        return () => { isMounted = false; };
+      }
+
+      queueMicrotask(() => {
+        if (isMounted) setSlotState({ status: "loading" });
+      });
+      getTenantAvailability(
+        null,
+        form.appointmentDate,
+        form.staffUserId || undefined,
+        mode === "edit" && appointmentId ? appointmentId : undefined,
+        duration,
+        true,
+      )
+        .then((res) => { if (isMounted) setSlotState({ status: "ready", slots: res.slots }); })
+        .catch(() => { if (isMounted) setSlotState({ status: "error" }); });
+      return () => { isMounted = false; };
+    }
+
+    const duration = Number(form.durationMinutes);
+    if (
+      !form.serviceId ||
+      !form.staffUserId ||
+      !form.appointmentDate ||
+      !form.durationMinutes ||
+      !Number.isFinite(duration) ||
+      duration <= 0
+    ) {
       queueMicrotask(() => {
         if (isMounted) setSlotState({ status: "prompt" });
       });
@@ -418,11 +766,12 @@ export function TenantAppointmentFormPage({
       form.appointmentDate,
       form.staffUserId || undefined,
       mode === "edit" && appointmentId ? appointmentId : undefined,
+      duration,
     )
       .then((res) => { if (isMounted) setSlotState({ status: "ready", slots: res.slots }); })
       .catch(() => { if (isMounted) setSlotState({ status: "error" }); });
     return () => { isMounted = false; };
-  }, [form.serviceId, form.appointmentDate, form.staffUserId, mode, appointmentId, isOfferAppointment, usesCustomService]);
+  }, [form.serviceId, form.durationMinutes, form.appointmentDate, form.staffUserId, mode, appointmentId, isOfferAppointment, usesCustomService]);
 
   useEffect(() => {
     let isMounted = true;
@@ -443,15 +792,35 @@ export function TenantAppointmentFormPage({
             setCustomServiceMode(
               Boolean(appointment.customServiceName && !appointment.serviceId),
             );
-          } else if (mode === "create" && (prefillPatientId || prefillServiceId)) {
+            setOriginalScheduling({
+              appointmentDate: appointment.appointmentDate.slice(0, 10),
+              durationMinutes: (
+                appointment.customServiceDuration ?? appointment.durationMinutes
+              ).toString(),
+              endTime: appointment.endTime,
+              serviceId: appointment.serviceId ?? "",
+              staffUserId: appointment.staffUserId,
+              startTime: appointment.startTime,
+            });
+          } else if (
+            mode === "create" &&
+            !sourceFollowUpId &&
+            !urlPrefillHydratedRef.current &&
+            (prefillPatientId || prefillServiceId || prefillBranchId)
+          ) {
             setForm((current) => {
               const selectedService = optionsResponse.services.find(
                 (service) => service.id === prefillServiceId,
               );
+              const defaultTemplate = getActiveTreatmentTemplates(selectedService)[0];
+              urlPrefillHydratedRef.current = true;
               return {
                 ...current,
+                ...planFieldsFromTreatmentTemplate(defaultTemplate, selectedService),
                 patientId: prefillPatientId || current.patientId,
                 serviceId: prefillServiceId || current.serviceId,
+                branchId: prefillBranchId || current.branchId,
+                notes: prefillNotes || current.notes,
                 durationMinutes:
                   selectedService?.durationMinutes?.toString() ||
                   current.durationMinutes,
@@ -474,7 +843,15 @@ export function TenantAppointmentFormPage({
     return () => {
       isMounted = false;
     };
-  }, [appointmentId, mode, prefillPatientId, prefillServiceId]);
+  }, [
+    appointmentId,
+    mode,
+    prefillPatientId,
+    prefillServiceId,
+    prefillBranchId,
+    prefillNotes,
+    sourceFollowUpId,
+  ]);
 
   useEffect(() => {
     let isMounted = true;
@@ -501,6 +878,90 @@ export function TenantAppointmentFormPage({
     };
   }, [mode, sourceFollowUpId]);
 
+  useEffect(() => {
+    if (
+      mode !== "create" ||
+      !sourceFollowUpId ||
+      !sourceFollowUp ||
+      !options ||
+      followUpHydratedRef.current
+    ) {
+      return;
+    }
+
+    const serviceId = sourceFollowUp.serviceId || prefillServiceId || "";
+    const selectedService = options.services.find((service) => service.id === serviceId);
+    const providerId = resolveFollowUpProviderId(sourceFollowUp, options);
+    const defaultTemplate = getActiveTreatmentTemplates(selectedService)[0];
+
+    followUpHydratedRef.current = true;
+    setCustomServiceMode(false);
+    setErrors({});
+    setConflictDetails(null);
+    setSaveError(null);
+    setForm((current) => ({
+      ...current,
+      ...planFieldsFromTreatmentTemplate(defaultTemplate, selectedService),
+      appointmentDate: sourceFollowUp.dueDate.slice(0, 10),
+      durationMinutes:
+        selectedService?.durationMinutes?.toString() ||
+        sourceFollowUp.lastTreatment?.durationMinutes?.toString() ||
+        current.durationMinutes,
+      notes: current.notes.trim() || "موعد من خطة متابعة",
+      patientId: sourceFollowUp.patientId || prefillPatientId || current.patientId,
+      serviceId,
+      staffUserId: providerId || current.staffUserId,
+      startTime: "",
+      status: "SCHEDULED",
+    }));
+  }, [
+    mode,
+    options,
+    prefillPatientId,
+    prefillServiceId,
+    sourceFollowUp,
+    sourceFollowUpId,
+  ]);
+
+  useEffect(() => {
+    if (!options || !form.serviceId || usesCustomService || isOfferAppointment) {
+      return;
+    }
+
+    const selectedService = options.services.find(
+      (service) => service.id === form.serviceId,
+    );
+    const templates = getActiveTreatmentTemplates(selectedService);
+    if (templates.length === 0) {
+      if (form.treatmentTemplateId) {
+        setForm((current) => ({
+          ...current,
+          treatmentTemplateId: "",
+        }));
+      }
+      return;
+    }
+
+    const selectedTemplate = templates.find(
+      (template) => template.id === form.treatmentTemplateId,
+    );
+
+    if (!selectedTemplate) {
+      const defaultTemplate =
+        templates.find((template) => template.isDefault) ?? templates[0];
+      setForm((current) => ({
+        ...current,
+        ...planFieldsFromTreatmentTemplate(defaultTemplate, selectedService),
+      }));
+    }
+  }, [
+    form.serviceId,
+    form.treatmentTemplateId,
+    isOfferAppointment,
+    options,
+    usesCustomService,
+  ]);
+
   return (
     <CenterAdminShell
       activeNav="appointments"
@@ -519,17 +980,61 @@ export function TenantAppointmentFormPage({
         const restrictionMessage =
           getTenantSubscriptionRestrictionMessage(session, dictionary);
         const followUpText = followUpContextCopy[locale];
+        const visibleSlots =
+          slotState.status === "ready"
+            ? withCurrentAppointmentSlot(
+                slotState.slots,
+                mode,
+                loadedAppointment,
+                form,
+              )
+            : [];
+        const linkedFollowUpAppointment = sourceFollowUp?.nextAppointment ?? null;
+        const isDuplicateFollowUpBooking =
+          mode === "create" && Boolean(linkedFollowUpAppointment);
+        const followUpScheduleText = followUpScheduleChangeCopy[locale];
+        const appointmentDateChangedOnLinkedFollowUp =
+          mode === "edit" &&
+          Boolean(loadedAppointment?.followUp) &&
+          Boolean(originalScheduling) &&
+          form.appointmentDate !== originalScheduling?.appointmentDate;
 
-        const submit = async () => {
+        const submit = async (recalculateFollowUpScheduleChoice?: boolean) => {
           if (isWriteBlocked) {
             return;
           }
+
+          if (isDuplicateFollowUpBooking) {
+            setSaveError(followUpText.alreadyBooked);
+            return;
+          }
+
+          // Compare every scheduling field against the snapshot captured on
+          // load. A notes-only or status-only edit must never re-validate the
+          // slot because the original slot may now be PAST_TIME or off-grid.
+          const changedSchedulingFields =
+            mode !== "edit" ||
+            !originalScheduling ||
+            form.appointmentDate !== originalScheduling.appointmentDate ||
+            form.startTime !== originalScheduling.startTime ||
+            form.staffUserId !== originalScheduling.staffUserId ||
+            form.serviceId !== originalScheduling.serviceId ||
+            form.durationMinutes !== originalScheduling.durationMinutes;
+
+          const isCurrentAppointmentSlotSelected =
+            !changedSchedulingFields &&
+            form.startTime === (originalScheduling?.startTime ?? "");
+
+          const selectedSlotIsValid =
+            isCurrentAppointmentSlotSelected || Boolean(form.startTime);
 
           const nextErrors = validateForm(
             form,
             dictionary,
             isOfferAppointment,
             usesCustomService,
+            !changedSchedulingFields,
+            (options?.branches.length ?? 0) > 1,
           );
 
           setErrors(nextErrors);
@@ -540,21 +1045,52 @@ export function TenantAppointmentFormPage({
             return;
           }
 
+          if (
+            appointmentDateChangedOnLinkedFollowUp &&
+            recalculateFollowUpScheduleChoice === undefined
+          ) {
+            setShowFollowUpScheduleDialog(true);
+            return;
+          }
+
           setIsSaving(true);
 
           try {
+            const recalculateFollowUpSchedule =
+              appointmentDateChangedOnLinkedFollowUp &&
+              recalculateFollowUpScheduleChoice === true;
             const saved =
               mode === "edit" && appointmentId
                 ? await updateTenantAppointment(
                     appointmentId,
-                    formToAppointmentPayload(form),
+                    {
+                      ...formToAppointmentPayload(form),
+                      recalculateFollowUpSchedule,
+                    },
                   )
-                : await createTenantAppointment(formToAppointmentPayload(form));
+                : await createTenantAppointment({
+                    ...formToAppointmentPayload(form),
+                    followUpId: sourceFollowUpId ?? null,
+                  });
 
             if (mode === "create" && sourceFollowUpId) {
-              await updateTenantFollowUpStatus(sourceFollowUpId, "BOOKED").catch(
-                () => undefined,
-              );
+              await updateTenantFollowUpStatus(
+                sourceFollowUpId,
+                "BOOKED",
+                saved.id,
+              ).catch(() => undefined);
+            }
+
+            if (mode === "create" && sourceBookingRequestId) {
+              await linkBookingRequestAppointment(
+                sourceBookingRequestId,
+                saved.id,
+              ).catch(() => undefined);
+              if (typeof window !== "undefined") {
+                window.dispatchEvent(
+                  new Event("tenant-booking-requests-updated"),
+                );
+              }
             }
 
             router.push(`/tenant/appointments/${saved.id}`);
@@ -581,12 +1117,22 @@ export function TenantAppointmentFormPage({
 
         const followUpRuleWarnings = getFollowUpRuleWarnings(form, dictionary);
         const followUpPlanPreview = getFollowUpPlanPreview(form);
+        const derivedTotalSessions =
+          form.totalRecommendedSessions && Number(form.totalRecommendedSessions) > 0
+            ? Number(form.totalRecommendedSessions)
+            : calculateTotalSessionsFromRules(form.followUpRules);
+        const modeText = followUpModeCopy[locale];
+        const treatmentTemplateText = treatmentTemplateSelectCopy[locale];
+        const selectedSavedService = options?.services.find(
+          (service) => service.id === form.serviceId,
+        );
+        const treatmentTemplates = getActiveTreatmentTemplates(selectedSavedService);
         const applyFollowUpPreset = (preset: "LASER" | "HIJAMA" | "SKINCARE") => {
           if (preset === "LASER") {
             setForm({
               ...form,
               followUpEnabled: true,
-              followUpType: "SESSION_PLAN",
+              followUpMode: "SESSION_BASED_PLAN",
               defaultIntervalDays: "30",
               totalRecommendedSessions: "8",
               followUpRules: [
@@ -599,7 +1145,7 @@ export function TenantAppointmentFormPage({
           setForm({
             ...form,
             followUpEnabled: true,
-            followUpType: "FIXED_INTERVAL",
+            followUpMode: "SESSION_BASED_PLAN",
             defaultIntervalDays: preset === "HIJAMA" ? "90" : "30",
             totalRecommendedSessions: "",
           });
@@ -632,6 +1178,78 @@ export function TenantAppointmentFormPage({
               <section className="mt-5 rounded-lg border border-[#E5E7EB] bg-white p-5 shadow-[0_12px_30px_rgba(11,45,92,0.04)]">
                 {sourceFollowUp ? (
                   <section className="mb-5 rounded-lg border border-[#D8DEE8] bg-[#F8FAFC] p-4">
+                    <div className="mb-4 rounded-lg border border-[#C8A45D]/40 bg-[#FFFCF4] px-4 py-3">
+                      <p className="text-sm font-bold text-[#0B2D5C]">
+                        {followUpText.bookingFromFollowUp}
+                      </p>
+                      <dl className="mt-3 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                        <div className="rounded-md bg-white/75 px-3 py-2">
+                          <dt className="text-[10px] font-bold uppercase tracking-wide text-[#8A98AA]">
+                            {dictionary.appointments.patient}
+                          </dt>
+                          <dd className="mt-1 break-words text-xs font-bold text-[#24364f]">
+                            {sourceFollowUp.patient.fullName}
+                          </dd>
+                        </div>
+                        <div className="rounded-md bg-white/75 px-3 py-2">
+                          <dt className="text-[10px] font-bold uppercase tracking-wide text-[#8A98AA]">
+                            {dictionary.appointments.service}
+                          </dt>
+                          <dd className="mt-1 break-words text-xs font-bold text-[#24364f]">
+                            {getFollowUpServiceName(sourceFollowUp, locale) ||
+                              dictionary.common.notAvailable}
+                          </dd>
+                        </div>
+                        <div className="rounded-md bg-white/75 px-3 py-2">
+                          <dt className="text-[10px] font-bold uppercase tracking-wide text-[#8A98AA]">
+                            {followUpText.session}
+                          </dt>
+                          <dd className="mt-1 break-words text-xs font-bold text-[#24364f]">
+                            {sourceFollowUp.sessionNumber
+                              ? `${followUpText.session} ${sourceFollowUp.sessionNumber}`
+                              : followUpText.followUp}
+                          </dd>
+                        </div>
+                        <div className="rounded-md bg-white/75 px-3 py-2">
+                          <dt className="text-[10px] font-bold uppercase tracking-wide text-[#8A98AA]">
+                            {dictionary.appointments.appointmentDate}
+                          </dt>
+                          <dd className="mt-1 break-words text-xs font-bold text-[#24364f]">
+                            {formatDateOnly(sourceFollowUp.dueDate)}
+                          </dd>
+                        </div>
+                      </dl>
+                      {linkedFollowUpAppointment ? (
+                        <div className="mt-3 rounded-lg border border-blue-200 bg-white px-3 py-3">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0">
+                              <p className="text-xs font-black text-blue-800">
+                                {followUpText.alreadyBooked}
+                              </p>
+                              <p className="mt-1 break-words text-xs font-bold text-[#24364f]">
+                                {followUpText.linkedAppointment}:{" "}
+                                {formatDateOnly(linkedFollowUpAppointment.appointmentDate)} ·{" "}
+                                {formatTime12h(linkedFollowUpAppointment.startTime)}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Link
+                                className={buttonClassName("secondary", "sm")}
+                                href={`/tenant/appointments/${linkedFollowUpAppointment.id}`}
+                              >
+                                {followUpText.viewAppointment}
+                              </Link>
+                              <Link
+                                className={buttonClassName("primary", "sm")}
+                                href={`/tenant/appointments/${linkedFollowUpAppointment.id}/edit`}
+                              >
+                                {followUpText.editAppointment}
+                              </Link>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
                     <h2 className="text-base font-bold text-[#0B2D5C]">
                       {followUpText.title}
                     </h2>
@@ -861,86 +1479,98 @@ export function TenantAppointmentFormPage({
                                       }
                                     </p>
                                   </div>
-                                  <label className="flex min-h-11 items-center gap-3 rounded-md border border-[#D8DEE8] bg-white px-3 text-sm font-semibold text-[#24364f]">
-                                    <input
-                                      checked={form.followUpEnabled}
-                                      onChange={(event) =>
-                                        setForm({
-                                          ...form,
-                                          followUpEnabled: event.target.checked,
-                                        })
-                                      }
-                                      type="checkbox"
-                                    />
-                                    {dictionary.services.enableFollowUpPlan}
-                                  </label>
-                                </div>
-                                {form.followUpEnabled ? (
-                                  <div className="mt-4 grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
-                                    <Field label={dictionary.services.planType}>
-                                      <select
-                                        className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm font-semibold text-[#132238]"
-                                        onChange={(event) =>
-                                          setForm({
-                                            ...form,
-                                            followUpType: event.target.value as
-                                              | "FIXED_INTERVAL"
-                                              | "SESSION_PLAN",
-                                          })
-                                        }
-                                        value={form.followUpType}
+                                  <div className="grid min-w-0 grid-cols-1 gap-2 sm:min-w-[360px]">
+                                    {([
+                                      ["NONE", dictionary.services.followUp.none, ""],
+                                      ["SESSION_BASED_PLAN", dictionary.services.followUp.sessionBasedPlan, dictionary.services.followUp.sessionBasedHelper],
+                                      ["RECURRING_CONTINUOUS", dictionary.services.followUp.recurring, dictionary.services.followUp.recurringHelper],
+                                    ] as const).map(([modeValue, label, helper]) => (
+                                      <label
+                                        className="flex min-h-11 items-center gap-3 rounded-md border border-[#D8DEE8] bg-white px-3 text-sm font-semibold text-[#24364f]"
+                                        key={modeValue}
                                       >
-                                        <option value="FIXED_INTERVAL">
-                                          {dictionary.services.fixedInterval}
-                                        </option>
-                                        <option value="SESSION_PLAN">
-                                          {dictionary.services.sessionPlan}
-                                        </option>
-                                      </select>
-                                    </Field>
-                                    <Field label={dictionary.services.defaultIntervalDays}>
-                                      <input
-                                        className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
-                                        min="1"
-                                        onChange={(event) =>
-                                          setForm({
-                                            ...form,
-                                            defaultIntervalDays: event.target.value,
-                                          })
-                                        }
-                                        step="1"
-                                        type="number"
-                                        value={form.defaultIntervalDays}
-                                      />
-                                    </Field>
-                                    <Field label={dictionary.services.totalRecommendedSessions}>
-                                      <input
-                                        className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
-                                        min="1"
-                                        onChange={(event) =>
-                                          setForm({
-                                            ...form,
-                                            totalRecommendedSessions: event.target.value,
-                                          })
-                                        }
-                                        step="1"
-                                        type="number"
-                                        value={form.totalRecommendedSessions}
-                                      />
-                                    </Field>
-                                    <label className="flex min-h-11 items-center gap-3 rounded-md border border-[#D8DEE8] bg-white px-3 text-sm font-semibold text-[#24364f]">
-                                      <input
-                                        checked={form.autoCreateNextReminder}
-                                        onChange={(event) =>
-                                          setForm({
-                                            ...form,
-                                            autoCreateNextReminder: event.target.checked,
-                                          })
-                                        }
-                                        type="checkbox"
-                                      />
-                                      {dictionary.services.createNextReminderAutomatically}
-                                    </label>
+                                        <input
+                                          checked={form.followUpMode === modeValue}
+                                          onChange={() =>
+                                            setForm({
+                                              ...form,
+                                              followUpEnabled: modeValue !== "NONE",
+                                              followUpMode: modeValue,
+                                            })
+                                          }
+                                          type="radio"
+                                        />
+                                        <span className="min-w-0">
+                                          <span className="block">{label}</span>
+                                          {helper ? <span className="mt-0.5 block text-xs font-normal text-[#66758a]">{helper}</span> : null}
+                                        </span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
+                                {form.followUpMode !== "NONE" ? (
+                                  <div className="mt-4 grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
+                                    {form.followUpMode === "SESSION_BASED_PLAN" ? (
+                                      <div className="md:col-span-2 space-y-4">
+                                        <p className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800">
+                                          {dictionary.services.followUp.sessionBasedHelper}
+                                        </p>
+                                        <SessionTotalSummary count={derivedTotalSessions ?? 0} dictionary={dictionary} locale={locale} />
+                                        <label className="flex min-h-11 items-center gap-3 rounded-md border border-[#D8DEE8] bg-white px-3 text-sm font-semibold text-[#24364f]">
+                                          <input
+                                            checked={form.autoCreateNextReminder}
+                                            onChange={(event) => setForm({ ...form, autoCreateNextReminder: event.target.checked })}
+                                            type="checkbox"
+                                          />
+                                          {dictionary.services.createNextReminderAutomatically}
+                                        </label>
+                                      </div>
+                                    ) : null}
+
+                                    {form.followUpMode === "RECURRING_CONTINUOUS" ? (
+                                      <>
+                                        <p className="rounded-md border border-sky-100 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-800 md:col-span-2">
+                                          {dictionary.services.followUp.recurringHelper}
+                                        </p>
+                                        <Field
+                                          error={errors.recurringIntervalValue}
+                                          label={modeText.repeatEvery}
+                                        >
+                                          <div className="grid grid-cols-[minmax(0,1fr)_minmax(130px,0.8fr)] gap-2">
+                                            <input
+                                              className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
+                                              min="1"
+                                              onChange={(event) =>
+                                                setForm({
+                                                  ...form,
+                                                  recurringIntervalValue: event.target.value,
+                                                })
+                                              }
+                                              step="1"
+                                              type="number"
+                                              value={form.recurringIntervalValue}
+                                            />
+                                            <select
+                                              className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm font-semibold text-[#132238]"
+                                              onChange={(event) =>
+                                                setForm({
+                                                  ...form,
+                                                  recurringIntervalUnit: event.target.value as TenantAppointmentFormState["recurringIntervalUnit"],
+                                                })
+                                              }
+                                              value={form.recurringIntervalUnit}
+                                            >
+                                              <option value="DAY">{modeText.day}</option>
+                                              <option value="WEEK">{modeText.week}</option>
+                                              <option value="MONTH">{modeText.month}</option>
+                                              <option value="YEAR">{modeText.year}</option>
+                                            </select>
+                                          </div>
+                                        </Field>
+                                      </>
+                                    ) : null}
+
+                                    {form.followUpMode === "SESSION_BASED_PLAN" ? (
                                     <div className="md:col-span-2">
                                       <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3">
                                         {(
@@ -964,35 +1594,32 @@ export function TenantAppointmentFormPage({
                                         ))}
                                       </div>
                                     </div>
-                                    {form.followUpType === "SESSION_PLAN" ? (
+                                    ) : null}
+                                    {form.followUpMode === "SESSION_BASED_PLAN" ? (
                                       <div className="md:col-span-2">
-                                        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                           <div>
                                             <h3 className="text-sm font-bold text-[#24364f]">
-                                              {dictionary.services.sessionPlan}
+                                              {dictionary.services.treatmentPhases}
                                             </h3>
-                                            <p className="mt-1 text-sm leading-6 text-[#66758a]">
+                                            <p className="mt-0.5 text-xs text-[#66758a]">
                                               {dictionary.services.followUpRuleHelper}
                                             </p>
                                           </div>
                                           <button
-                                            className={buttonClassName("secondary", "sm", "shrink-0")}
+                                            className={buttonClassName("primary", "sm", "shrink-0")}
                                             onClick={() =>
                                               setForm({
                                                 ...form,
                                                 followUpRules: [
                                                   ...form.followUpRules,
-                                                  {
-                                                    fromSessionNumber: "",
-                                                    toSessionNumber: "",
-                                                    intervalDays: "",
-                                                  },
+                                                  { fromSessionNumber: "", toSessionNumber: "", intervalDays: "" },
                                                 ],
                                               })
                                             }
                                             type="button"
                                           >
-                                            {dictionary.services.addRule}
+                                            + {dictionary.services.addRule}
                                           </button>
                                         </div>
                                         <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-2">
@@ -1107,6 +1734,8 @@ export function TenantAppointmentFormPage({
                                         </div>
                                       </div>
                                     ) : null}
+                                    {form.followUpMode === "SESSION_BASED_PLAN" ? (
+                                    <>
                                     <Field
                                       className="md:col-span-2"
                                       label={dictionary.services.whatsappMessageArabic}
@@ -1148,6 +1777,8 @@ export function TenantAppointmentFormPage({
                                         value={form.reminderMessageHe}
                                       />
                                     </Field>
+                                    </>
+                                    ) : null}
                                   </div>
                                 ) : null}
                               </section>
@@ -1170,8 +1801,10 @@ export function TenantAppointmentFormPage({
                                 const service = options?.services.find(
                                   (item) => item.id === event.target.value,
                                 );
+                                const defaultTemplate = getActiveTreatmentTemplates(service)[0];
                                 setForm({
                                   ...form,
+                                  ...planFieldsFromTreatmentTemplate(defaultTemplate, service),
                                   durationMinutes:
                                     service?.durationMinutes?.toString() ||
                                     form.durationMinutes,
@@ -1194,6 +1827,105 @@ export function TenantAppointmentFormPage({
                               ))}
                             </select>
                           </Field>
+                          {treatmentTemplates.length > 0 ? (
+                            <>
+                            <Field
+                              className="md:col-span-2"
+                              helper={treatmentTemplateText.helper}
+                              label={treatmentTemplateText.label}
+                            >
+                              <select
+                                className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
+                                onChange={(event) => {
+                                  const template =
+                                    treatmentTemplates.find(
+                                      (item) => item.id === event.target.value,
+                                    ) ?? null;
+                                  setForm({
+                                    ...form,
+                                    ...planFieldsFromTreatmentTemplate(
+                                      template,
+                                      selectedSavedService,
+                                    ),
+                                    startTime: "",
+                                  });
+                                }}
+                                value={form.treatmentTemplateId}
+                              >
+                                {treatmentTemplates.map((template) => {
+                                  const templateSessionCount =
+                                    getTreatmentTemplateSessionCount(
+                                      template,
+                                      selectedSavedService,
+                                    );
+                                  return (
+                                    <option key={template.id} value={template.id}>
+                                      {getTreatmentTemplateName(template, locale)} —{" "}
+                                      {templateSessionCount
+                                        ? dictionary.services.totalSessionsSummary(
+                                            templateSessionCount,
+                                          )
+                                        : dictionary.common.notAvailable}
+                                    </option>
+                                  );
+                                })}
+                              </select>
+                            </Field>
+                            </>
+                          ) : null}
+                          {form.treatmentTemplateId ? (
+                            <div className="md:col-span-2 rounded-lg border border-sky-100 bg-sky-50 p-4">
+                              <p className="text-xs font-bold text-sky-800">
+                                {treatmentTemplateText.helper}
+                              </p>
+                              <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+                                <Field label={dictionary.services.totalRecommendedSessions}>
+                                  <input
+                                    className="min-h-10 w-full rounded-md border border-[#D8DEE8] bg-white px-3 text-sm text-[#132238]"
+                                    min="1"
+                                    onChange={(event) => {
+                                      const total = event.target.value;
+                                      setForm({
+                                        ...form,
+                                        followUpRules: [
+                                          {
+                                            fromSessionNumber: "1",
+                                            intervalDays:
+                                              form.defaultIntervalDays ||
+                                              form.followUpRules[0]?.intervalDays ||
+                                              "30",
+                                            toSessionNumber: total,
+                                          },
+                                        ],
+                                        totalRecommendedSessions: total,
+                                      });
+                                    }}
+                                    type="number"
+                                    value={form.totalRecommendedSessions}
+                                  />
+                                </Field>
+                                <Field label={dictionary.services.defaultIntervalDays}>
+                                  <input
+                                    className="min-h-10 w-full rounded-md border border-[#D8DEE8] bg-white px-3 text-sm text-[#132238]"
+                                    min="1"
+                                    onChange={(event) => {
+                                      const interval = event.target.value;
+                                      setForm({
+                                        ...form,
+                                        defaultIntervalDays: interval,
+                                        followUpRules: form.followUpRules.map((rule) => ({
+                                          ...rule,
+                                          intervalDays: interval || rule.intervalDays,
+                                        })),
+                                      });
+                                    }}
+                                    type="number"
+                                    value={form.defaultIntervalDays}
+                                  />
+                                </Field>
+                              </div>
+                            </div>
+                          ) : null}
                           {mode === "edit" && loadedAppointment?.customServiceSaved && form.serviceId ? (
                             <div className="mt-2 flex flex-wrap items-center gap-2">
                               <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
@@ -1237,6 +1969,33 @@ export function TenantAppointmentFormPage({
                       ))}
                     </select>
                   </Field>
+                  {options && options.branches.length > 1 ? (
+                    <Field
+                      error={errors.branchId}
+                      label={dictionary.appointments.branch}
+                    >
+                      <select
+                        className="min-h-11 w-full rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
+                        onChange={(event) =>
+                          setForm({ ...form, branchId: event.target.value })
+                        }
+                        value={form.branchId}
+                      >
+                        <option value="">
+                          {dictionary.appointments.chooseBranch}
+                        </option>
+                        {options.branches.map((branch) => (
+                          <option
+                            key={branch.id}
+                            value={branch.id}
+                            title={getBranchLabel(branch, locale)}
+                          >
+                            {getBranchLabel(branch, locale)}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                  ) : null}
                   <Field
                     error={errors.appointmentDate}
                     label={dictionary.appointments.appointmentDate}
@@ -1254,12 +2013,17 @@ export function TenantAppointmentFormPage({
                       value={form.appointmentDate}
                     />
                   </Field>
+                  {appointmentDateChangedOnLinkedFollowUp ? (
+                    <p className="md:col-span-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+                      {followUpScheduleText.banner}
+                    </p>
+                  ) : null}
                   <div className="min-w-0 md:col-span-2">
                     <span className="text-sm font-semibold text-[#24364f]">
                       {dictionary.appointments.startTime}
                     </span>
                     <div className="mt-2">
-                      {isOfferAppointment || usesCustomService ? (
+                      {isOfferAppointment ? (
                         <input
                           className="min-h-11 w-full max-w-xs rounded-md border border-[#D8DEE8] px-3 text-sm text-[#132238]"
                           onChange={(e) =>
@@ -1268,6 +2032,10 @@ export function TenantAppointmentFormPage({
                           type="time"
                           value={form.startTime}
                         />
+                      ) : slotState.status === "needs_duration" ? (
+                        <p className="text-sm text-[#66758a]">
+                          {dictionary.appointments.enterDurationToSeeSlots}
+                        </p>
                       ) : slotState.status === "prompt" ? (
                         <p className="text-sm text-[#66758a]">
                           {dictionary.appointments.selectServiceAndDate}
@@ -1285,32 +2053,41 @@ export function TenantAppointmentFormPage({
                         <p className="text-sm text-[#B42318]">
                           {dictionary.appointments.loadError}
                         </p>
-                      ) : slotState.slots.length === 0 ? (
+                      ) : visibleSlots.length === 0 ? (
                         <p className="text-sm text-[#66758a]">
                           {dictionary.appointments.noSlots}
                         </p>
                       ) : (
                         <div className="flex flex-wrap gap-2">
-                          {slotState.slots.map(({ time, available }) => {
+                          {visibleSlots.map(({ time, available, reason }) => {
                             const isSelected = form.startTime === time;
+                            const isCurrentSlot = reason === "CURRENT_APPOINTMENT";
+                            const isSelectable = available || isCurrentSlot;
                             return (
                               <button
                                 key={time}
                                 type="button"
-                                disabled={!available}
+                                disabled={!isSelectable}
                                 onClick={() =>
                                   setForm({ ...form, startTime: time })
                                 }
                                 className={`rounded-md border px-3 py-2 text-xs font-semibold transition-colors ${
                                   isSelected
                                     ? "border-[#0B2D5C] bg-[#0B2D5C] text-white"
-                                    : available
+                                    : isCurrentSlot
+                                      ? "border-[#C8A45D] bg-[#FFFCF4] text-[#0B2D5C] hover:border-[#0B2D5C]"
+                                    : isSelectable
                                       ? "border-[#D8DEE8] bg-white text-[#24364f] hover:border-[#0B2D5C] hover:bg-[#F0F4FA]"
                                       : "cursor-not-allowed border-[#E5E7EB] bg-[#F8FAFC] text-[#A0AEC0] line-through"
                                 }`}
                               >
                                 {time}
-                                {!available && (
+                                {isCurrentSlot ? (
+                                  <span className="ms-1 text-[10px] font-bold">
+                                    · {dictionary.appointments.currentAppointmentSlot}
+                                  </span>
+                                ) : null}
+                                {!isSelectable && (
                                   <span className="ms-1 text-[10px] font-normal">
                                     · {dictionary.appointments.slotBooked}
                                   </span>
@@ -1432,6 +2209,42 @@ export function TenantAppointmentFormPage({
                   </p>
                 ) : null}
 
+                {showFollowUpScheduleDialog ? (
+                  <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4"
+                    role="dialog"
+                    aria-modal="true"
+                  >
+                    <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
+                      <p className="text-base font-bold text-[#132238]">
+                        {followUpScheduleText.confirm}
+                      </p>
+                      <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                        <button
+                          className={buttonClassName("secondary", "md")}
+                          onClick={() => {
+                            setShowFollowUpScheduleDialog(false);
+                            void submit(false);
+                          }}
+                          type="button"
+                        >
+                          {followUpScheduleText.keep}
+                        </button>
+                        <button
+                          className={buttonClassName("primary", "md")}
+                          onClick={() => {
+                            setShowFollowUpScheduleDialog(false);
+                            void submit(true);
+                          }}
+                          type="button"
+                        >
+                          {followUpScheduleText.recalculate}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
                 <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                   <Link
                     className={buttonClassName("secondary", "md")}
@@ -1441,9 +2254,15 @@ export function TenantAppointmentFormPage({
                   </Link>
                   <button
                     className={buttonClassName("primary", "md")}
-                    disabled={isSaving || isWriteBlocked}
-                    onClick={submit}
-                    title={restrictionMessage || undefined}
+                    disabled={isSaving || isWriteBlocked || isDuplicateFollowUpBooking}
+                    onClick={() => {
+                      void submit();
+                    }}
+                    title={
+                      isDuplicateFollowUpBooking
+                        ? followUpText.alreadyBooked
+                        : restrictionMessage || undefined
+                    }
                     type="button"
                   >
                     {isSaving
@@ -1459,6 +2278,42 @@ export function TenantAppointmentFormPage({
         );
       }}
     </CenterAdminShell>
+  );
+}
+
+function getTotalSessionsSummary(
+  dictionary: CenterAdminDictionary,
+  _locale: "en" | "ar" | "he",
+  count: number,
+) {
+  return dictionary.services.totalSessionsSummary(count);
+}
+
+function getTotalSessionsCalculated(
+  dictionary: CenterAdminDictionary,
+  _locale: "en" | "ar" | "he",
+) {
+  return dictionary.services.totalSessionsCalculated;
+}
+
+function SessionTotalSummary({
+  count,
+  dictionary,
+  locale,
+}: {
+  count: number;
+  dictionary: CenterAdminDictionary;
+  locale: "en" | "ar" | "he";
+}) {
+  return (
+    <div className="min-w-0 rounded-lg border border-sky-100 bg-sky-50 px-4 py-3">
+      <p className="text-sm font-bold text-[#0B2D5C]">
+        {getTotalSessionsSummary(dictionary, locale, count)}
+      </p>
+      <p className="mt-1 text-xs font-medium leading-5 text-[#66758a]">
+        {getTotalSessionsCalculated(dictionary, locale)}
+      </p>
+    </div>
   );
 }
 

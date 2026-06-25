@@ -562,12 +562,7 @@ export function TenantTeamPage() {
             {/* Member cards */}
             <section className="mt-5 grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {members.map((item, index) => {
-                const name =
-                  safeLocale === "ar"
-                    ? item.nameAr || item.nameEn || item.nameHe
-                    : safeLocale === "he"
-                    ? item.nameHe || item.nameEn || item.nameAr
-                    : item.nameEn || item.nameAr || item.nameHe;
+                const name = item.nameEn || item.nameAr || item.nameHe;
                 const title =
                   safeLocale === "ar"
                     ? item.titleAr || item.titleEn || item.titleHe

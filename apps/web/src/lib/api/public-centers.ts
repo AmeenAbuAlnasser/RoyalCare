@@ -27,6 +27,8 @@ export type PublicServiceFull = PublicServicePreview & {
   durationMinutes: number | null;
   price: string | null;
   currency: string;
+  coverImageUrl: string | null;
+  coverImageAlt: string | null;
 };
 
 export type PublicProvider = {
@@ -34,6 +36,25 @@ export type PublicProvider = {
   name: string;
   roleKey: string;
   roleName: string;
+};
+
+export type PublicCenterBranch = {
+  id: string;
+  name: string;
+  cityAr: string | null;
+  cityEn: string | null;
+  cityHe: string | null;
+  addressAr: string | null;
+  addressEn: string | null;
+  addressHe: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+  mapsUrl: string | null;
+  workingHoursTextAr: string | null;
+  workingHoursTextEn: string | null;
+  workingHoursTextHe: string | null;
+  isMain: boolean;
+  sortOrder: number;
 };
 
 export type PublicCenterBranding = {
@@ -71,6 +92,7 @@ export type PublicCenterBranding = {
   longitude: number | null;
   websiteSectionOrder: string[] | null;
   websiteSectionVisibility: Record<string, boolean> | null;
+  publicBookingMode: "SIMPLE_REQUEST" | "DIRECT_BOOKING";
 };
 
 export type PublicGalleryImage = {
@@ -89,7 +111,12 @@ export type PublicCenterReview = {
   sortOrder: number;
 };
 
-export type PublicBeforeAfterCategory = "LASER" | "SKIN" | "DENTAL" | "HAIR" | "OTHER";
+export type PublicBeforeAfterCategory =
+  | "LASER"
+  | "SKIN"
+  | "DENTAL"
+  | "HAIR"
+  | "OTHER";
 
 export type PublicCenterBeforeAfter = {
   afterImageUrl: string;
@@ -153,6 +180,7 @@ export type PublicCenterSummary = {
   type: PublicCenterType;
   primaryLanguage: PublicCenterLanguage;
   branding: PublicCenterBranding | null;
+  branches: PublicCenterBranch[];
   services: PublicServicePreview[];
 };
 
@@ -174,53 +202,80 @@ export type PublicMarketingSettings = {
 };
 
 export async function listPublicCenters(): Promise<PublicCenterSummary[]> {
-  const response = await fetch(`${API_BASE_URL}/public/centers`, {
-    cache: "no-store",
+  return cachedPublicResource("directory:centers", async () => {
+    const response = await fetch(`${API_BASE_URL}/public/centers`, {
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error("Failed to load centers");
+    const json = (await response.json()) as { data: PublicCenterSummary[] };
+    return json.data;
   });
-  if (!response.ok) throw new Error("Failed to load centers");
-  const json = await response.json() as { data: PublicCenterSummary[] };
-  return json.data;
 }
 
 export async function getPublicCenterGallery(
   slug: string,
 ): Promise<{ data: PublicGalleryImage[] }> {
-  const response = await fetch(
-    `${API_BASE_URL}/public/centers/${encodeURIComponent(slug)}/gallery`,
-    { cache: "no-store" },
+  return cachedPublicResource(
+    `${encodeURIComponent(slug)}:gallery`,
+    async () => {
+      const response = await fetch(
+        `${API_BASE_URL}/public/centers/${encodeURIComponent(slug)}/gallery`,
+        { cache: "no-store" },
+      );
+      if (!response.ok) return { data: [] };
+      return response.json() as Promise<{ data: PublicGalleryImage[] }>;
+    },
   );
-  if (!response.ok) return { data: [] };
-  return response.json() as Promise<{ data: PublicGalleryImage[] }>;
 }
 
 export async function getPublicCenterReviews(
   slug: string,
 ): Promise<{ data: PublicCenterReview[] }> {
-  const response = await fetch(
-    `${API_BASE_URL}/public/centers/${encodeURIComponent(slug)}/reviews`,
-    { cache: "no-store" },
+  return cachedPublicResource(
+    `${encodeURIComponent(slug)}:reviews`,
+    async () => {
+      const response = await fetch(
+        `${API_BASE_URL}/public/centers/${encodeURIComponent(slug)}/reviews`,
+        { cache: "no-store" },
+      );
+      if (!response.ok) return { data: [] };
+      return response.json() as Promise<{ data: PublicCenterReview[] }>;
+    },
   );
-  if (!response.ok) return { data: [] };
-  return response.json() as Promise<{ data: PublicCenterReview[] }>;
 }
 
 export async function getPublicCenterBeforeAfter(
   slug: string,
 ): Promise<{ data: PublicCenterBeforeAfter[] }> {
-  const response = await fetch(
-    `${API_BASE_URL}/public/centers/${encodeURIComponent(slug)}/before-after`,
-    { cache: "no-store" },
+  return cachedPublicResource(
+    `${encodeURIComponent(slug)}:before-after`,
+    async () => {
+      const response = await fetch(
+        `${API_BASE_URL}/public/centers/${encodeURIComponent(slug)}/before-after`,
+        { cache: "no-store" },
+      );
+      if (!response.ok) return { data: [] };
+      return response.json() as Promise<{ data: PublicCenterBeforeAfter[] }>;
+    },
   );
-  if (!response.ok) return { data: [] };
-  return response.json() as Promise<{ data: PublicCenterBeforeAfter[] }>;
 }
 
-export async function getPublicCenter(slug: string): Promise<PublicCenterDetail> {
-  const response = await fetch(`${API_BASE_URL}/public/centers/${encodeURIComponent(slug)}`, {
-    cache: "no-store",
-  });
-  if (!response.ok) throw new Error("Center not found");
-  return response.json() as Promise<PublicCenterDetail>;
+export async function getPublicCenter(
+  slug: string,
+): Promise<PublicCenterDetail> {
+  return cachedPublicResource(
+    `${encodeURIComponent(slug)}:detail`,
+    async () => {
+      const response = await fetch(
+        `${API_BASE_URL}/public/centers/${encodeURIComponent(slug)}`,
+        {
+          cache: "no-store",
+        },
+      );
+      if (!response.ok) throw new Error("Center not found");
+      return response.json() as Promise<PublicCenterDetail>;
+    },
+  );
 }
 
 export async function getPublicCenterMarketingSettings(
@@ -247,23 +302,30 @@ export async function getPublicCenterMarketingSettings(
 export async function getPublicCenterOffers(
   slug: string,
 ): Promise<{ data: PublicOffer[] }> {
-  const response = await fetch(
-    `${API_BASE_URL}/public/centers/${encodeURIComponent(slug)}/offers`,
-    { cache: "no-store" },
+  return cachedPublicResource(
+    `${encodeURIComponent(slug)}:offers`,
+    async () => {
+      const response = await fetch(
+        `${API_BASE_URL}/public/centers/${encodeURIComponent(slug)}/offers`,
+        { cache: "no-store" },
+      );
+      if (!response.ok) return { data: [] };
+      return response.json() as Promise<{ data: PublicOffer[] }>;
+    },
   );
-  if (!response.ok) return { data: [] };
-  return response.json() as Promise<{ data: PublicOffer[] }>;
 }
 
 export async function getPublicCenterTeam(
   slug: string,
 ): Promise<{ data: PublicTeamMember[] }> {
-  const response = await fetch(
-    `${API_BASE_URL}/public/centers/${encodeURIComponent(slug)}/team`,
-    { cache: "no-store" },
-  );
-  if (!response.ok) return { data: [] };
-  return response.json() as Promise<{ data: PublicTeamMember[] }>;
+  return cachedPublicResource(`${encodeURIComponent(slug)}:team`, async () => {
+    const response = await fetch(
+      `${API_BASE_URL}/public/centers/${encodeURIComponent(slug)}/team`,
+      { cache: "no-store" },
+    );
+    if (!response.ok) return { data: [] };
+    return response.json() as Promise<{ data: PublicTeamMember[] }>;
+  });
 }
 
 export type PublicCenterSeoData = {
@@ -280,18 +342,66 @@ export type PublicCenterSeoData = {
   } | null;
 };
 
+const PUBLIC_CENTER_CACHE_TTL_MS = 60_000;
+
+const publicCenterCache = new Map<
+  string,
+  {
+    expiresAt: number;
+    promise: Promise<unknown>;
+  }
+>();
+
+function cachedPublicResource<T>(key: string, loader: () => Promise<T>) {
+  const now = Date.now();
+  const cached = publicCenterCache.get(key);
+  if (cached && cached.expiresAt > now) {
+    return cached.promise as Promise<T>;
+  }
+
+  const promise = loader().catch((error) => {
+    publicCenterCache.delete(key);
+    throw error;
+  });
+
+  publicCenterCache.set(key, {
+    expiresAt: now + PUBLIC_CENTER_CACHE_TTL_MS,
+    promise,
+  });
+
+  return promise;
+}
+
+export function clearPublicCenterCache(slug?: string) {
+  if (!slug) {
+    publicCenterCache.clear();
+    return;
+  }
+
+  const prefix = `${encodeURIComponent(slug)}:`;
+  for (const key of publicCenterCache.keys()) {
+    if (key.startsWith(prefix)) {
+      publicCenterCache.delete(key);
+    }
+  }
+}
+
 export async function getPublicCenterSeo(
   slug: string,
 ): Promise<PublicCenterSeoData | null> {
-  try {
-    const response = await fetch(
-      `${API_BASE_URL}/public/centers/${encodeURIComponent(slug)}/seo`,
-      { cache: "no-store" },
-    );
-    if (!response.ok) return null;
-    const json = (await response.json()) as { data: PublicCenterSeoData | null };
-    return json.data ?? null;
-  } catch {
-    return null;
-  }
+  return cachedPublicResource(`${encodeURIComponent(slug)}:seo`, async () => {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/public/centers/${encodeURIComponent(slug)}/seo`,
+        { cache: "no-store" },
+      );
+      if (!response.ok) return null;
+      const json = (await response.json()) as {
+        data: PublicCenterSeoData | null;
+      };
+      return json.data ?? null;
+    } catch {
+      return null;
+    }
+  });
 }

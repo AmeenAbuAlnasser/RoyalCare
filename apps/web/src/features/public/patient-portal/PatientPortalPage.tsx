@@ -7,6 +7,7 @@ import {
   getPatientPortalDictionary,
   type PatientPortalDictionary,
 } from "@/i18n/dictionaries/patient-portal";
+import { formatTime12h } from "@/i18n/formatters";
 import { supportedLocales, type SupportedLocale } from "@/i18n/locales";
 import {
   getPatientPortal,
@@ -58,16 +59,12 @@ function formatTs(isoTs: string): string {
 
 function localizedCenterName(
   center: Pick<PatientPortalData["center"], "name" | "nameAr" | "nameEn" | "nameHe">,
-  locale: SupportedLocale,
+  _locale: SupportedLocale,
 ): string {
-  if (locale === "ar") return center.nameAr || center.nameEn || center.name;
-  if (locale === "he") return center.nameHe || center.nameEn || center.name;
-  return center.nameEn || center.name;
+  return center.name || center.nameEn || center.nameAr || center.nameHe || "";
 }
 
-function localizedServiceName(service: PortalServiceName, locale: SupportedLocale): string {
-  if (locale === "ar") return service.nameAr || service.nameEn;
-  if (locale === "he") return service.nameHe || service.nameEn;
+function localizedServiceName(service: PortalServiceName, _locale: SupportedLocale): string {
   return service.nameEn || service.nameAr || service.nameHe;
 }
 
@@ -184,7 +181,7 @@ function AppointmentRow({
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-[#0B2D5C]">{serviceName}</p>
           <p className="mt-0.5 text-xs text-[#66758a]">
-            {appt.startTime} – {appt.endTime}
+            {formatTime12h(appt.startTime)} – {formatTime12h(appt.endTime)}
           </p>
         </div>
 
@@ -354,7 +351,7 @@ function HeroCard({
           d.rescheduleMessage(
             localizedServiceName(nextAppt.service, locale),
             formatDate(nextAppt.appointmentDate),
-            nextAppt.startTime,
+            formatTime12h(nextAppt.startTime),
           ),
         )
       : null;
@@ -366,7 +363,7 @@ function HeroCard({
           d.cancelMessage(
             localizedServiceName(nextAppt.service, locale),
             formatDate(nextAppt.appointmentDate),
-            nextAppt.startTime,
+            formatTime12h(nextAppt.startTime),
           ),
         )
       : null;
@@ -422,7 +419,7 @@ function HeroCard({
                 {formatDate(nextAppt.appointmentDate)}
               </span>
               <span className="text-base font-semibold text-white/80">
-                {nextAppt.startTime} – {nextAppt.endTime}
+                {formatTime12h(nextAppt.startTime)} – {formatTime12h(nextAppt.endTime)}
               </span>
             </div>
             <div className="mt-2">

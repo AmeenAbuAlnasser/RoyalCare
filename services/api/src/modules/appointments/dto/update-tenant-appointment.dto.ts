@@ -1,6 +1,8 @@
 export class UpdateTenantAppointmentDto {
   appointmentDate?: string;
+  branchId?: string | null;
   autoCreateNextReminder?: boolean;
+  recalculateFollowUpSchedule?: boolean;
   customServiceCurrency?: string | null;
   customServiceDuration?: number | string | null;
   customServiceName?: string | null;
@@ -9,6 +11,8 @@ export class UpdateTenantAppointmentDto {
   durationMinutes?: number | string;
   endTime?: string;
   followUpEnabled?: boolean;
+  treatmentTemplateId?: string | null;
+  followUpMode?: 'NONE' | 'SESSION_BASED_PLAN' | 'RECURRING_CONTINUOUS';
   followUpRules?: Array<{
     fromSessionNumber?: number | string;
     toSessionNumber?: number | string;
@@ -19,7 +23,8 @@ export class UpdateTenantAppointmentDto {
     toSessionNumber?: number | string;
     intervalDays?: number | string;
   }> | null;
-  followUpType?: 'FIXED_INTERVAL' | 'SESSION_PLAN';
+  recurringIntervalValue?: number | string | null;
+  recurringIntervalUnit?: 'DAY' | 'WEEK' | 'MONTH' | 'YEAR' | null;
   internalNotes?: string | null;
   notes?: string | null;
   patientId?: string;

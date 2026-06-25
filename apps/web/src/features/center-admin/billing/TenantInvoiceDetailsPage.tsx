@@ -30,12 +30,10 @@ const PAYMENT_METHODS: PaymentMethod[] = ["CASH", "BANK_TRANSFER", "CHECK", "OTH
 
 function getServiceName(
   service: { nameEn: string; nameAr: string; nameHe: string } | null,
-  locale: string,
+  _locale: string,
   customServiceName?: string | null,
 ) {
   if (!service) return customServiceName || "";
-  if (locale === "ar" && service.nameAr) return service.nameAr;
-  if (locale === "he" && service.nameHe) return service.nameHe;
   return service.nameEn || service.nameAr || service.nameHe || customServiceName || "";
 }
 
@@ -358,11 +356,16 @@ export function TenantInvoiceDetailsPage() {
             {!isLoading && !loadError && invoice ? (
               <>
                 {/* Status header */}
-                <div className="mt-5 flex min-w-0 flex-wrap items-center gap-3">
-                  <StatusBadge
-                    label={dictionary.billingStatuses[invoice.status]}
-                    status={invoice.status}
-                  />
+                <div className="mt-5 flex min-w-0 flex-wrap items-start gap-3">
+                  <div className="min-w-0">
+                    <StatusBadge
+                      label={dictionary.billingStatuses[invoice.status]}
+                      status={invoice.status}
+                    />
+                    <StatusDescription
+                      description={getInvoiceStatusDescription(invoice.status, dictionary)}
+                    />
+                  </div>
                   {hasBillingUpdatePermission && (invoice.status === "PENDING" || invoice.status === "PARTIAL") ? (
                     <button
                       className={buttonClassName("success", "sm")}
@@ -480,21 +483,26 @@ export function TenantInvoiceDetailsPage() {
                       label={dictionary.billing.invoiceTotal}
                       value={`${payments.invoiceTotal} ${payments.currency}`}
                       variant="neutral"
+                      description={dictionary.billing.invoiceTotalDesc}
                     />
                     <SummaryCard
                       label={dictionary.billing.paidAmount}
                       value={`${payments.paidAmount} ${payments.currency}`}
                       variant="paid"
+                      description={dictionary.billing.paidAmountDesc}
                     />
                     <SummaryCard
                       label={dictionary.billing.balanceDue}
                       value={`${payments.balanceDue} ${payments.currency}`}
                       variant={parseFloat(payments.balanceDue) > 0 ? "due" : "settled"}
+                      description={dictionary.billing.balanceDueDesc}
+                      tooltip={dictionary.billing.balanceDueTooltip}
                     />
                     <SummaryCard
                       label={dictionary.billing.creditBalance}
                       value={`${payments.patientCreditBalance ?? "0.00"} ${payments.currency}`}
                       variant="credit"
+                      description={dictionary.billing.creditBalanceDesc}
                     />
                   </div>
                 ) : null}
@@ -811,6 +819,31 @@ export function TenantInvoiceDetailsPage() {
   );
 }
 
+function getInvoiceStatusDescription(
+  status: InvoiceStatus,
+  dictionary: {
+    billing: {
+      statusPaidDesc: string;
+      statusPartialDesc: string;
+      statusPendingDesc: string;
+    };
+  },
+) {
+  if (status === "PAID") return dictionary.billing.statusPaidDesc;
+  if (status === "PARTIAL") return dictionary.billing.statusPartialDesc;
+  if (status === "PENDING") return dictionary.billing.statusPendingDesc;
+  return "";
+}
+
+function StatusDescription({ description }: { description: string }) {
+  if (!description) return null;
+  return (
+    <p className="mt-1 max-w-md text-xs leading-5 text-[#66758a]">
+      {description}
+    </p>
+  );
+}
+
 function StatusBadge({ status, label }: { status: InvoiceStatus; label: string }) {
   if (status === "CANCELLED") {
     return (
@@ -823,8 +856,8 @@ function StatusBadge({ status, label }: { status: InvoiceStatus; label: string }
     status === "PAID"
       ? "bg-emerald-100 text-emerald-800 border-emerald-300"
       : status === "PARTIAL"
-        ? "bg-indigo-100 text-indigo-800 border-indigo-300"
-        : "bg-amber-100 text-amber-800 border-amber-300";
+        ? "bg-amber-100 text-amber-800 border-amber-300"
+        : "bg-red-50 text-red-700 border-red-200";
 
   return (
     <span className={`rounded-full border px-4 py-1.5 text-sm font-semibold ${cls}`}>
@@ -854,10 +887,14 @@ function SummaryCard({
   label,
   value,
   variant,
+  description,
+  tooltip,
 }: {
   label: string;
   value: string;
   variant: "neutral" | "paid" | "due" | "settled" | "credit";
+  description?: string;
+  tooltip?: string;
 }) {
   const cls =
     variant === "paid"
@@ -876,13 +913,18 @@ function SummaryCard({
       : variant === "due"
         ? "text-amber-800"
         : variant === "credit"
-          ? "text-indigo-800"
+          ? "text-indigo-700"
           : "text-[#24364f]";
 
   return (
-    <div className={`min-w-0 rounded-lg border p-4 ${cls}`}>
+    <div className={`min-w-0 rounded-lg border p-4 ${cls}`} title={tooltip}>
       <p className="text-xs font-semibold text-[#66758a]">{label}</p>
-      <p className={`mt-1 text-lg font-bold ${textCls}`}>{value}</p>
+      <p className={`mt-1 text-lg font-bold leading-tight ${textCls}`}>{value}</p>
+      {description ? (
+        <p className="mt-1.5 text-[11px] leading-snug text-[#8B98AA]">
+          {description}
+        </p>
+      ) : null}
     </div>
   );
 }

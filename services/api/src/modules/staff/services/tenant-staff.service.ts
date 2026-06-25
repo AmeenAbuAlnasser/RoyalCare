@@ -37,11 +37,18 @@ const staffRoles = [
   'STAFF',
 ] as const;
 const staffStatuses = ['ACTIVE', 'INACTIVE'] as const;
+const defaultProviderRoles: TenantStaffRole[] = [
+  'CENTER_OWNER',
+  'CENTER_MANAGER',
+  'DOCTOR',
+  'STAFF',
+];
 
 const staffAssignmentSelect = {
   id: true,
   centerId: true,
   status: true,
+  providerEnabled: true,
   assignedAt: true,
   createdAt: true,
   updatedAt: true,
@@ -88,19 +95,102 @@ function formatStaffAssignment(
   assignment: Prisma.UserRoleGetPayload<{
     select: typeof staffAssignmentSelect;
   }>,
+  centerOwnerUserId?: string | null,
 ) {
+  const isCenterOwner = centerOwnerUserId === assignment.user.id;
+  const roles = [assignment.role.key as TenantStaffRole];
+
+  if (isCenterOwner && !roles.includes('CENTER_OWNER')) {
+    roles.unshift('CENTER_OWNER');
+  }
+
   return {
     id: assignment.user.id,
+    userId: assignment.user.id,
+    name: assignment.user.fullName,
     fullName: assignment.user.fullName,
     email: assignment.user.email,
     phone: assignment.user.phone,
     role: assignment.role.key,
     roleName: assignment.role.name,
+    roles,
+    isCenterOwner,
+    isActive: assignment.user.status === 'ACTIVE',
+    providerEnabled: assignment.providerEnabled,
     status: assignment.user.status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE',
     assignmentStatus: assignment.status,
     createdAt: assignment.user.createdAt,
     updatedAt: assignment.updatedAt,
   };
+}
+
+function aggregateStaffAssignments(
+  assignments: Array<
+    Prisma.UserRoleGetPayload<{
+      select: typeof staffAssignmentSelect;
+    }>
+  >,
+  centerOwnerUserId?: string | null,
+) {
+  const byUser = new Map<
+    string,
+    ReturnType<typeof formatStaffAssignment> & {
+      roles: TenantStaffRole[];
+      roleNames: string[];
+    }
+  >();
+
+  for (const assignment of assignments) {
+    const key = assignment.user.email?.trim().toLowerCase() || assignment.user.id;
+    if (!key) continue;
+
+    const role = assignment.role.key as TenantStaffRole;
+    const current = byUser.get(key);
+
+    if (!current) {
+      byUser.set(key, {
+        ...formatStaffAssignment(assignment, centerOwnerUserId),
+        roleNames: [assignment.role.name],
+      });
+      continue;
+    }
+
+    if (!current.roles.includes(role)) {
+      current.roles.push(role);
+      current.roleNames.push(assignment.role.name);
+    }
+
+    current.providerEnabled =
+      current.providerEnabled || assignment.providerEnabled;
+
+    if (centerOwnerUserId === assignment.user.id) {
+      current.isCenterOwner = true;
+      if (!current.roles.includes('CENTER_OWNER')) {
+        current.roles.unshift('CENTER_OWNER');
+        current.roleNames.unshift('Center Owner');
+      }
+    }
+
+    if (assignment.updatedAt > current.updatedAt) {
+      current.updatedAt = assignment.updatedAt;
+    }
+  }
+
+  const roleOrder = new Map<TenantStaffRole, number>(
+    staffRoles.map((role, index) => [role, index]),
+  );
+
+  return [...byUser.values()].map((item) => {
+    const roles = [...item.roles].sort(
+      (a, b) => (roleOrder.get(a) ?? 99) - (roleOrder.get(b) ?? 99),
+    );
+
+    return {
+      ...item,
+      role: roles[0] ?? item.role,
+      roles,
+    };
+  });
 }
 
 function getRoleName(roleKey: TenantStaffRole) {
@@ -122,6 +212,8 @@ function getStaffValidation(
   );
   const role = optionalTrimmed(dto.role)?.toUpperCase();
   const status = optionalTrimmed(dto.status)?.toUpperCase();
+  const providerEnabled =
+    typeof dto.providerEnabled === 'boolean' ? dto.providerEnabled : undefined;
 
   if ((isCreate || dto.fullName !== undefined) && !fullName) {
     errors.fullName = 'Staff name is required.';
@@ -159,9 +251,14 @@ function getStaffValidation(
     email,
     fullName,
     password,
+    providerEnabled,
     role: role as TenantStaffRole | undefined,
     status: status as TenantStaffStatus | undefined,
   };
+}
+
+function defaultProviderEnabled(role?: TenantStaffRole) {
+  return role ? defaultProviderRoles.includes(role) : false;
 }
 
 @Injectable()
@@ -188,7 +285,7 @@ export class TenantStaffService {
       role: {
         scope: 'CENTER',
         key: {
-          in: isAllowedValue(role, staffRoles) ? [role] : [...staffRoles],
+          in: [...staffRoles],
         },
         status: 'ACTIVE',
       },
@@ -208,18 +305,27 @@ export class TenantStaffService {
       },
     };
 
-    const [items, total] = await Promise.all([
+    const [items, center] = await Promise.all([
       prisma.userRole.findMany({
         where,
         orderBy: [{ user: { fullName: 'asc' } }, { assignedAt: 'asc' }],
         select: staffAssignmentSelect,
       }),
-      prisma.userRole.count({ where }),
+      prisma.center.findUnique({
+        where: { id: centerId },
+        select: { ownerUserId: true },
+      }),
     ]);
+    const aggregatedItems = aggregateStaffAssignments(
+      items,
+      center?.ownerUserId,
+    ).filter((item) =>
+      isAllowedValue(role, staffRoles) ? item.roles.includes(role) : true,
+    );
 
     return {
-      items: items.map(formatStaffAssignment),
-      total,
+      items: aggregatedItems,
+      total: aggregatedItems.length,
     };
   }
 
@@ -254,6 +360,9 @@ export class TenantStaffService {
       const assignment = await tx.userRole.create({
         data: {
           centerId,
+          providerEnabled:
+            validation.providerEnabled ??
+            defaultProviderEnabled(validation.role ?? 'STAFF'),
           roleId: role.id,
           status: validation.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
           userId: user.id,
@@ -317,6 +426,9 @@ export class TenantStaffService {
         where: { id: current.id },
         data: {
           roleId: nextRole.id,
+          ...(validation.providerEnabled !== undefined
+            ? { providerEnabled: validation.providerEnabled }
+            : {}),
           ...(validation.status !== undefined
             ? { status: validation.status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE' }
             : {}),
@@ -348,6 +460,20 @@ export class TenantStaffService {
 
     const prisma = await this.prisma.getClient();
     let oldStatus: TenantStaffStatus = 'INACTIVE';
+
+    const center = await prisma.center.findUnique({
+      where: { id: centerId },
+      select: { ownerUserId: true },
+    });
+
+    if (center?.ownerUserId === userId && status !== 'ACTIVE') {
+      throw new ForbiddenException({
+        message: 'Permission denied',
+        errors: {
+          staff: 'The center owner cannot be deactivated.',
+        },
+      });
+    }
 
     const result = await prisma.$transaction(async (tx) => {
       const current = await this.getAssignment(tx, centerId, userId);

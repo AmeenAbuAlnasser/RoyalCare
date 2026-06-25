@@ -81,10 +81,8 @@ function extractErrors(error: unknown, dictionary: CenterAdminDictionary): FormE
 
 function getServiceName(
   service: { nameEn: string; nameAr: string; nameHe: string },
-  locale: string,
+  _locale: string,
 ) {
-  if (locale === "ar" && service.nameAr) return service.nameAr;
-  if (locale === "he" && service.nameHe) return service.nameHe;
   return service.nameEn || service.nameAr || service.nameHe;
 }
 

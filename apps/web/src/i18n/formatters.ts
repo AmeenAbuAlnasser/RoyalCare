@@ -97,10 +97,16 @@ export function formatDate(
     const day = String(value.getDate()).padStart(2, "0");
     const month = String(value.getMonth() + 1).padStart(2, "0");
     const year = String(value.getFullYear());
-    const hour = String(value.getHours()).padStart(2, "0");
-    const minute = String(value.getMinutes()).padStart(2, "0");
+    const hour = value.getHours();
+    const minute = value.getMinutes();
+    const second = value.getSeconds();
+    const date = `${day}/${month}/${year}`;
 
-    return `${day}/${month}/${year} ${hour}:${minute}`;
+    if (hour === 0 && minute === 0 && second === 0) {
+      return date;
+    }
+
+    return `${date} - ${formatTime12h(`${hour}:${minute}`)}`;
   }
 
   const parts = parseIsoDate(value);
@@ -112,7 +118,9 @@ export function formatDate(
   const date = `${parts.day}/${parts.month}/${parts.year}`;
 
   if (parts.hour && parts.minute) {
-    return `${date} ${parts.hour}:${parts.minute}`;
+    const isMidnight = parts.hour === "00" && parts.minute === "00";
+
+    return isMidnight ? date : `${date} - ${formatTime12h(`${parts.hour}:${parts.minute}`)}`;
   }
 
   return date;
@@ -123,6 +131,49 @@ export function formatDateTime(
   locale?: SupportedLocale,
 ) {
   return formatDate(value, locale);
+}
+
+export function formatTime12h(time: string): string {
+  const trimmed = time.trim();
+  const isoTime = parseIsoDate(trimmed);
+  const normalized = isoTime?.hour
+    ? `${isoTime.hour}:${isoTime.minute ?? "00"}`
+    : trimmed;
+  const match = /^(\d{1,2}):(\d{2})(?::\d{2})?/.exec(normalized);
+
+  if (!match) {
+    return time;
+  }
+
+  const [, hourStr, minuteStr] = match;
+  const hour = Number(hourStr);
+
+  if (!Number.isFinite(hour) || Number.isNaN(hour) || hour < 0 || hour > 23) {
+    return time;
+  }
+
+  const period = hour >= 12 ? "PM" : "AM";
+  const hour12 = hour % 12 || 12;
+
+  return `${String(hour12).padStart(2, "0")}:${minuteStr} ${period}`;
+}
+
+export function formatTimeRange(startTime: string, endTime: string): string {
+  return `${formatTime12h(startTime)} - ${formatTime12h(endTime)}`;
+}
+
+export function formatAppointmentDateTime(
+  date: Date | string | null | undefined,
+  time: string | null | undefined,
+  locale?: SupportedLocale,
+) {
+  const formattedDate = formatDateOnly(date, locale);
+
+  if (!formattedDate) {
+    return time ? formatTime12h(time) : "";
+  }
+
+  return time ? `${formattedDate} - ${formatTime12h(time)}` : formattedDate;
 }
 
 export function formatDateOnly(

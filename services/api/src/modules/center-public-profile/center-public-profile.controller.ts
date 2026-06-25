@@ -2,14 +2,14 @@ import {
   BadRequestException,
   Body,
   Controller,
-  ForbiddenException,
+  Delete,
   Get,
-  Headers,
   Param,
   Patch,
   Post,
   Req,
   UploadedFile,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import type { Request } from 'express';
@@ -23,10 +23,13 @@ import {
   verifyCenterSessionToken,
 } from '../auth/services/center-session.service';
 import { CenterAuthService } from '../auth/services/center-auth.service';
-import { PermissionsService } from '../permissions/services/permissions.service';
+import { RequirePermissions } from '../permissions/decorators/require-permissions.decorator';
+import { PermissionGuard } from '../permissions/guards/permission.guard';
 import {
   CenterPublicProfileService,
+  type ReorderCenterBranchesDto,
   type UpdatePublicProfileDto,
+  type UpsertCenterBranchDto,
 } from './center-public-profile.service';
 
 // ── shared image upload helpers ────────────────────────────────────────────
@@ -49,6 +52,7 @@ const UPLOAD_MAX_WIDTH: Record<string, number> = {
   card: 1200,
   hero: 1920,
   service: 900,
+  serviceCover: 1200,
 };
 const DEFAULT_MAX_WIDTH = 1200;
 const WEBP_QUALITY = 82;
@@ -187,53 +191,31 @@ function getUploadType(request: Request): string | undefined {
 // ── Super Admin controller ─────────────────────────────────────────────────
 
 @Controller('admin/centers/:centerId/public-profile')
+@UseGuards(PermissionGuard)
 export class AdminCenterPublicProfileController {
   constructor(
     private readonly profileService: CenterPublicProfileService,
-    private readonly permissionsService: PermissionsService,
   ) {}
 
-  private async requireSuperAdmin(userId?: string | string[]) {
-    const id = Array.isArray(userId) ? userId[0] : userId;
-    if (!id) {
-      throw new ForbiddenException({
-        message: 'Permission denied',
-        errors: { role: 'SUPER_ADMIN role is required.' },
-      });
-    }
-    const ctx = await this.permissionsService.getUserPermissions(id);
-    const isSuperAdmin = (ctx.roles as Array<{ key: string }>).some(
-      (r) => r.key === 'super_admin',
-    );
-    if (!ctx.user || !isSuperAdmin) {
-      throw new ForbiddenException({
-        message: 'Permission denied',
-        errors: { role: 'SUPER_ADMIN role is required.' },
-      });
-    }
-    return ctx.user;
-  }
-
   @Get()
+  @RequirePermissions('view:centers')
   async get(
     @Param('centerId') centerId: string,
-    @Headers('x-royalcare-super-admin-user-id') superAdminUserId?: string,
   ) {
-    await this.requireSuperAdmin(superAdminUserId);
     return this.profileService.getProfile(centerId);
   }
 
   @Patch()
+  @RequirePermissions('edit:centers')
   async update(
     @Param('centerId') centerId: string,
     @Body() dto: UpdatePublicProfileDto,
-    @Headers('x-royalcare-super-admin-user-id') superAdminUserId?: string,
   ) {
-    await this.requireSuperAdmin(superAdminUserId);
     return this.profileService.updateProfile(centerId, dto);
   }
 
   @Post('upload-image')
+  @RequirePermissions('edit:centers')
   @UseInterceptors(
     FileInterceptor('file', { limits: { fileSize: MULTER_MAX_BYTES } }),
   )
@@ -241,11 +223,52 @@ export class AdminCenterPublicProfileController {
     @Param('centerId') _centerId: string,
     @UploadedFile() file: UploadedPublicImageFile | undefined,
     @Req() req: Request,
-    @Headers('x-royalcare-super-admin-user-id') superAdminUserId?: string,
   ) {
-    await this.requireSuperAdmin(superAdminUserId);
     const uploadType = getUploadType(req);
     return handleImageUpload(file, uploadType);
+  }
+
+  @Get('branches')
+  @RequirePermissions('view:centers')
+  async listBranches(@Param('centerId') centerId: string) {
+    return { data: await this.profileService.listBranches(centerId) };
+  }
+
+  @Post('branches')
+  @RequirePermissions('edit:centers')
+  async createBranch(
+    @Param('centerId') centerId: string,
+    @Body() dto: UpsertCenterBranchDto,
+  ) {
+    return this.profileService.createBranch(centerId, dto);
+  }
+
+  @Patch('branches/reorder')
+  @RequirePermissions('edit:centers')
+  async reorderBranches(
+    @Param('centerId') centerId: string,
+    @Body() dto: ReorderCenterBranchesDto,
+  ) {
+    return { data: await this.profileService.reorderBranches(centerId, dto) };
+  }
+
+  @Patch('branches/:branchId')
+  @RequirePermissions('edit:centers')
+  async updateBranch(
+    @Param('centerId') centerId: string,
+    @Param('branchId') branchId: string,
+    @Body() dto: UpsertCenterBranchDto,
+  ) {
+    return this.profileService.updateBranch(centerId, branchId, dto);
+  }
+
+  @Delete('branches/:branchId')
+  @RequirePermissions('edit:centers')
+  async deleteBranch(
+    @Param('centerId') centerId: string,
+    @Param('branchId') branchId: string,
+  ) {
+    return this.profileService.deactivateBranch(centerId, branchId);
   }
 }
 
@@ -290,5 +313,55 @@ export class TenantCenterPublicProfileController {
     const uploadType = getUploadType(request);
     void session; // centerId scoped via session — upload is center-agnostic path-wise
     return handleImageUpload(file, uploadType);
+  }
+
+  @Get('branches')
+  async listBranches(@Req() request: Request) {
+    const session = await this.getSession(request);
+    this.profileService.requireSettingsPermission(session.permissions);
+    return { data: await this.profileService.listBranches(session.center.id) };
+  }
+
+  @Post('branches')
+  async createBranch(
+    @Req() request: Request,
+    @Body() dto: UpsertCenterBranchDto,
+  ) {
+    const session = await this.getSession(request);
+    this.profileService.requireSettingsPermission(session.permissions);
+    return this.profileService.createBranch(session.center.id, dto);
+  }
+
+  @Patch('branches/reorder')
+  async reorderBranches(
+    @Req() request: Request,
+    @Body() dto: ReorderCenterBranchesDto,
+  ) {
+    const session = await this.getSession(request);
+    this.profileService.requireSettingsPermission(session.permissions);
+    return {
+      data: await this.profileService.reorderBranches(session.center.id, dto),
+    };
+  }
+
+  @Patch('branches/:branchId')
+  async updateBranch(
+    @Req() request: Request,
+    @Param('branchId') branchId: string,
+    @Body() dto: UpsertCenterBranchDto,
+  ) {
+    const session = await this.getSession(request);
+    this.profileService.requireSettingsPermission(session.permissions);
+    return this.profileService.updateBranch(session.center.id, branchId, dto);
+  }
+
+  @Delete('branches/:branchId')
+  async deleteBranch(
+    @Req() request: Request,
+    @Param('branchId') branchId: string,
+  ) {
+    const session = await this.getSession(request);
+    this.profileService.requireSettingsPermission(session.permissions);
+    return this.profileService.deactivateBranch(session.center.id, branchId);
   }
 }

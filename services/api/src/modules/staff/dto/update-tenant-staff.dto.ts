@@ -7,6 +7,7 @@ export class UpdateTenantStaffDto {
   email?: string;
   fullName?: string;
   password?: string;
+  providerEnabled?: boolean;
   role?: TenantStaffRole;
   status?: TenantStaffStatus;
 }

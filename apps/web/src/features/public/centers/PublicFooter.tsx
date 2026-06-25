@@ -9,6 +9,11 @@ import { publicCentersDictionaries } from "@/i18n/dictionaries/public-centers";
 import { getPublicSystemSettings, type SystemSetting } from "@/lib/api/system-settings";
 
 type SocialKey = "facebook" | "instagram" | "whatsapp" | "youtube";
+type FooterLink = {
+  external?: boolean;
+  href?: string;
+  label: string;
+};
 
 function settingsMap(settings: SystemSetting[]) {
   return new Map(settings.map((setting) => [setting.key, setting.value]));
@@ -99,10 +104,36 @@ export function PublicFooter({
     publicSettings.get("public_whatsapp_url"),
     publicSettings.get("public_support_whatsapp"),
   );
+  const supportEmail = firstValue(
+    publicSettings.get("public_support_email"),
+    d.nav.supportEmail,
+  );
   const footerGroups = [
-    { title: d.footer.centersTitle, links: d.footer.centersLinks },
-    { title: d.footer.ownersTitle, links: d.footer.ownersLinks },
-    { title: d.footer.infoTitle, links: d.footer.infoLinks },
+    {
+      title: d.footer.centersTitle,
+      links: [
+        { label: d.footer.centersLinks[0], href: "/centers" },
+        { label: d.footer.centersLinks[1], href: "/centers#how-it-works-services" },
+        { label: d.footer.centersLinks[2], href: "/centers#featured-centers" },
+      ],
+    },
+    {
+      title: d.footer.ownersTitle,
+      links: [
+        { label: d.footer.ownersLinks[0], href: "/open-center" },
+        { label: d.footer.ownersLinks[1], href: "/centers#features" },
+        { label: d.footer.ownersLinks[2], href: "/pricing" },
+      ],
+    },
+    {
+      title: d.footer.infoTitle,
+      links: [
+        { label: d.footer.infoLinks[0] },
+        { label: d.footer.infoLinks[1] },
+        { label: d.footer.infoLinks[2], href: `mailto:${supportEmail}`, external: true },
+        { label: d.footer.infoLinks[3], href: "#contact" },
+      ],
+    },
   ];
   const socialLinks = [
     {
@@ -168,14 +199,29 @@ export function PublicFooter({
           <div className="min-w-0" key={group.title}>
             <h3 className="text-sm font-black text-[#D8BD7A]">{group.title}</h3>
             <ul className="mt-4 space-y-3">
-              {group.links.map((link) => (
-                <li key={link}>
-                  <a
-                    className="text-sm font-semibold text-white/72 transition hover:text-white"
-                    href="#"
-                  >
-                    {link}
-                  </a>
+              {group.links.map((link: FooterLink) => (
+                <li key={link.label}>
+                  {link.href ? (
+                    link.external ? (
+                      <a
+                        className="text-sm font-semibold text-white/72 transition hover:text-white"
+                        href={link.href}
+                      >
+                        {link.label}
+                      </a>
+                    ) : (
+                      <Link
+                        className="text-sm font-semibold text-white/72 transition hover:text-white"
+                        href={link.href}
+                      >
+                        {link.label}
+                      </Link>
+                    )
+                  ) : (
+                    <span className="text-sm font-semibold text-white/40">
+                      {link.label}
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>

@@ -766,6 +766,35 @@ export function SuperAdminDashboard() {
               })}
             </section>
 
+            {/* Platform Usage Metrics */}
+            <section className="mt-6">
+              <h2 className="mb-3 text-sm font-semibold text-[#0B2D5C]">
+                {dictionary.platformUsage.sectionTitle}
+              </h2>
+              <div className="grid min-w-0 grid-cols-2 gap-4 lg:grid-cols-4">
+                {(
+                  [
+                    { key: "totalPatients", value: dashboard?.platformUsage?.totalPatients ?? 0, cls: "border-[#0B2D5C]/15 bg-[#0B2D5C]/5 text-[#0B2D5C]" },
+                    { key: "totalAppointments", value: dashboard?.platformUsage?.totalAppointments ?? 0, cls: "border-slate-200 bg-white text-[#0B2D5C]" },
+                    { key: "appointmentsLast30Days", value: dashboard?.platformUsage?.appointmentsLast30Days ?? 0, cls: "border-emerald-200 bg-emerald-50 text-emerald-800" },
+                    { key: "totalInvoices", value: dashboard?.platformUsage?.totalInvoices ?? 0, cls: "border-slate-200 bg-white text-[#0B2D5C]" },
+                  ] as const
+                ).map((card) => (
+                  <div
+                    className={`min-w-0 rounded-lg border px-4 py-3 ${card.cls}`}
+                    key={card.key}
+                  >
+                    <p className="min-w-0 truncate text-xs font-semibold opacity-70">
+                      {dictionary.platformUsage[card.key]}
+                    </p>
+                    <p className="mt-2 text-2xl font-semibold">
+                      {isLoading ? "—" : formatNumber(card.value)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
             {/* Subscription KPIs */}
             <section className="mt-6">
               <div className="mb-3 flex min-w-0 items-center justify-between gap-3">

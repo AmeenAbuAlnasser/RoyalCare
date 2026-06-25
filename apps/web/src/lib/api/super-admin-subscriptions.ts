@@ -28,6 +28,8 @@ export type ApiSubscriptionLifecycle =
 export type SuperAdminSubscription = {
   id: string;
   centerId: string;
+  // v2: planId links to the Plan table. null for legacy subscriptions.
+  planId?: string | null;
   planCode: string;
   planName: string;
   status: ApiSubscriptionStatus;
@@ -84,6 +86,8 @@ export type ManualSubscriptionPlan = "BASIC" | "STANDARD" | "PREMIUM" | "ENTERPR
 
 export type UpdateSubscriptionPayload = {
   subscriptionStatus?: "TRIAL" | "ACTIVE" | "EXPIRED" | "OVERDUE" | "SUSPENDED" | "CANCELLED";
+  // v2: when planId is provided, backend resolves planCode/planName automatically.
+  planId?: string;
   subscriptionPlan?: ManualSubscriptionPlan;
   subscriptionStartDate?: string;
   subscriptionEndDate?: string;

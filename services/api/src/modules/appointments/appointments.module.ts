@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ScheduleService } from '../../common/schedule/schedule.service';
 import { AuditModule } from '../audit/audit.module';
 import { AuthModule } from '../auth/auth.module';
+import { BillingModule } from '../billing/billing.module';
 import { PatientFollowUpsModule } from '../patient-follow-ups/patient-follow-ups.module';
 import { AppointmentReminderScheduler } from './appointment-reminder.scheduler';
 import { TenantAppointmentsController } from './controllers/tenant-appointments.controller';
@@ -9,7 +10,7 @@ import { AppointmentReminderService } from './services/appointment-reminder.serv
 import { TenantAppointmentsService } from './services/tenant-appointments.service';
 
 @Module({
-  imports: [AuthModule, AuditModule, PatientFollowUpsModule],
+  imports: [AuthModule, AuditModule, PatientFollowUpsModule, BillingModule],
   controllers: [TenantAppointmentsController],
   providers: [
     TenantAppointmentsService,

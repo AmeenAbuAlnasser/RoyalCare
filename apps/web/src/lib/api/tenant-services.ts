@@ -12,9 +12,13 @@ export type TenantService = {
   bufferMinutes: number;
   durationMinutes: number | null;
   followUpEnabled: boolean;
-  followUpType: "FIXED_INTERVAL" | "SESSION_PLAN";
+  followUpMode: "NONE" | "SESSION_BASED_PLAN" | "RECURRING_CONTINUOUS";
   defaultIntervalDays: number | null;
   totalRecommendedSessions: number | null;
+  recurringIntervalValue: number | null;
+  recurringIntervalUnit: "DAY" | "WEEK" | "MONTH" | "YEAR" | null;
+  autoWhatsappReminderEnabled: boolean;
+  autoReminderDaysBefore: number | null;
   autoCreateNextReminder: boolean;
   reminderMessageAr: string | null;
   reminderMessageEn: string | null;
@@ -24,8 +28,27 @@ export type TenantService = {
     toSessionNumber: number;
     intervalDays: number;
   }> | null;
+  treatmentTemplates: Array<{
+    id: string;
+    nameAr: string;
+    nameEn: string;
+    nameHe: string;
+    totalSessions: number;
+    defaultIntervalDays: number | null;
+    phases: Array<{
+      fromSessionNumber: number;
+      toSessionNumber: number;
+      intervalDays: number;
+    }> | null;
+    isDefault: boolean;
+    isActive: boolean;
+    sortOrder: number;
+  }>;
   price: string | number | null;
   currency: string;
+  coverImageUrl: string | null;
+  coverImageBlurhash: string | null;
+  coverImageAlt: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -40,9 +63,13 @@ export type TenantServicePayload = {
   descriptionHe?: string | null;
   durationMinutes?: number | string | null;
   followUpEnabled?: boolean;
-  followUpType?: "FIXED_INTERVAL" | "SESSION_PLAN";
+  followUpMode?: "NONE" | "SESSION_BASED_PLAN" | "RECURRING_CONTINUOUS";
   defaultIntervalDays?: number | string | null;
   totalRecommendedSessions?: number | string | null;
+  recurringIntervalValue?: number | string | null;
+  recurringIntervalUnit?: "DAY" | "WEEK" | "MONTH" | "YEAR" | null;
+  autoWhatsappReminderEnabled?: boolean;
+  autoReminderDaysBefore?: number | string | null;
   autoCreateNextReminder?: boolean;
   reminderMessageAr?: string | null;
   reminderMessageEn?: string | null;
@@ -52,6 +79,25 @@ export type TenantServicePayload = {
     toSessionNumber: number | string;
     intervalDays: number | string;
   }> | null;
+  treatmentTemplates?: Array<{
+    id?: string | null;
+    nameAr?: string | null;
+    nameEn?: string | null;
+    nameHe?: string | null;
+    totalSessions?: number | string | null;
+    defaultIntervalDays?: number | string | null;
+    phases?: Array<{
+      fromSessionNumber: number | string;
+      toSessionNumber: number | string;
+      intervalDays: number | string;
+    }> | null;
+    isDefault?: boolean;
+    isActive?: boolean;
+    sortOrder?: number | string | null;
+  }> | null;
+  coverImageUrl?: string | null;
+  coverImageBlurhash?: string | null;
+  coverImageAlt?: string | null;
   isActive?: boolean;
   nameAr: string;
   nameEn: string;
